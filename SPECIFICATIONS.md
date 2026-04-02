@@ -82,27 +82,54 @@ Automatically track, extract, and analyze benchmark evaluation trends across Lar
 
 ### 2.2 Source Discovery Strategy
 
-For each model, the system should:
+For each model, the system must use Google search to discover all documentation sources:
 
 1. **Model Card**: Always fetch from HuggingFace (primary metadata source)
-2. **GitHub README**: Construct URL based on lab → GitHub org mapping
-3. **GitHub PDFs**: Search releases and docs folders for technical reports
-4. **arXiv Papers**: Search using model name + lab name
-5. **Official Blogs**: Search known blog domains for model announcements
+2. **arXiv Papers**:
+   - First, check model card for arxiv.org URLs → use directly if found
+   - If not found → Google search: `"{model_name}" {lab_name} arxiv pdf`
+   - Extract arxiv.org links from search results
+3. **GitHub Technical Reports**:
+   - Check model card for GitHub repo links
+   - Try known URL patterns (releases, docs folders)
+   - If not found → Google search: `"{model_name}" {lab_name} github technical report pdf`
+4. **Official Blogs**:
+   - Google search: `"{lab_name}" "{model_name}" announcement`
+   - Filter results to known blog domains (meta.ai, anthropic.com, qwenlm.github.io, etc.)
+
+**Google Search Implementation:**
+- Scrape Google search results directly (no API required)
+- Use `requests` + `BeautifulSoup` to parse result pages
+- Handle rate limiting with exponential backoff
+- Set appropriate user-agent headers to avoid blocking
 
 ### 2.3 Source Processing Requirements
 
 **For each source, the system MUST:**
-1. ✅ Check content hash before processing (skip if unchanged)
-2. ✅ Store source URL, type, and fetch timestamp
-3. ✅ Handle rate limits and retries (3 attempts with exponential backoff)
-4. ✅ Extract clean text content:
+
+1. ✅ Fetch document from URL
+2. ✅ Extract text content:
    - **Markdown**: Parse directly
    - **HTML**: Strip tags, extract main content
-   - **PDF**: Use PDF parser libraries (PyPDF2, pdfplumber, or similar)
+   - **PDF**: Extract text + tables using pdfplumber (see section 10.2 for details)
    - **Unreadable content**: Ignore PDFs that cannot be parsed or are image-only without text layer
-5. ✅ Limit content size to prevent overwhelming AI (<50K chars per source)
-6. ✅ Log failed fetches but continue processing other sources
+3. ✅ Compute content hash (SHA256 of extracted text)
+4. ✅ Check cache: Compare hash with stored hash for (model_id, url)
+5. ✅ **If hash unchanged**: Skip processing (no extraction needed)
+6. ✅ **If hash changed or new document**:
+   - For PDFs: Use AI (Claude) to identify sections containing benchmark information
+   - Extract benchmarks from relevant sections using AI
+   - Store benchmarks in database
+   - Update cached hash (even if extraction fails - prevents infinite retries)
+7. ✅ **Do NOT cache document content** - only store metadata (url, doc_type, content_hash, last_fetched)
+8. ✅ Handle rate limits and retries (3 attempts with exponential backoff)
+9. ✅ Log failed fetches but continue processing other sources
+
+**Caching Strategy:**
+- Document content is re-fetched and re-extracted every run
+- Only the content hash is cached for change detection
+- Benchmark extraction (expensive Claude API call) only runs when content hash changes
+- If extraction fails, cache the hash anyway with failure flag to avoid repeated failures
 
 **Note**: If a source document is not found (e.g., no arXiv paper exists) or cannot be read, this is NOT a failure. The system should search all potential sources but gracefully handle missing or unreadable ones.
 
@@ -302,14 +329,14 @@ CREATE TABLE model_benchmarks (
     UNIQUE(model_id, benchmark_id)
 );
 
--- Documents cache
+-- Documents cache (metadata only, no content storage)
 CREATE TABLE documents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     model_id TEXT NOT NULL,
-    doc_type TEXT NOT NULL,            -- model_card, blog, paper, etc.
+    doc_type TEXT NOT NULL,            -- model_card, blog, paper, arxiv_paper, github_pdf
     url TEXT NOT NULL,
     content_hash TEXT NOT NULL,        -- SHA256 for change detection
-    content TEXT,
+    extraction_failed BOOLEAN DEFAULT 0, -- Flag failed extractions to avoid retries
     last_fetched TEXT NOT NULL,
     FOREIGN KEY (model_id) REFERENCES models(id),
     UNIQUE(model_id, doc_type, url)
@@ -329,20 +356,29 @@ CREATE TABLE snapshots (
 ### 6.2 Incremental Update Logic
 
 **On each run:**
-1. Update model metadata (downloads, likes) for ALL models
+1. Update model metadata (downloads, likes) for ALL models from HuggingFace API
 2. For each model:
-   - Check if documents exist in cache
+   - Discover and fetch all source documents (model card, PDFs, blogs)
    - For each document:
-     - Fetch current version
-     - Compare `content_hash`
-     - If **unchanged**: Skip processing
-     - If **changed**: Re-extract benchmarks from this document
-3. Only models with changed documents trigger benchmark re-extraction
+     - Extract text/tables from source
+     - Compute content hash (SHA256)
+     - Check cache: does (model_id, url) exist?
+     - Compare stored hash with new hash
+     - **If hash unchanged**: Skip extraction (content hasn't changed)
+     - **If hash changed or new document**:
+       - For PDFs: AI section detection → extract relevant sections
+       - AI benchmark extraction from relevant content
+       - Store benchmarks in database
+       - Update cached hash (even if extraction fails)
+   - Discard fetched content (not persisted)
+3. Only documents with changed content trigger expensive AI extraction
 
 **Benefits**:
-- Faster incremental runs (skip unchanged content)
-- Always have latest popularity data (downloads, likes)
+- Faster incremental runs (skip unchanged content via hash comparison)
+- Always have latest popularity data (downloads, likes updated every run)
 - Detect when labs update their documentation
+- Avoid infinite retries on broken documents (cache failed extraction attempts)
+- No disk bloat from storing document content
 
 ---
 
@@ -569,18 +605,42 @@ reporting:
 
 ### 10.2 PDF Parsing
 
-**Use proper PDF parsing libraries**:
-- `PyPDF2` for basic text extraction
-- `pdfplumber` for tables and structured data
-- `pdfminer.six` for complex layouts
-- OCR (`pytesseract`) only as fallback for image-based PDFs
+**PDF parsing library**:
+- Use `pdfplumber` as primary library (better table extraction and structure handling)
+- Fallback to `PyPDF2` if pdfplumber fails
+- Skip PDFs that cannot be parsed (image-only, corrupted)
 
-**Extraction strategy**:
-1. Download PDF
-2. Extract all text using parser
-3. Clean and normalize text
-4. Limit to 50K chars (truncate if needed)
-5. Pass to AI for benchmark extraction
+**Extraction strategy (AI-powered section detection)**:
+1. Download or stream PDF from URL
+2. Extract all text + tables using pdfplumber:
+   ```python
+   with pdfplumber.open(pdf_path) as pdf:
+       text = '\n'.join(page.extract_text() for page in pdf.pages)
+       tables = [page.extract_tables() for page in pdf.pages]
+   ```
+3. Compute content hash: `SHA256(extracted_text)`
+4. Check cache: If hash matches stored hash, skip processing
+5. **If content changed (new or updated)**:
+   - Send extracted text to Claude AI: "Identify sections containing benchmark/evaluation information"
+   - Claude returns relevant sections (e.g., "Section 4: Evaluation", "Appendix A: Benchmark Results")
+   - Send those sections to Claude: "Extract benchmark names from these sections"
+   - Store extracted benchmarks in database
+6. Update cached hash (even if extraction fails)
+7. Discard PDF and extracted text (do not persist)
+
+**Table handling**:
+- Extract table structure with pdfplumber
+- Include tables in text sent to Claude (no need to reformat)
+- Claude parses benchmark names from table data
+
+**Error handling**:
+- If extraction returns <500 chars, consider PDF unreadable → log warning, skip
+- If Claude extraction fails, cache hash anyway with `extraction_failed=true` flag
+- Prevents infinite retries on broken or irrelevant PDFs
+
+**Section detection runs every time**:
+- When document hash changes (content updated), always run AI section detection
+- This ensures new benchmark mentions are captured even if document structure changes
 
 ---
 
