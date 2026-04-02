@@ -1,8 +1,8 @@
 # Benchmark Intelligence System - Technical Specifications
 
-**Version:** 1.2
+**Version:** 1.3
 **Last Updated:** 2026-04-02
-**Status:** Final
+**Status:** Final - Updated web fetching strategy
 
 ---
 
@@ -82,28 +82,63 @@ Automatically track, extract, and analyze benchmark evaluation trends across Lar
 
 ### 2.2 Source Discovery Strategy
 
-For each model, the system must use Google search to discover all documentation sources:
+For each model, the system must discover all documentation sources using a multi-tiered approach:
 
 1. **Model Card**: Always fetch from HuggingFace (primary metadata source)
 2. **arXiv Papers**:
    - First, check model card for arxiv.org URLs → use directly if found (use only that paper)
-   - If not found → Google search: `"{model_name}" {lab_name} arxiv pdf`
+   - If not found → use lab→GitHub mapping and known URL patterns
+   - If still not found → fallback to MCP webfetch with known URLs
    - If multiple papers found, select paper with authors from the lab that released the model
    - Process max 1 arXiv paper per model
 3. **GitHub Technical Reports**:
-   - Check model card for GitHub repo links
-   - Try known URL patterns (releases, docs folders)
-   - If not found → Google search: `"{model_name}" {lab_name} github technical report pdf`
+   - Use lab→GitHub org mapping from `labs.yaml` (e.g., Qwen → QwenLM)
+   - Try known URL patterns: `https://github.com/{org}/{model}/README.md`
+   - Check releases folder: `https://github.com/{org}/{model}/releases/`
+   - If not found → fallback to direct URL fetch if available
 4. **Official Blogs**:
-   - Google search: `"{lab_name}" "{model_name}" announcement`
-   - Accept results from any domain returned by Google
+   - Use known blog URL patterns per lab (e.g., Qwen → qwenlm.github.io)
+   - Fetch directly using MCP webfetch tool
    - Parse HTML to extract main content
 
-**Google Search Implementation:**
-- Scrape Google search results directly (no API required)
-- Use `requests` + `BeautifulSoup` to parse result pages
-- Handle rate limiting with exponential backoff
-- Set appropriate user-agent headers to avoid blocking
+**Web Fetching Strategy:**
+The system uses the **MCP webfetch tool** (`mcp__webfetch__fetch`) for fetching web content:
+
+- **Primary Method**: MCP webfetch (works reliably, no blocking issues)
+- **Advantages**:
+  - Handles JavaScript-rendered pages
+  - No rate limiting concerns
+  - Direct content extraction
+  - Supports markdown conversion
+- **Implementation**:
+  ```python
+  from mcp__webfetch__fetch import fetch
+
+  content = fetch(
+      url="https://qwenlm.github.io/blog/qwen2.5/",
+      max_length=50000  # Adjust based on content size
+  )
+  ```
+
+**Lab→GitHub Organization Mapping:**
+Configuration in `labs.yaml`:
+```yaml
+lab_github_mappings:
+  Qwen: QwenLM
+  meta-llama: meta-llama
+  mistralai: mistralai
+  google: google
+  microsoft: microsoft
+  deepseek-ai: deepseek-ai
+  internlm: InternLM
+  # ... etc
+```
+
+**Google Search Fallback (Optional):**
+Google search scraping is implemented but often blocked. Use as last resort:
+- Configuration kept for backwards compatibility
+- Implements retry with exponential backoff
+- Falls back to "skip" strategy if blocked after 3 attempts
 - Configuration:
   ```yaml
   google_search:

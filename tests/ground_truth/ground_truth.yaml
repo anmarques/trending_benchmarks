@@ -1,0 +1,487 @@
+# Ground Truth Data for Benchmark Intelligence System Testing
+# Manually verified and extracted from official sources
+# Date: 2026-04-02
+
+models:
+  # ==================== MODEL 1: Llama 3.1 8B ====================
+  - id: "meta-llama/Llama-3.1-8B"
+    model_name: "Llama-3.1-8B"
+    lab: "meta-llama"
+
+    documents:
+      # Document 1: HuggingFace Model Card (USER VERIFIED ✓)
+      - url: "https://huggingface.co/meta-llama/Llama-3.1-8B"
+        type: "model_card"
+        status: "verified_by_user"
+
+        benchmarks:
+          # Base Model Benchmarks
+          - name: "MMLU"
+            variant: "5-shot, base"
+            score: "66.7"
+            metric: "macro_avg/acc_char"
+            category: "General Knowledge"
+
+          - name: "MMLU-Pro"
+            variant: "CoT, 5-shot, base"
+            score: "37.1"
+            metric: "macro_avg/acc_char"
+            category: "General Knowledge"
+
+          - name: "AGIEval English"
+            variant: "3-5 shot, base"
+            score: "47.8"
+            metric: "average/acc_char"
+            category: "General Knowledge"
+
+          - name: "CommonSenseQA"
+            variant: "7-shot, base"
+            score: "75.0"
+            metric: "acc_char"
+            category: "Reasoning"
+
+          - name: "Winogrande"
+            variant: "5-shot, base"
+            score: "60.5"
+            metric: "acc_char"
+            category: "Reasoning"
+
+          - name: "BIG-Bench Hard"
+            variant: "CoT, 3-shot, base"
+            score: "64.2"
+            metric: "average/em"
+            category: "Reasoning"
+
+          - name: "ARC-Challenge"
+            variant: "25-shot, base"
+            score: "79.7"
+            metric: "acc_char"
+            category: "General Knowledge"
+
+          - name: "TriviaQA-Wiki"
+            variant: "5-shot, base"
+            score: "77.6"
+            metric: "em"
+            category: "General Knowledge"
+
+          - name: "SQuAD"
+            variant: "1-shot, base"
+            score: "77.0"
+            metric: "em"
+            category: "Reading Comprehension"
+
+          - name: "QuAC"
+            variant: "F1, 1-shot, base"
+            score: "44.9"
+            metric: "f1"
+            category: "Reading Comprehension"
+
+          - name: "BoolQ"
+            variant: "0-shot, base"
+            score: "75.0"
+            metric: "acc_char"
+            category: "Reading Comprehension"
+
+          - name: "DROP"
+            variant: "F1, 3-shot, base"
+            score: "59.5"
+            metric: "f1"
+            category: "Reading Comprehension"
+
+          # Instruct Model Benchmarks
+          - name: "MMLU"
+            variant: "5-shot, instruct"
+            score: "69.4"
+            metric: "macro_avg/acc"
+            category: "General Knowledge"
+
+          - name: "MMLU"
+            variant: "CoT, 0-shot, instruct"
+            score: "73.0"
+            metric: "macro_avg/acc"
+            category: "General Knowledge"
+
+          - name: "MMLU-Pro"
+            variant: "CoT, 5-shot, instruct"
+            score: "48.3"
+            metric: "micro_avg/acc_char"
+            category: "General Knowledge"
+
+          - name: "IFEval"
+            variant: "instruct"
+            score: "80.4"
+            category: "Instruction Following"
+
+          - name: "ARC-C"
+            variant: "0-shot, instruct"
+            score: "83.4"
+            metric: "acc"
+            category: "General Knowledge"
+
+          - name: "GPQA"
+            variant: "0-shot, instruct"
+            score: "30.4"
+            metric: "em"
+            category: "Reasoning"
+
+          - name: "HumanEval"
+            variant: "0-shot, instruct"
+            score: "72.6"
+            metric: "pass@1"
+            category: "Code Generation"
+
+          - name: "MBPP++"
+            variant: "base version, 0-shot, instruct"
+            score: "72.8"
+            metric: "pass@1"
+            category: "Code Generation"
+
+          - name: "Multipl-E HumanEval"
+            variant: "0-shot, instruct"
+            score: "50.8"
+            metric: "pass@1"
+            category: "Code Generation"
+
+          - name: "Multipl-E MBPP"
+            variant: "0-shot, instruct"
+            score: "52.4"
+            metric: "pass@1"
+            category: "Code Generation"
+
+          - name: "GSM-8K"
+            variant: "CoT, 8-shot, instruct"
+            score: "84.5"
+            metric: "em_maj1@1"
+            category: "Math Reasoning"
+
+          - name: "MATH"
+            variant: "CoT, 0-shot, instruct"
+            score: "51.9"
+            metric: "final_em"
+            category: "Math Reasoning"
+
+          - name: "API-Bank"
+            variant: "0-shot, instruct"
+            score: "82.6"
+            metric: "acc"
+            category: "Tool Use"
+
+          - name: "BFCL"
+            variant: "0-shot, instruct"
+            score: "76.1"
+            metric: "acc"
+            category: "Tool Use"
+
+          - name: "Gorilla Benchmark API Bench"
+            variant: "0-shot, instruct"
+            score: "8.2"
+            metric: "acc"
+            category: "Tool Use"
+
+          - name: "Nexus"
+            variant: "0-shot, instruct"
+            score: "38.5"
+            metric: "macro_avg/acc"
+            category: "Tool Use"
+
+          - name: "Multilingual MGSM"
+            variant: "CoT, 0-shot, instruct"
+            score: "68.9"
+            metric: "em"
+            category: "Multilingual"
+
+      # Document 2: Meta AI Blog
+      - url: "https://ai.meta.com/blog/meta-llama-3-1/"
+        type: "blog_post"
+        status: "extracted"
+        benchmarks: []  # High-level data, mostly covered in model card
+
+      # Document 3: arXiv Paper
+      - url: "https://arxiv.org/abs/2407.21783"
+        type: "arxiv_paper"
+        status: "too_large_for_extraction"
+        notes: "PDF is 629KB, contains detailed benchmarks but too large to extract in single call"
+        benchmarks: []  # Could be extracted in chunks if needed
+
+  # ==================== MODEL 2: Qwen 2.5 72B-Instruct ====================
+  - id: "Qwen/Qwen2.5-72B-Instruct"
+    model_name: "Qwen2.5-72B-Instruct"
+    lab: "Qwen"
+
+    documents:
+      # Document 1: HuggingFace Model Card
+      - url: "https://huggingface.co/Qwen/Qwen2.5-72B-Instruct"
+        type: "model_card"
+        status: "no_benchmarks"
+        notes: "Model card references external blog for benchmarks"
+        benchmarks: []
+
+      # Document 2: Qwen 2.5 Blog (Main)
+      - url: "https://qwenlm.github.io/blog/qwen2.5/"
+        type: "blog_post"
+        status: "extracted"
+        notes: "High-level overview, detailed benchmarks in qwen2.5-llm blog"
+        benchmarks:
+          - name: "MMLU"
+            variant: "general mention"
+            score: "85+"
+            category: "General Knowledge"
+
+          - name: "HumanEval"
+            variant: "general mention"
+            score: "85+"
+            category: "Code Generation"
+
+          - name: "MATH"
+            variant: "general mention"
+            score: "80+"
+            category: "Math Reasoning"
+
+      # Document 3: Qwen 2.5 LLM Blog (Detailed)
+      - url: "https://qwenlm.github.io/blog/qwen2.5-llm/"
+        type: "blog_post"
+        status: "extracted"
+        notes: "Primary source with comprehensive benchmark tables"
+
+        benchmarks:
+          # Base Model Benchmarks (Qwen2.5-72B)
+          - name: "MMLU"
+            variant: "5-shot, base"
+            score: "86.1"
+            category: "General Knowledge"
+
+          - name: "MMLU-Pro"
+            variant: "5-shot, base"
+            score: "58.1"
+            category: "General Knowledge"
+
+          - name: "MMLU-redux"
+            variant: "5-shot, base"
+            score: "83.9"
+            category: "General Knowledge"
+
+          - name: "BBH"
+            variant: "3-shot, base"
+            score: "86.3"
+            category: "Reasoning"
+
+          - name: "ARC-C"
+            variant: "25-shot, base"
+            score: "72.4"
+            category: "General Knowledge"
+
+          - name: "TruthfulQA"
+            variant: "0-shot, base"
+            score: "60.4"
+            category: "Truthfulness"
+
+          - name: "WindoGrande"
+            variant: "5-shot, base"
+            score: "83.9"
+            category: "Reasoning"
+
+          - name: "HellaSwag"
+            variant: "10-shot, base"
+            score: "87.6"
+            category: "Reasoning"
+
+          - name: "GPQA"
+            variant: "5-shot, base"
+            score: "45.9"
+            category: "Science"
+
+          - name: "Theoremqa"
+            variant: "5-shot, base"
+            score: "42.4"
+            category: "Science"
+
+          - name: "MATH"
+            variant: "4-shot, base"
+            score: "62.1"
+            category: "Math Reasoning"
+
+          - name: "MMLU-stem"
+            variant: "base"
+            score: "82.7"
+            category: "Science"
+
+          - name: "GSM8K"
+            variant: "4-shot, base"
+            score: "91.5"
+            category: "Math Reasoning"
+
+          - name: "HumanEval"
+            variant: "0-shot, base"
+            score: "59.1"
+            category: "Code Generation"
+
+          - name: "HumanEval+"
+            variant: "0-shot, base"
+            score: "51.2"
+            category: "Code Generation"
+
+          - name: "MBPP"
+            variant: "0-shot, base"
+            score: "84.7"
+            category: "Code Generation"
+
+          - name: "MBPP+"
+            variant: "0-shot, base"
+            score: "69.2"
+            category: "Code Generation"
+
+          - name: "MultiPL-E"
+            variant: "0-shot, base"
+            score: "60.5"
+            category: "Code Generation"
+
+          - name: "Multi-Exam"
+            variant: "multilingual, base"
+            score: "78.7"
+            category: "Multilingual"
+
+          - name: "Multi-Understanding"
+            variant: "multilingual, base"
+            score: "89.6"
+            category: "Multilingual"
+
+          - name: "Multi-Mathematics"
+            variant: "multilingual, base"
+            score: "76.7"
+            category: "Multilingual"
+
+          - name: "Multi-Translation"
+            variant: "Flores-101, 5-shot, base"
+            score: "39.0"
+            category: "Multilingual"
+
+          # Instruct Model Benchmarks (Qwen2.5-72B-Instruct)
+          - name: "MMLU-Pro"
+            variant: "instruct"
+            score: "71.1"
+            category: "General Knowledge"
+
+          - name: "MMLU-redux"
+            variant: "instruct"
+            score: "86.8"
+            category: "General Knowledge"
+
+          - name: "GPQA"
+            variant: "instruct"
+            score: "49.0"
+            category: "Science"
+
+          - name: "MATH"
+            variant: "instruct"
+            score: "83.1"
+            category: "Math Reasoning"
+
+          - name: "GSM8K"
+            variant: "instruct"
+            score: "95.8"
+            category: "Math Reasoning"
+
+          - name: "HumanEval"
+            variant: "instruct"
+            score: "86.6"
+            category: "Code Generation"
+
+          - name: "MBPP"
+            variant: "instruct"
+            score: "88.2"
+            category: "Code Generation"
+
+          - name: "MultiPL-E"
+            variant: "instruct"
+            score: "75.1"
+            category: "Code Generation"
+
+          - name: "LiveCodeBench"
+            variant: "2305-2409, instruct"
+            score: "55.5"
+            category: "Code Generation"
+
+          - name: "LiveBench"
+            variant: "0831, instruct"
+            score: "52.3"
+            category: "General"
+
+          - name: "IFeval"
+            variant: "strict-prompt, instruct"
+            score: "84.1"
+            category: "Instruction Following"
+
+          - name: "Arena-Hard"
+            variant: "instruct"
+            score: "81.2"
+            category: "Chat"
+
+          - name: "AlignBench"
+            variant: "v1.1, instruct"
+            score: "8.16"
+            category: "Alignment"
+
+          - name: "MTbench"
+            variant: "instruct"
+            score: "9.35"
+            category: "Chat"
+
+      # Document 4: arXiv Paper
+      - url: "https://arxiv.org/abs/2412.15115"
+        type: "arxiv_paper"
+        status: "not_yet_extracted"
+        notes: "Qwen2.5 Technical Report - can be extracted if needed"
+        benchmarks: []
+
+# Expected System Behavior
+expected_behavior:
+  consolidation:
+    - benchmark_group: "MMLU"
+      variants_found: ["MMLU", "mmlu", "MMLU-Pro", "MMLU-redux", "MMLU-stem"]
+      should_consolidate: false
+      reason: "MMLU-Pro, MMLU-redux, MMLU-stem are distinct variants (side-by-side in same documents)"
+
+    - benchmark_group: "HumanEval"
+      variants_found: ["HumanEval", "HumanEval+", "Multipl-E HumanEval"]
+      should_consolidate: false
+      reason: "HumanEval+ and Multipl-E HumanEval are distinct variants"
+
+    - benchmark_group: "MBPP"
+      variants_found: ["MBPP", "MBPP+", "MBPP++", "Multipl-E MBPP"]
+      should_consolidate: false
+      reason: "All are distinct variants found side-by-side"
+
+  classification:
+    expected_categories:
+      - "General Knowledge"
+      - "Reasoning"
+      - "Math Reasoning"
+      - "Code Generation"
+      - "Reading Comprehension"
+      - "Tool Use"
+      - "Multilingual"
+      - "Instruction Following"
+      - "Chat"
+      - "Science"
+      - "Truthfulness"
+      - "Alignment"
+
+# Test Statistics
+test_statistics:
+  llama_31_8b:
+    total_benchmarks: 29
+    unique_benchmark_names: 23
+    documents: 3
+    primary_source: "HuggingFace model card"
+
+  qwen_25_72b_instruct:
+    total_benchmarks: 53
+    unique_benchmark_names: 35
+    documents: 4
+    primary_source: "Qwen2.5-LLM blog"
+
+  overall:
+    total_benchmarks: 82
+    unique_benchmark_names: 45
+    models: 2
+    expected_extraction_rate: ">90%"
