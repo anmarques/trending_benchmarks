@@ -34,8 +34,20 @@ from .tools.consolidate import (
 )
 from .tools.classify import classify_benchmarks_batch, enrich_benchmarks_with_classification
 from .tools.cache import CacheManager
+from .tools.taxonomy_manager import (
+    load_current_taxonomy,
+    analyze_benchmark_fit,
+    propose_new_categories,
+    evolve_taxonomy,
+    archive_taxonomy_if_changed,
+    update_taxonomy_file,
+)
 from .reporting import ReportGenerator
 from .clients.factory import get_hf_client
+
+
+# Progress reporting symbols
+SYMBOLS = {"success": "✓", "error": "✗", "cached": "↻", "new": "⊕"}
 
 
 logger = logging.getLogger(__name__)
@@ -153,25 +165,29 @@ class BenchmarkIntelligenceAgent:
             logger.info("=" * 80)
 
             # Step 1: Discover trending models
-            logger.info("\n[Step 1/5] Discovering trending models...")
+            logger.info("\n[Discovery] Starting model discovery...")
             models = self._discover_models()
             self.stats["models_discovered"] = len(models)
-            logger.info(f"Discovered {len(models)} models")
+
+            # Get lab names for reporting
+            labs = self.config.get("labs", [])
+            lab_preview = ', '.join(labs[:3]) + ('...' if len(labs) > 3 else '')
+            logger.info(f"[Discovery] Found {len(models)} models from {lab_preview}")
 
             if not models:
                 logger.warning("No models discovered. Exiting.")
                 return self._create_result(success=False, message="No models discovered")
 
             # Step 2: Process each model
-            logger.info(f"\n[Step 2/5] Processing {len(models)} models...")
+            logger.info(f"\n[Processing] Processing {len(models)} models...")
             for i, model in enumerate(models, 1):
                 try:
-                    logger.info(f"\n--- Processing model {i}/{len(models)}: {model['id']} ---")
+                    logger.info(f"[Processing] Model {i}/{len(models)}: {model['id']}")
 
                     # Check if we should process this model
                     if incremental and not force_reprocess:
                         if self._should_skip_model(model):
-                            logger.info(f"Skipping {model['id']} (no changes)")
+                            logger.info(f"  {SYMBOLS['cached']} Cached (no changes)")
                             self.stats["models_skipped"] += 1
                             continue
 
@@ -190,7 +206,7 @@ class BenchmarkIntelligenceAgent:
                     continue
 
             # Step 3: Consolidate benchmarks across all models
-            logger.info("\n[Step 3/5] Consolidating benchmarks...")
+            logger.info("\n[Consolidation] Consolidating benchmarks...")
             self._consolidate_all_benchmarks()
 
             # Step 4: Create snapshot
@@ -198,7 +214,7 @@ class BenchmarkIntelligenceAgent:
             snapshot_id = self._create_snapshot()
 
             # Step 5: Generate report
-            logger.info("\n[Step 5/5] Generating report...")
+            logger.info("\n[Reporting] Generating 7 sections...")
             report = self._generate_report()
 
             # Summary
@@ -233,7 +249,7 @@ class BenchmarkIntelligenceAgent:
         labs = self.config.get("labs", [])
         discovery_config = self.config.get("discovery", {})
 
-        logger.info(f"Discovering models from {len(labs)} labs")
+        logger.info(f"[Discovery] Querying {len(labs)} labs...")
         logger.debug(f"Labs: {', '.join(labs)}")
 
         return discover_trending_models(
@@ -291,11 +307,10 @@ class BenchmarkIntelligenceAgent:
             raise ValueError("Model missing 'id' field")
 
         # Step 2a: Parse model card
-        logger.info(f"Parsing model card for {model_id}...")
         model_card_data = parse_model_card(model_id, hf_client=self.hf_client)
+        logger.info(f"  {SYMBOLS['success']} Fetched model card")
 
         # Step 2b: Extract benchmarks from model card
-        logger.info(f"Extracting benchmarks from model card...")
         card_benchmarks = extract_benchmarks_from_text(
             text=model_card_data["content"],
             source_type="model_card",
@@ -333,7 +348,8 @@ class BenchmarkIntelligenceAgent:
 
         # Step 2e: Consolidate benchmarks
         all_benchmarks = card_benchmarks.get("benchmarks", []) + doc_benchmarks
-        logger.info(f"Total benchmarks extracted: {len(all_benchmarks)}")
+        if all_benchmarks:
+            logger.info(f"  {SYMBOLS['success']} Extracted {len(all_benchmarks)} benchmarks")
         self.stats["benchmarks_extracted"] += len(all_benchmarks)
 
         if all_benchmarks:
@@ -450,11 +466,98 @@ class BenchmarkIntelligenceAgent:
 
         # Get all benchmarks
         all_benchmarks = self.cache.get_all_benchmarks()
-        logger.info(f"Found {len(all_benchmarks)} total benchmarks in cache")
+        logger.info(f"[Consolidation] Found {len(all_benchmarks)} unique benchmark names")
 
         # Already consolidated during processing
         # This step is for any additional cross-model consolidation if needed
         logger.debug("Benchmarks already consolidated during model processing")
+
+        # Taxonomy evolution
+        logger.info("Evolving taxonomy based on discovered benchmarks...")
+        self._evolve_taxonomy(all_benchmarks)
+
+    def _evolve_taxonomy(self, all_benchmarks: List[Dict[str, Any]]):
+        """
+        Evolve taxonomy based on discovered benchmarks.
+
+        Args:
+            all_benchmarks: List of all benchmarks from cache
+        """
+        if self.dry_run:
+            logger.debug("Skipping taxonomy evolution (dry run mode)")
+            return
+
+        try:
+            # Get taxonomy file path (at project root)
+            taxonomy_path = Path(__file__).parent.parent.parent / "benchmark_taxonomy.md"
+
+            # Load current taxonomy
+            logger.info("Loading current taxonomy...")
+            current_taxonomy = load_current_taxonomy(str(taxonomy_path))
+
+            # Extract unique benchmark names
+            benchmark_names = []
+            for bench in all_benchmarks:
+                name = bench.get("canonical_name") or bench.get("name")
+                if name and name not in benchmark_names:
+                    benchmark_names.append(name)
+
+            if not benchmark_names:
+                logger.info("No benchmarks to analyze for taxonomy evolution")
+                return
+
+            logger.info(f"Analyzing {len(benchmark_names)} unique benchmarks against taxonomy...")
+
+            # Analyze benchmark fit
+            analysis = analyze_benchmark_fit(benchmark_names, current_taxonomy)
+
+            poor_fit_count = len(analysis.get("poor_fit", []))
+            logger.info(
+                f"Fit analysis: {len(analysis.get('well_categorized', []))} well-categorized, "
+                f"{poor_fit_count} poor fit"
+            )
+
+            # If there are poorly-fitting benchmarks, propose new categories
+            if analysis.get("poor_fit"):
+                logger.info("Proposing new categories for poor-fit benchmarks...")
+                proposed_categories = propose_new_categories(
+                    analysis["poor_fit"],
+                    current_taxonomy
+                )
+
+                if proposed_categories:
+                    logger.info(f"Proposed {len(proposed_categories)} new categories: {', '.join(proposed_categories)}")
+
+                    # Evolve taxonomy
+                    evolved_taxonomy = evolve_taxonomy(current_taxonomy, proposed_categories)
+
+                    # Archive old taxonomy if changed
+                    timestamp = datetime.utcnow().strftime("%Y%m%d")
+                    archive_path = archive_taxonomy_if_changed(
+                        current_taxonomy,
+                        evolved_taxonomy,
+                        timestamp
+                    )
+
+                    if archive_path:
+                        logger.info(f"Archived previous taxonomy to {archive_path}")
+
+                    # Update taxonomy file
+                    update_taxonomy_file(evolved_taxonomy, str(taxonomy_path))
+                    logger.info("Taxonomy updated successfully")
+
+                    # Update snapshot metadata with taxonomy version
+                    if self.cache:
+                        self.stats["taxonomy_updated"] = True
+                        self.stats["new_categories"] = proposed_categories
+                else:
+                    logger.info("No new categories needed")
+            else:
+                logger.info("All benchmarks fit well into existing taxonomy")
+
+        except Exception as e:
+            logger.error(f"Taxonomy evolution failed: {e}", exc_info=True)
+            # Don't fail the entire run if taxonomy evolution fails
 
     def _create_snapshot(self) -> Optional[int]:
         """Create a snapshot of current cache state."""
@@ -490,6 +593,8 @@ class BenchmarkIntelligenceAgent:
 
             # Save historical snapshot
             report_generator.save_snapshot(report_content)
+            logger.info(f"[Reporting] {SYMBOLS['success']} Report saved")
+            logger.info(f"[Reporting] {SYMBOLS['success']} Updated root README.md")
 
         return report_content
 
