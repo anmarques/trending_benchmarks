@@ -61,12 +61,16 @@
 **Total Benchmarks:** 29 unique benchmarks
 
 #### Source 2: arXiv Paper
-**URL:** Need to search for "Llama 3.1" arXiv paper
-**Status:** ⏳ Pending
+**URL:** https://arxiv.org/abs/2407.21783 (PDF: https://arxiv.org/pdf/2407.21783)
+**Title:** "The Llama 3 Herd of Models"
+**Status:** ✅ Found - Needs WebFetch permission to extract benchmarks
+**Note:** Published July 31, 2024, updated November 23, 2024
 
 #### Source 3: Meta AI Blog
-**URL:** Need to search
-**Status:** ⏳ Pending
+**URL:** https://ai.meta.com/blog/meta-llama-3-1/
+**Title:** "Introducing Llama 3.1: Our most capable models to date"
+**Status:** ✅ Found - Needs WebFetch permission to extract benchmarks
+**Note:** Official Meta announcement with benchmark comparisons
 
 ---
 
@@ -80,25 +84,40 @@
 **Status:** ✅ Fetched - No benchmarks in card itself
 **Note:** Model card references external blog for benchmarks
 
-#### Source 2: Qwen Blog Post
-**URL:** https://qwenlm.github.io/blog/qwen2.5/
+#### Source 2: Qwen Blog Posts
+**URL 1:** https://qwenlm.github.io/blog/qwen2.5/
+**URL 2:** https://qwenlm.github.io/blog/qwen2.5-llm/
 **Type:** blog_post
-**Status:** ⏳ Requires permission to fetch
+**Status:** ✅ Found - Needs WebFetch permission to extract benchmarks
 **Expected Content:** Comprehensive benchmark results for 72B-Instruct
+**Note:** Blog mentions MMLU 86.1, MATH 83.1, LiveCodeBench 55.5, Arena-Hard 81.2
 
 #### Source 3: arXiv Paper
-**URL:** Need to search for "Qwen2.5" arXiv paper
-**Status:** ⏳ Pending
+**URL:** https://arxiv.org/abs/2412.15115 (PDF: https://arxiv.org/pdf/2412.15115)
+**Title:** "Qwen2.5 Technical Report"
+**Status:** ✅ Found - Needs WebFetch permission to extract benchmarks
+**Note:** Published December 19, 2024, updated January 3, 2025
 
 ---
 
+## Document Sources Found
+
+### Llama 3.1 8B
+1. ✅ HuggingFace model card - 29 benchmarks extracted
+2. ✅ arXiv paper found - https://arxiv.org/pdf/2407.21783
+3. ✅ Meta blog found - https://ai.meta.com/blog/meta-llama-3-1/
+
+### Qwen 2.5 72B-Instruct
+1. ✅ HuggingFace model card - No benchmarks (references blog)
+2. ✅ Qwen blogs found - https://qwenlm.github.io/blog/qwen2.5/ and /qwen2.5-llm/
+3. ✅ arXiv paper found - https://arxiv.org/pdf/2412.15115
+
 ## Next Steps
 
-1. ⏳ Fetch Qwen blog post (requires WebFetch permission)
-2. ⏳ Search for arXiv papers for both models
-3. ⏳ Search for official GitHub repositories with technical reports
-4. ✅ Create ground_truth.yaml with all discovered benchmarks
-5. ⏳ User manual verification of ground truth data
+1. ⏳ WebFetch permission needed to extract benchmarks from PDFs and blogs
+2. ⏳ Extract all benchmarks from 4 additional sources (2 PDFs + 2 blogs)
+3. ⏳ Consolidate all benchmarks into ground_truth.yaml
+4. ⏳ User final verification of complete ground truth data
 
 ---
 
