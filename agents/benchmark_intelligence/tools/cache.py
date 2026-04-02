@@ -66,7 +66,8 @@ class CacheManager:
                     canonical_name TEXT UNIQUE NOT NULL,
                     categories TEXT,  -- JSON array
                     attributes TEXT,  -- JSON object
-                    first_seen TEXT NOT NULL
+                    first_seen TEXT NOT NULL,
+                    last_seen TEXT  -- Track when last mentioned
                 )
             """)
 
