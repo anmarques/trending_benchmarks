@@ -1,0 +1,309 @@
+# Ground Truth Data for Testing
+# This file contains manually verified benchmark data for 2 test models
+# Used to validate system accuracy
+
+models:
+  # Model 1: Llama 3.1 8B
+  - id: "meta-llama/Llama-3.1-8B"
+    model_name: "Llama-3.1-8B"
+    lab: "meta-llama"
+
+    documents:
+      # Document 1: HuggingFace Model Card
+      - url: "https://huggingface.co/meta-llama/Llama-3.1-8B"
+        type: "model_card"
+        status: "verified"
+        notes: "Primary source with comprehensive benchmarks"
+
+        benchmarks:
+          # Base Model Benchmarks
+          - name: "MMLU"
+            variant: "5-shot"
+            score: "66.7"
+            metric: "macro_avg/acc_char"
+            category: "General Knowledge"
+
+          - name: "MMLU-Pro"
+            variant: "CoT, 5-shot"
+            score: "37.1"
+            metric: "macro_avg/acc_char"
+            category: "General Knowledge"
+
+          - name: "AGIEval English"
+            variant: "3-5 shot"
+            score: "47.8"
+            metric: "average/acc_char"
+            category: "General Knowledge"
+
+          - name: "CommonSenseQA"
+            variant: "7-shot"
+            score: "75.0"
+            metric: "acc_char"
+            category: "Reasoning"
+
+          - name: "Winogrande"
+            variant: "5-shot"
+            score: "60.5"
+            metric: "acc_char"
+            category: "Reasoning"
+
+          - name: "BIG-Bench Hard"
+            variant: "CoT, 3-shot"
+            score: "64.2"
+            metric: "average/em"
+            category: "Reasoning"
+
+          - name: "ARC-Challenge"
+            variant: "25-shot"
+            score: "79.7"
+            metric: "acc_char"
+            category: "General Knowledge"
+
+          - name: "TriviaQA-Wiki"
+            variant: "5-shot"
+            score: "77.6"
+            metric: "em"
+            category: "General Knowledge"
+
+          - name: "SQuAD"
+            variant: "1-shot"
+            score: "77.0"
+            metric: "em"
+            category: "Reading Comprehension"
+
+          - name: "QuAC"
+            variant: "F1, 1-shot"
+            score: "44.9"
+            metric: "f1"
+            category: "Reading Comprehension"
+
+          - name: "BoolQ"
+            variant: "0-shot"
+            score: "75.0"
+            metric: "acc_char"
+            category: "Reading Comprehension"
+
+          - name: "DROP"
+            variant: "F1, 3-shot"
+            score: "59.5"
+            metric: "f1"
+            category: "Reading Comprehension"
+
+          # Instruct Model Benchmarks
+          - name: "MMLU"
+            variant: "Instruct, 5-shot"
+            score: "69.4"
+            metric: "macro_avg/acc"
+            category: "General Knowledge"
+
+          - name: "MMLU"
+            variant: "Instruct CoT, 0-shot"
+            score: "73.0"
+            metric: "macro_avg/acc"
+            category: "General Knowledge"
+
+          - name: "MMLU-Pro"
+            variant: "Instruct CoT, 5-shot"
+            score: "48.3"
+            metric: "micro_avg/acc_char"
+            category: "General Knowledge"
+
+          - name: "IFEval"
+            score: "80.4"
+            category: "Instruction Following"
+
+          - name: "ARC-C"
+            variant: "0-shot"
+            score: "83.4"
+            metric: "acc"
+            category: "General Knowledge"
+
+          - name: "GPQA"
+            variant: "0-shot"
+            score: "30.4"
+            metric: "em"
+            category: "Reasoning"
+
+          - name: "HumanEval"
+            variant: "0-shot"
+            score: "72.6"
+            metric: "pass@1"
+            category: "Code Generation"
+
+          - name: "MBPP++"
+            variant: "base version, 0-shot"
+            score: "72.8"
+            metric: "pass@1"
+            category: "Code Generation"
+
+          - name: "Multipl-E HumanEval"
+            variant: "0-shot"
+            score: "50.8"
+            metric: "pass@1"
+            category: "Code Generation"
+
+          - name: "Multipl-E MBPP"
+            variant: "0-shot"
+            score: "52.4"
+            metric: "pass@1"
+            category: "Code Generation"
+
+          - name: "GSM-8K"
+            variant: "CoT, 8-shot"
+            score: "84.5"
+            metric: "em_maj1@1"
+            category: "Math Reasoning"
+
+          - name: "MATH"
+            variant: "CoT, 0-shot"
+            score: "51.9"
+            metric: "final_em"
+            category: "Math Reasoning"
+
+          - name: "API-Bank"
+            variant: "0-shot"
+            score: "82.6"
+            metric: "acc"
+            category: "Tool Use"
+
+          - name: "BFCL"
+            variant: "0-shot"
+            score: "76.1"
+            metric: "acc"
+            category: "Tool Use"
+
+          - name: "Gorilla Benchmark API Bench"
+            variant: "0-shot"
+            score: "8.2"
+            metric: "acc"
+            category: "Tool Use"
+
+          - name: "Nexus"
+            variant: "0-shot"
+            score: "38.5"
+            metric: "macro_avg/acc"
+            category: "Tool Use"
+
+          - name: "Multilingual MGSM"
+            variant: "CoT, 0-shot"
+            score: "68.9"
+            metric: "em"
+            category: "Multilingual"
+
+          # Multilingual MMLU variants
+          - name: "MMLU"
+            variant: "Portuguese, 5-shot"
+            score: "62.12"
+            metric: "macro_avg/acc"
+            category: "Multilingual"
+
+          - name: "MMLU"
+            variant: "Spanish, 5-shot"
+            score: "62.45"
+            metric: "macro_avg/acc"
+            category: "Multilingual"
+
+          - name: "MMLU"
+            variant: "Italian, 5-shot"
+            score: "61.63"
+            metric: "macro_avg/acc"
+            category: "Multilingual"
+
+          - name: "MMLU"
+            variant: "German, 5-shot"
+            score: "60.59"
+            metric: "macro_avg/acc"
+            category: "Multilingual"
+
+          - name: "MMLU"
+            variant: "French, 5-shot"
+            score: "62.34"
+            metric: "macro_avg/acc"
+            category: "Multilingual"
+
+          - name: "MMLU"
+            variant: "Hindi, 5-shot"
+            score: "50.88"
+            metric: "macro_avg/acc"
+            category: "Multilingual"
+
+          - name: "MMLU"
+            variant: "Thai, 5-shot"
+            score: "50.32"
+            metric: "macro_avg/acc"
+            category: "Multilingual"
+
+      # Document 2: arXiv Paper (if found)
+      - url: "TO_BE_VERIFIED"
+        type: "arxiv_paper"
+        status: "pending_search"
+        notes: "Need to search for Llama 3.1 technical paper"
+        benchmarks: []
+
+      # Document 3: Meta AI Blog (if found)
+      - url: "TO_BE_VERIFIED"
+        type: "blog_post"
+        status: "pending_search"
+        notes: "Need to search for official Meta AI blog post"
+        benchmarks: []
+
+  # Model 2: Qwen 2.5 72B Instruct
+  - id: "Qwen/Qwen2.5-72B-Instruct"
+    model_name: "Qwen2.5-72B-Instruct"
+    lab: "Qwen"
+
+    documents:
+      # Document 1: HuggingFace Model Card
+      - url: "https://huggingface.co/Qwen/Qwen2.5-72B-Instruct"
+        type: "model_card"
+        status: "verified"
+        notes: "No benchmarks in card - references external blog"
+        benchmarks: []
+
+      # Document 2: Qwen Blog Post
+      - url: "https://qwenlm.github.io/blog/qwen2.5/"
+        type: "blog_post"
+        status: "pending_verification"
+        notes: "Primary source for Qwen2.5 benchmarks - NEEDS MANUAL EXTRACTION"
+        benchmarks: []  # TO BE FILLED BY USER
+
+      # Document 3: arXiv Paper (if found)
+      - url: "TO_BE_VERIFIED"
+        type: "arxiv_paper"
+        status: "pending_search"
+        notes: "Need to search for Qwen2.5 technical report"
+        benchmarks: []
+
+# Expected System Behavior
+expected_consolidation:
+  - benchmark_group: "MMLU"
+    variants_found: ["MMLU", "mmlu"]  # System should detect and consolidate
+    canonical_name: "MMLU"  # Uppercase should win
+
+  - benchmark_group: "HumanEval"
+    variants_found: ["HumanEval", "Multipl-E HumanEval"]
+    note: "Should treat as distinct (side-by-side in same document)"
+
+# Verification Checklist
+verification_tasks:
+  - task: "Visit Qwen blog and manually extract ALL benchmarks for 72B-Instruct"
+    url: "https://qwenlm.github.io/blog/qwen2.5/"
+    status: "pending"
+
+  - task: "Search for Llama 3.1 arXiv paper"
+    query: "Llama 3.1 arXiv"
+    status: "pending"
+
+  - task: "Search for Qwen2.5 arXiv paper or technical report"
+    query: "Qwen2.5 arXiv OR technical report"
+    status: "pending"
+
+  - task: "Verify all benchmark names are exactly as written in source"
+    status: "pending"
+
+  - task: "Verify all scores match source documents"
+    status: "pending"
+
+  - task: "Check for any PDF technical reports in GitHub repos"
+    repos: ["meta-llama/llama", "QwenLM/Qwen2.5"]
+    status: "pending"

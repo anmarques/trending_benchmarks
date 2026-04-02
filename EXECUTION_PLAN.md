@@ -59,6 +59,13 @@
 - [ ] P3-4: Add unit tests (>80% coverage)
 - [ ] P3-5: Update documentation
 
+#### Testing & Validation
+- [ ] TEST-1: Gather ground truth data for 2 target models
+- [ ] TEST-2: Create ground truth YAML file with expected results
+- [ ] TEST-3: Implement automated verification test suite
+- [ ] TEST-4: Execute system on test models and capture outputs
+- [ ] TEST-5: Run verification tests and generate test report
+
 ### Phase 2: Web Dashboard (v2.0)
 - [ ] Phase 2.1: Data export (JSON generation)
 - [ ] Phase 2.2: React dashboard shell
@@ -67,7 +74,7 @@
 - [ ] Phase 2.5: Remaining views (Model Comparison, Lab Analytics, Taxonomy Browser)
 - [ ] Phase 2.6: Polish & deploy to GitHub Pages
 
-**Progress:** 12/36 tasks complete (33.3%)
+**Progress:** 12/41 tasks complete (29.3%)
 
 ---
 
