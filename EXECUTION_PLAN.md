@@ -34,13 +34,13 @@
 - [x] P0-5: Fix progress reporting format (add ✓, ✗, ↻, ⊕ symbols) ✅
 
 #### Priority 1: High Importance
-- [ ] P1-1: Update database schema (deleted_at, extraction_failed, indexes)
+- [x] P1-1: Update database schema (deleted_at, extraction_failed, indexes) ✅
 - [ ] P1-2: Implement "most common nomenclature" consolidation
 - [x] P1-3: Update root README auto-update ✅
 - [x] P1-4: Implement retry policy configuration ✅
 - [x] P1-5: Implement 12-month rolling window ✅
-- [ ] P1-6: Handle deleted models
-- [ ] P1-7: Implement failed extraction "never retry" policy
+- [x] P1-6: Handle deleted models ✅
+- [x] P1-7: Implement failed extraction "never retry" policy ✅
 
 #### Priority 2: Medium Importance
 - [ ] P2-1: Implement side-by-side benchmark disambiguation
@@ -67,7 +67,7 @@
 - [ ] Phase 2.5: Remaining views (Model Comparison, Lab Analytics, Taxonomy Browser)
 - [ ] Phase 2.6: Polish & deploy to GitHub Pages
 
-**Progress:** 8/36 tasks complete (22.2%)
+**Progress:** 11/36 tasks complete (30.6%)
 
 ---
 
