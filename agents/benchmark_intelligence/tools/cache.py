@@ -1084,3 +1084,161 @@ class CacheManager:
                 'documents_by_type': doc_types,
                 'snapshots': snapshot_count
             }
+
+    def get_benchmarks_within_timeframe(self, months: int = 12) -> List[Dict[str, Any]]:
+        """
+        Get benchmarks first seen within the last N months.
+
+        Implements 12-month rolling window for temporal tracking.
+
+        Args:
+            months: Number of months to look back (default: 12)
+
+        Returns:
+            List of benchmarks within the timeframe
+        """
+        cutoff_date = (datetime.utcnow() - timedelta(days=months * 30)).isoformat()
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM benchmarks
+                WHERE first_seen >= ?
+                ORDER BY first_seen DESC
+            """, (cutoff_date,))
+
+            benchmarks = []
+            for row in cursor.fetchall():
+                benchmarks.append({
+                    'id': row['id'],
+                    'canonical_name': row['canonical_name'],
+                    'categories': json.loads(row['categories']) if row['categories'] else [],
+                    'attributes': json.loads(row['attributes']) if row['attributes'] else {},
+                    'first_seen': row['first_seen']
+                })
+
+            return benchmarks
+
+    def get_snapshots_within_timeframe(self, months: int = 12) -> List[Dict[str, Any]]:
+        """
+        Get snapshots from the last N months.
+
+        Implements 12-month rolling window for temporal tracking.
+
+        Args:
+            months: Number of months to look back (default: 12)
+
+        Returns:
+            List of snapshots within the timeframe
+        """
+        cutoff_date = (datetime.utcnow() - timedelta(days=months * 30)).isoformat()
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM snapshots
+                WHERE timestamp >= ?
+                ORDER BY timestamp DESC
+            """, (cutoff_date,))
+
+            snapshots = []
+            for row in cursor.fetchall():
+                snapshots.append({
+                    'id': row['id'],
+                    'timestamp': row['timestamp'],
+                    'model_count': row['model_count'],
+                    'benchmark_count': row['benchmark_count'],
+                    'summary': json.loads(row['summary']) if row['summary'] else {}
+                })
+
+            return snapshots
+
+    def get_models_within_timeframe(self, months: int = 12) -> List[Dict[str, Any]]:
+        """
+        Get models first seen within the last N months.
+
+        Implements 12-month rolling window for temporal tracking.
+
+        Args:
+            months: Number of months to look back (default: 12)
+
+        Returns:
+            List of models within the timeframe
+        """
+        cutoff_date = (datetime.utcnow() - timedelta(days=months * 30)).isoformat()
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM models
+                WHERE first_seen >= ? AND deleted_at IS NULL
+                ORDER BY first_seen DESC
+            """, (cutoff_date,))
+
+            models = []
+            for row in cursor.fetchall():
+                models.append({
+                    'id': row['id'],
+                    'name': row['name'],
+                    'lab': row['lab'],
+                    'release_date': row['release_date'],
+                    'first_seen': row['first_seen'],
+                    'last_updated': row['last_updated'],
+                    'downloads': row['downloads'],
+                    'likes': row['likes'],
+                    'tags': json.loads(row['tags']) if row['tags'] else [],
+                    'model_card_hash': row['model_card_hash']
+                })
+
+            return models
+
+    def get_benchmark_trends_within_timeframe(self, months: int = 12) -> List[Dict[str, Any]]:
+        """
+        Get benchmark trends within the last N months.
+
+        Filters benchmark popularity data to only include activity from the last N months.
+
+        Args:
+            months: Number of months to look back (default: 12)
+
+        Returns:
+            List of benchmarks with usage statistics from the timeframe
+        """
+        cutoff_date = (datetime.utcnow() - timedelta(days=months * 30)).isoformat()
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT
+                    b.id,
+                    b.canonical_name,
+                    b.categories,
+                    b.attributes,
+                    b.first_seen,
+                    COUNT(mb.id) as total_models,
+                    COUNT(DISTINCT DATE(mb.recorded_at)) as active_days,
+                    MIN(mb.recorded_at) as first_recorded,
+                    MAX(mb.recorded_at) as last_recorded
+                FROM benchmarks b
+                LEFT JOIN model_benchmarks mb ON b.id = mb.benchmark_id
+                    AND mb.recorded_at >= ?
+                GROUP BY b.id
+                HAVING COUNT(mb.id) > 0
+                ORDER BY total_models DESC
+            """, (cutoff_date,))
+
+            trends = []
+            for row in cursor.fetchall():
+                trends.append({
+                    'id': row['id'],
+                    'canonical_name': row['canonical_name'],
+                    'categories': json.loads(row['categories']) if row['categories'] else [],
+                    'attributes': json.loads(row['attributes']) if row['attributes'] else {},
+                    'first_seen': row['first_seen'],
+                    'total_models': row['total_models'],
+                    'active_days': row['active_days'],
+                    'first_recorded': row['first_recorded'],
+                    'last_recorded': row['last_recorded']
+                })
+
+            return trends

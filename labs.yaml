@@ -51,3 +51,14 @@ pdf_constraints:
   max_file_size_mb: 10
   download_timeout_seconds: 120
   max_extracted_chars: 50000
+
+# Retry policy configuration
+retry_policy:
+  max_attempts: 3
+  initial_delay_seconds: 1
+  backoff_multiplier: 2
+  max_delay_seconds: 60
+
+# Temporal tracking configuration
+temporal_tracking:
+  timeframe_months: 12
