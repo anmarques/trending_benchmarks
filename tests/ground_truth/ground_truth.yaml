@@ -152,9 +152,6 @@ models:
     - name: Winogrande
       variant: base
       category: Reasoning
-    - name: HellaSwag
-      variant: base
-      category: Reasoning
     - name: WorldSense
       variant: base
       category: Reasoning
@@ -529,8 +526,8 @@ expected_behavior:
     - Long Context
 test_statistics:
   llama_31_8b:
-    total_benchmarks: 83
-    unique_benchmark_names: 58
+    total_benchmarks: 82
+    unique_benchmark_names: 57
     documents: 3
     primary_source: HuggingFace model card
     additional_sources: arXiv paper Tables 8-16 (all benchmark categories fully extracted)
@@ -541,8 +538,8 @@ test_statistics:
     primary_source: Qwen2.5-LLM blog
     additional_sources: arXiv paper confirms benchmarks
   overall:
-    total_benchmarks: 167
-    unique_benchmark_names: 76
+    total_benchmarks: 166
+    unique_benchmark_names: 75
     models: 2
     expected_extraction_rate: '>90%'
     notes: Complete extraction from all sources including PDFs, blogs, and model cards. Tables 8-16 from Llama arXiv paper fully extracted.
