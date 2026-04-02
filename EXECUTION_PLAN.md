@@ -45,8 +45,8 @@
 #### Priority 2: Medium Importance
 - [x] P2-1: Implement side-by-side benchmark disambiguation ✅
 - [x] P2-2: Add lab→GitHub org mapping ✅
-- [ ] P2-3: Track source type in model_benchmarks
-- [ ] P2-4: Implement deprecated benchmark tracking
+- [x] P2-3: Track source type in model_benchmarks ✅
+- [x] P2-4: Implement deprecated benchmark tracking ✅
 - [ ] P2-5: Add Google search configuration
 - [ ] P2-6: Add PDF constraints configuration
 - [x] P2-7: Implement report generation retry ✅
@@ -74,7 +74,7 @@
 - [ ] Phase 2.5: Remaining views (Model Comparison, Lab Analytics, Taxonomy Browser)
 - [ ] Phase 2.6: Polish & deploy to GitHub Pages
 
-**Progress:** 17/41 tasks complete (41.5%)
+**Progress:** 19/41 tasks complete (46.3%)
 
 ---
 
