@@ -1,4 +1,5 @@
 # Target model creators/organizations to track
+# Only include labs that produce LLMs, VLMs, and audio-language models
 labs:
   - Qwen
   - MinimaxAI
@@ -15,14 +16,30 @@ labs:
   - THUDM  # ChatGLM
   - baichuan-inc
   - internlm
-  - huggingface
+  # Note: "huggingface" removed - gets irrelevant time-series/BERT models
 
 # Discovery settings
 discovery:
-  models_per_lab: 5  # Top N models per lab (reduced for faster first run)
+  models_per_lab: 15  # Increased for better coverage
   sort_by: "downloads"  # Options: downloads, trending, lastModified
-  filter_tags: []  # Empty = no tag filtering
-  min_downloads: 0  # No minimum (get all models)
+
+  # Task/pipeline tag filters (empty = no filtering)
+  # Common tags: text-generation, text2text-generation, image-text-to-text,
+  # zero-shot-image-classification, automatic-speech-recognition
+  filter_tags:
+    - "text-generation"       # LLMs
+    - "image-text-to-text"    # VLMs
+    - "text2text-generation"  # Some LLMs use this
+
+  # Additional filters
+  min_downloads: 10000       # Skip low-usage models
+  date_filter_months: 12     # Only models from last 12 months
+
+  # Skip models with these tags (noise reduction)
+  exclude_tags:
+    - "time-series-forecasting"
+    - "fill-mask"
+    - "token-classification"
 
 # Cadence settings
 schedule:

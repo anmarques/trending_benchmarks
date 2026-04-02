@@ -141,35 +141,37 @@ evaluation trends, emerging benchmarks, and lab-specific preferences."""
 
     def _generate_trending_models(self, all_models: List[Dict[str, Any]]) -> str:
         """Generate trending models section."""
-        # Get models from last 30 days
-        thirty_days_ago = (datetime.utcnow() - timedelta(days=30)).isoformat()
-        recent_models = self.cache.get_trending_models(thirty_days_ago)
+        # Get models from last 12 months (to match discovery config)
+        twelve_months_ago = (datetime.utcnow() - timedelta(days=365)).isoformat()
+        recent_models = self.cache.get_trending_models(twelve_months_ago)
 
         if not recent_models:
-            return """## Trending Models This Month
+            return """## Trending Models (Last 12 Months)
 
-No new models discovered in the last 30 days."""
+No new models discovered in the last 12 months."""
 
-        # Sort by first_seen (most recent first)
-        recent_models.sort(key=lambda m: m.get("first_seen", ""), reverse=True)
+        # Sort by downloads (most popular first), then by release date
+        recent_models.sort(
+            key=lambda m: (m.get("downloads", 0), m.get("first_seen", "")),
+            reverse=True
+        )
 
-        # Limit to top 20
-        top_models = recent_models[:20]
-
-        lines = ["## Trending Models This Month", ""]
-        lines.append(f"Discovered {len(recent_models)} new models in the last 30 days.")
+        # Show ALL models (no arbitrary limit)
+        lines = ["## Trending Models (Last 12 Months)", ""]
+        lines.append(f"Discovered {len(recent_models)} models from major labs in the last year.")
         lines.append("")
-        lines.append("| Model | Lab | Downloads | Likes | First Seen |")
-        lines.append("|-------|-----|-----------|-------|------------|")
+        lines.append("| Model | Lab | Downloads | Likes | Release Date |")
+        lines.append("|-------|-----|-----------|-------|--------------|")
 
-        for model in top_models:
+        for model in recent_models:
             name = model.get("name", model.get("id", "Unknown"))
             lab = model.get("lab", "Unknown")
             downloads = self._format_number(model.get("downloads", 0))
             likes = self._format_number(model.get("likes", 0))
-            first_seen = model.get("first_seen", "")[:10]
+            # Use release_date if available, otherwise first_seen
+            release_date = model.get("release_date", model.get("first_seen", ""))[:10]
 
-            lines.append(f"| {name} | {lab} | {downloads} | {likes} | {first_seen} |")
+            lines.append(f"| {name} | {lab} | {downloads} | {likes} | {release_date} |")
 
         return "\n".join(lines)
 

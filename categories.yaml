@@ -1,0 +1,400 @@
+# Benchmark Classification Taxonomy
+# Defines the 13 primary categories and secondary attributes used for benchmark classification
+# Version: 1.0
+# Last Updated: 2026-04-02
+
+# =============================================================================
+# PRIMARY CATEGORIES (Multi-label)
+# =============================================================================
+# Each benchmark can belong to multiple primary categories
+
+primary_categories:
+  - name: Knowledge
+    description: Tests factual knowledge and general understanding across academic/world domains
+    keywords:
+      - MMLU
+      - TriviaQA
+      - Natural Questions
+      - knowledge
+      - facts
+      - academic
+      - subjects
+      - C-Eval
+      - CMMLU
+    examples:
+      - MMLU (57 academic subjects)
+      - TriviaQA (trivia questions)
+      - Natural Questions (factual QA)
+      - C-Eval (Chinese knowledge)
+    confidence_threshold: 0.9  # High confidence if name/description clearly indicates knowledge testing
+
+  - name: Reasoning
+    description: Tests logical reasoning, commonsense reasoning, and inference abilities
+    keywords:
+      - ARC
+      - HellaSwag
+      - PIQA
+      - WinoGrande
+      - reasoning
+      - logic
+      - commonsense
+      - inference
+      - BoolQ
+    examples:
+      - ARC-c (science reasoning)
+      - HellaSwag (commonsense reasoning)
+      - PIQA (physical reasoning)
+      - WinoGrande (coreference reasoning)
+      - BoolQ (yes/no reasoning)
+    confidence_threshold: 0.8
+
+  - name: Math
+    description: Mathematical problem solving, numerical reasoning, and computation
+    keywords:
+      - GSM8K
+      - MATH
+      - AIME
+      - math
+      - mathematical
+      - arithmetic
+      - algebra
+      - geometry
+      - calculus
+      - olympiad
+    examples:
+      - GSM8K (grade school math)
+      - MATH (competition math)
+      - AIME (invitational math exam)
+      - MathVista (visual math)
+      - Omni-MATH (olympiad math)
+    confidence_threshold: 0.9
+
+  - name: Code
+    description: Code generation, programming, software engineering, and debugging
+    keywords:
+      - HumanEval
+      - MBPP
+      - SWE-bench
+      - code
+      - programming
+      - python
+      - coding
+      - software
+      - debugging
+      - repository
+    examples:
+      - HumanEval (Python code generation)
+      - MBPP (Python programming)
+      - SWE-bench (GitHub issues)
+      - LiveCodeBench (code generation)
+      - BigCodeBench (code tasks)
+    confidence_threshold: 0.9
+
+  - name: Vision
+    description: Visual understanding, image processing, and visual question answering
+    keywords:
+      - VQA
+      - MMMU
+      - visual
+      - image
+      - vision
+      - picture
+      - photo
+      - diagram
+      - chart
+      - OCR
+      - document
+    examples:
+      - VQAv2 (visual questions)
+      - MMMU (multimodal understanding)
+      - DocVQA (document VQA)
+      - MMBench (vision benchmark)
+    confidence_threshold: 0.9
+
+  - name: Audio
+    description: Speech recognition, audio processing, and sound understanding
+    keywords:
+      - LibriSpeech
+      - audio
+      - speech
+      - ASR
+      - WER
+      - sound
+      - spoken
+      - voice
+    examples:
+      - LibriSpeech (speech recognition)
+      - Audio ASR benchmarks
+    confidence_threshold: 1.0
+
+  - name: Multilingual
+    description: Non-English or cross-lingual evaluation, multilingual capabilities
+    keywords:
+      - multilingual
+      - cross-lingual
+      - FLORES
+      - Belebele
+      - XNLI
+      - translation
+      - languages
+      - Chinese
+      - French
+      - Spanish
+      - MGSM
+      - C-Eval
+      - CMMLU
+    examples:
+      - FLORES-200 (200 languages)
+      - Belebele (122 languages)
+      - XNLI (cross-lingual inference)
+      - C-Eval (Chinese)
+      - MMMLU (multilingual MMLU)
+    confidence_threshold: 0.9
+
+  - name: Safety
+    description: Truthfulness, toxicity, bias, robustness, and adversarial testing
+    keywords:
+      - TruthfulQA
+      - ToxiGen
+      - BBQ
+      - safety
+      - truthful
+      - toxic
+      - bias
+      - adversarial
+      - trust
+      - robustness
+    examples:
+      - TruthfulQA (truthfulness)
+      - ToxiGen (toxicity)
+      - BBQ (bias)
+      - AdvGLUE (adversarial)
+      - DecodingTrust (trustworthiness)
+    confidence_threshold: 1.0
+
+  - name: Long-Context
+    description: Tasks requiring long context windows (typically >4K tokens)
+    keywords:
+      - LongBench
+      - RULER
+      - long context
+      - long-form
+      - needle
+      - haystack
+      - InfiniteBench
+      - long
+      - AA-LCR
+    examples:
+      - LongBench (long context tasks)
+      - RULER (long context)
+      - InfiniteBench (>100K tokens)
+      - Needle-in-Haystack
+    confidence_threshold: 1.0
+
+  - name: Instruction-Following
+    description: Following complex, multi-step, or constrained instructions
+    keywords:
+      - IFEval
+      - AlpacaEval
+      - MT-Bench
+      - instruction
+      - following
+      - constraints
+      - multi-turn
+      - conversation
+    examples:
+      - IFEval (verifiable instructions)
+      - AlpacaEval (instruction following)
+      - MT-Bench (multi-turn)
+      - Arena-Hard (challenging instructions)
+    confidence_threshold: 0.9
+
+  - name: Tool-Use
+    description: Function calling, API usage, and tool integration
+    keywords:
+      - BFCL
+      - tool
+      - function calling
+      - API
+      - tools
+      - functions
+    examples:
+      - BFCL (Berkeley Function Calling)
+      - API-Bench (API usage)
+      - NFCL (Nexus Function Calling)
+    confidence_threshold: 1.0
+
+  - name: Agent
+    description: Interactive, multi-step, environment-based autonomous tasks
+    keywords:
+      - WebArena
+      - OSWorld
+      - agent
+      - interactive
+      - environment
+      - autonomous
+      - planning
+      - multi-step
+      - task completion
+    examples:
+      - WebArena (web agent tasks)
+      - OSWorld (OS-level tasks)
+      - AgentBench (agent capabilities)
+      - VisualWebArena (multimodal agent)
+    confidence_threshold: 1.0
+
+  - name: Domain-Specific
+    description: Specialized domains like medical, legal, finance, and science
+    keywords:
+      - LegalBench
+      - FinQA
+      - PubMedQA
+      - MedQA
+      - legal
+      - medical
+      - finance
+      - biomedical
+      - healthcare
+      - law
+    examples:
+      - LegalBench (legal reasoning)
+      - FinQA (financial reasoning)
+      - PubMedQA (biomedical QA)
+      - MedXpertQA (medical)
+    confidence_threshold: 1.0
+
+# =============================================================================
+# SECONDARY ATTRIBUTES
+# =============================================================================
+# Additional characteristics that can apply to benchmarks
+
+secondary_attributes:
+  - name: OCR/Text
+    description: Requires reading text from images
+    examples:
+      - DocVQA
+      - OCRBench
+      - TextVQA
+      - CharXiv
+
+  - name: Spatial
+    description: Spatial reasoning and understanding
+    examples:
+      - RefCOCO
+      - CountBench
+      - EmbSpatialBench
+      - LingoQA
+
+  - name: Medical
+    description: Healthcare and biomedical domain
+    examples:
+      - SLAKE
+      - PMC-VQA
+      - MedXpertQA
+      - PubMedQA
+
+  - name: Video
+    description: Video understanding with temporal reasoning
+    examples:
+      - VideoMME
+      - MLVU
+      - MVBench
+      - VideoMMMU
+
+  - name: Document
+    description: Document understanding and processing
+    examples:
+      - DocVQA
+      - OmniDocBench
+      - CharXiv
+
+  - name: Competition
+    description: Based on real competitions
+    examples:
+      - AIME
+      - HMMT
+      - IMO
+      - Olympiad benchmarks
+
+  - name: Contamination-Free
+    description: Continuously updated to avoid training data leakage
+    examples:
+      - LiveCodeBench
+      - LongReason
+
+  - name: Real-World
+    description: Based on real-world data and tasks
+    examples:
+      - SWE-bench
+      - WebArena
+      - OSWorld
+      - RealWorldQA
+
+  - name: STEM
+    description: Science, Technology, Engineering, Mathematics focus
+    examples:
+      - MMMU (STEM subset)
+      - ARC
+      - Science benchmarks
+
+  - name: Multimodal
+    description: Requires multiple modalities (vision+text, audio+text, etc.)
+    examples:
+      - MMMU
+      - VideoMME
+      - Any VLM benchmark
+
+# =============================================================================
+# MODALITIES
+# =============================================================================
+# Base modalities for benchmarks
+
+modalities:
+  - text
+  - vision
+  - audio
+  - multimodal
+
+# =============================================================================
+# DIFFICULTY LEVELS
+# =============================================================================
+# Classification of benchmark difficulty
+
+difficulty_levels:
+  - name: introductory
+    description: Basic tasks with high baseline scores
+    examples:
+      - GSM8K
+      - Simple QA tasks
+
+  - name: intermediate
+    description: Standard evaluation with moderate difficulty
+    examples:
+      - MMLU
+      - HumanEval
+
+  - name: advanced
+    description: Challenging tasks with low baseline scores
+    examples:
+      - MMMU
+      - MATH
+
+  - name: expert
+    description: Competition-level, olympiad, specialized expertise
+    examples:
+      - AIME
+      - SWE-bench
+      - WebArena
+
+# =============================================================================
+# CLASSIFICATION NOTES
+# =============================================================================
+# Important guidelines for using this taxonomy:
+#
+# 1. Multi-label Classification: Benchmarks can belong to multiple primary categories
+# 2. Confidence Scoring: Use threshold values as guides, adjust based on clarity
+# 3. Keyword Matching: Keywords are case-insensitive and can appear anywhere in name/description
+# 4. Context Priority: Explicit mentions in description take precedence over name inference
+# 5. Secondary Attributes: Applied in addition to primary categories for enrichment
+# 6. Modality Assignment: Determines base capability being tested
+# 7. Domain Specificity: Domain-Specific category + specific domain attribute (e.g., Medical)

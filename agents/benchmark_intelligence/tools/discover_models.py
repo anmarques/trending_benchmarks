@@ -82,14 +82,16 @@ def discover_trending_models(
         models_per_lab = config.get("models_per_lab", 20)
         sort_by = config.get("sort_by", "downloads")
         filter_tags = config.get("filter_tags", [])
+        exclude_tags = config.get("exclude_tags", [])
         min_downloads = config.get("min_downloads", 0)
+        date_filter_months = config.get("date_filter_months", None)
 
         logger.info(
             f"Discovering models from {len(labs)} labs: {', '.join(labs)}"
         )
         logger.info(
             f"Settings: {models_per_lab} models/lab, sort by {sort_by}, "
-            f"min downloads: {min_downloads}"
+            f"min downloads: {min_downloads}, date filter: {date_filter_months} months"
         )
 
         all_models = []
@@ -122,6 +124,20 @@ def discover_trending_models(
                     # Check tags if specified
                     if filter_tags:
                         if not any(tag in model.tags for tag in filter_tags):
+                            continue
+
+                    # Check exclude_tags
+                    if exclude_tags:
+                        if any(tag in model.tags for tag in exclude_tags):
+                            continue
+
+                    # Check date filter (last N months)
+                    if date_filter_months and model.created_at:
+                        from datetime import datetime, timezone
+                        from dateutil.relativedelta import relativedelta
+
+                        cutoff_date = datetime.now(timezone.utc) - relativedelta(months=date_filter_months)
+                        if model.created_at < cutoff_date:
                             continue
 
                     filtered_models.append(model)
