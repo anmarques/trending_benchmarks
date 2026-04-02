@@ -74,7 +74,7 @@
 - [ ] Phase 2.5: Remaining views (Model Comparison, Lab Analytics, Taxonomy Browser)
 - [ ] Phase 2.6: Polish & deploy to GitHub Pages
 
-**Progress:** 14/41 tasks complete (34.1%)
+**Progress:** 16/41 tasks complete (39.0%)
 
 ---
 
