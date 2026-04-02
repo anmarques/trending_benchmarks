@@ -1,8 +1,8 @@
 # Benchmark Intelligence System - Technical Specifications
 
-**Version:** 1.1
+**Version:** 1.2
 **Last Updated:** 2026-04-02
-**Status:** Draft for Review
+**Status:** Final
 
 ---
 
@@ -14,8 +14,7 @@ Automatically track, extract, and analyze benchmark evaluation trends across Lar
 ### 1.2 Goals
 - **Comprehensive Coverage**: Track benchmarks from all major AI labs and organizations
 - **Multi-Source Intelligence**: Extract benchmark data from all available sources (model cards, technical reports, research papers, official blogs)
-- **Temporal Tracking**: Monitor evolution of benchmark usage over 12+ months
-- **Automated Reporting**: Generate actionable intelligence reports on a monthly cadence
+- **Temporal Tracking**: Monitor evolution of benchmark usage over 12 months
 - **High Quality**: Filter noise, consolidate duplicates, provide accurate categorization
 - **Adaptive Taxonomy**: Evolve benchmark categorization based on discovered benchmarks
 
@@ -27,19 +26,16 @@ Automatically track, extract, and analyze benchmark evaluation trends across Lar
 - ✅ Zero irrelevant models (no time-series forecasting, fill-mask, token-classification models)
 - ✅ Reports show ALL discovered models without arbitrary limits
 - ✅ SQLite cache enables incremental updates (only process new/changed content)
-- ✅ Taxonomy adapts to newly discovered benchmark types
+- ✅ Taxonomy adapts to newly discovered benchmark types on every run
 - ✅ Progress is reported to user as agent executes
 - ✅ Historical taxonomy versions are preserved
-
-**Note**: Success is NOT defined by hitting specific numbers (e.g., "100 models" or "80 benchmarks"). The system succeeds when it comprehensively processes all available data with high quality.
+- ✅ Trend tracking capped at 12 months
 
 ---
 
 ## 2. Data Sources
 
-### 2.1 Source Types (All Equally Important)
-
-All sources provide valuable benchmark information and must be treated equally. No source is prioritized over another.
+### 2.1 Source Types
 
 #### Model Cards (HuggingFace)
 - **What**: Official model documentation on HuggingFace Hub
@@ -104,10 +100,11 @@ For each model, the system should:
    - **Markdown**: Parse directly
    - **HTML**: Strip tags, extract main content
    - **PDF**: Use PDF parser libraries (PyPDF2, pdfplumber, or similar)
+   - **Unreadable content**: Ignore PDFs that cannot be parsed or are image-only without text layer
 5. ✅ Limit content size to prevent overwhelming AI (<50K chars per source)
 6. ✅ Log failed fetches but continue processing other sources
 
-**Note**: If a source document is not found (e.g., no arXiv paper exists), this is NOT a failure. The system should search all potential sources but gracefully handle missing ones.
+**Note**: If a source document is not found (e.g., no arXiv paper exists) or cannot be read, this is NOT a failure. The system should search all potential sources but gracefully handle missing or unreadable ones.
 
 ---
 
@@ -220,40 +217,23 @@ A **benchmark** is a standardized evaluation dataset or task with a clear name m
 - ❌ Different benchmarks: `MMLU-Pro` ≠ `MMLU`
 - ❌ Subsets: Track separately (`MMLU-STEM` vs `MMLU`)
 
+**Benchmark Disambiguation**:
+- If benchmarks are routinely reported side-by-side with different names (e.g., both "MMLU" and "MMLU-Pro" in same model card), they are distinct benchmarks
+- When in doubt, treat as separate unless consolidation rules clearly indicate they are variants
+
 **Consolidation Method**:
 1. Fuzzy string matching (Levenshtein distance < 0.2)
 2. AI-assisted grouping (Claude identifies variants)
-3. Store consolidated name in database
-
-**Note**: There is no "accuracy metric" for consolidation. The system does its best using AI + fuzzy matching. Manual corrections can be made in configuration if needed.
+3. When same benchmark appears with different names across sources, adopt the most common nomenclature
+4. Store consolidated name in database
 
 ---
 
 ## 5. Benchmark Classification & Adaptive Taxonomy
 
-### 5.1 Initial Category Taxonomy
+### 5.1 Taxonomy Evolution
 
-The following categories are defined in the specification as starting points. The agent may discover new categories during operation.
-
-| Category | Description | Example Benchmarks |
-|----------|-------------|-------------------|
-| **Knowledge** | Factual knowledge, Q&A | MMLU, TriviaQA, NaturalQuestions |
-| **Reasoning** | Logic, common sense | ARC, HellaSwag, PIQA, BoolQ |
-| **Math** | Mathematical problem solving | GSM8K, MATH, AIME, Gaokao |
-| **Code** | Programming tasks | HumanEval, MBPP, SWE-bench |
-| **Vision** | Visual understanding | VQAv2, MMMU, DocVQA, AI2D |
-| **Audio** | Speech/audio tasks | FLEURS, LibriSpeech |
-| **Multilingual** | Non-English languages | MMMLU, C-Eval, CMMLU, FLORES |
-| **Safety** | Toxicity, bias, jailbreaks | TruthfulQA, RewardBench |
-| **Long-Context** | Extended context handling | LongBench, RULER, InfiniteBench |
-| **Instruction-Following** | Adherence to instructions | IFEval, AlpacaEval |
-| **Tool-Use** | API calling, tool integration | ToolBench, API-Bank |
-| **Agent** | Multi-step reasoning, planning | AgentBench, WebArena |
-| **Domain-Specific** | Medical, legal, finance | MedQA, LegalBench, FinQA |
-
-### 5.2 Adaptive Taxonomy
-
-**Each run, the agent should**:
+**On each run, the agent must**:
 
 1. **Classify all benchmarks** using Claude AI based on benchmark names and descriptions
 2. **Identify gaps**: If many benchmarks don't fit existing categories, propose new ones
@@ -269,7 +249,7 @@ The following categories are defined in the specification as starting points. Th
 - Confidence threshold: Minimum 0.6 confidence for assignment
 - Manual override: Users can edit `categories.yaml` at root
 
-### 5.3 Taxonomy Storage
+### 5.2 Taxonomy Storage
 
 ```
 /benchmark_taxonomy.md               # Current taxonomy (auto-updated)
@@ -604,7 +584,7 @@ reporting:
 
 ---
 
-## 11. Web Dashboard (Future)
+## 11. Web Dashboard
 
 ### 11.1 Purpose
 Interactive visualization of benchmark trends and model intelligence.
@@ -664,32 +644,7 @@ Dashboard reads directly from SQLite database:
 
 ---
 
-## 13. Out of Scope
-
-The following are explicitly **NOT** included in this specification:
-
-- ❌ **Real-time updates**: System runs on monthly cadence, not continuously
-- ❌ **REST API**: No programmatic API for external access (dashboard only)
-- ❌ **Alert system**: No email/Slack notifications for new benchmarks
-- ❌ **Trend prediction**: No ML-based forecasting (only historical analysis)
-- ❌ **Benchmark score tracking**: Only track presence, not specific scores
-- ❌ **Multi-version model tracking**: Track document updates, not model versions
-- ❌ **Social media sources**: No Twitter, Reddit, or LinkedIn content
-- ❌ **User accounts**: Dashboard is read-only, no authentication
-
----
-
-## 14. Open Questions
-
-1. **PDF Quality**: How to handle poorly formatted or image-based PDFs? (OCR fallback?)
-2. **Source Conflicts**: If same benchmark appears with different names in different sources, which to prefer?
-3. **Benchmark Disambiguation**: How to distinguish "MMLU" vs "MMLU-Pro" vs "MMLU-Extended"?
-4. **Taxonomy Evolution**: How often to update taxonomy? Every run or only when significant new benchmarks emerge?
-5. **Historical Data**: Should we backfill data for older models (>12 months), or only track forward from now?
-
----
-
-## 15. Acceptance Criteria
+## 13. Acceptance Criteria
 
 **The system is considered complete when:**
 
@@ -708,7 +663,6 @@ The following are explicitly **NOT** included in this specification:
 - ✅ Root README links to latest report
 - ✅ Documentation complete (README, SPEC, inline comments)
 - ✅ PDF parsing works for technical reports
-- ✅ Can run monthly on schedule (cron or manual)
 
 ---
 
