@@ -35,7 +35,7 @@
 
 #### Priority 1: High Importance
 - [x] P1-1: Update database schema (deleted_at, extraction_failed, indexes) ✅
-- [ ] P1-2: Implement "most common nomenclature" consolidation
+- [x] P1-2: Implement "most common nomenclature" consolidation ✅
 - [x] P1-3: Update root README auto-update ✅
 - [x] P1-4: Implement retry policy configuration ✅
 - [x] P1-5: Implement 12-month rolling window ✅
@@ -67,7 +67,7 @@
 - [ ] Phase 2.5: Remaining views (Model Comparison, Lab Analytics, Taxonomy Browser)
 - [ ] Phase 2.6: Polish & deploy to GitHub Pages
 
-**Progress:** 11/36 tasks complete (30.6%)
+**Progress:** 12/36 tasks complete (33.3%)
 
 ---
 
