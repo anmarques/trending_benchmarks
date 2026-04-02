@@ -43,14 +43,14 @@
 - [x] P1-7: Implement failed extraction "never retry" policy ✅
 
 #### Priority 2: Medium Importance
-- [ ] P2-1: Implement side-by-side benchmark disambiguation
+- [x] P2-1: Implement side-by-side benchmark disambiguation ✅
 - [x] P2-2: Add lab→GitHub org mapping ✅
 - [ ] P2-3: Track source type in model_benchmarks
 - [ ] P2-4: Implement deprecated benchmark tracking
 - [ ] P2-5: Add Google search configuration
 - [ ] P2-6: Add PDF constraints configuration
-- [ ] P2-7: Implement report generation retry
-- [ ] P2-8: Archive taxonomy only on change
+- [x] P2-7: Implement report generation retry ✅
+- [x] P2-8: Archive taxonomy only on change ✅
 
 #### Priority 3: Polish & Optimization
 - [ ] P3-1: Implement document fetching parallelization
@@ -74,7 +74,7 @@
 - [ ] Phase 2.5: Remaining views (Model Comparison, Lab Analytics, Taxonomy Browser)
 - [ ] Phase 2.6: Polish & deploy to GitHub Pages
 
-**Progress:** 13/41 tasks complete (31.7%)
+**Progress:** 14/41 tasks complete (34.1%)
 
 ---
 
