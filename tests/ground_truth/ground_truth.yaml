@@ -123,7 +123,7 @@ models:
   - url: https://arxiv.org/abs/2407.21783
     type: arxiv_paper
     status: extracted
-    notes: The Llama 3 Herd of Models - Technical Report, Table 2 (Page 3), additional benchmarks from full text
+    notes: The Llama 3 Herd of Models - Technical Report, Tables 8 and 16 extracted
     benchmarks:
     - name: BFCL
       variant: instruct
@@ -137,18 +137,60 @@ models:
     - name: NIH
       variant: Multi-needle, instruct
       category: Long Context
-    - name: MuSR
-      variant: Multi-step reasoning
+    - name: RACE
+      variant: base
+      category: Reading Comprehension
+    - name: PAWS
+      variant: paraphrase detection
       category: Reasoning
-    - name: BigCodeBench
-      variant: code
+    - name: Adv SQuAD
+      variant: adversarial
+      category: Reading Comprehension
+    - name: Dynabench SQuAD
+      variant: adversarial
+      category: Reading Comprehension
+    - name: GSM-Plus
+      variant: adversarial
+      category: Math Reasoning
+    - name: many-shot GSM8K
+      variant: long context
+      category: Math Reasoning
+    - name: HumanEval+
+      variant: instruct
       category: Code Generation
-    - name: SimpleQA
-      variant: factuality
-      category: Truthfulness
-    - name: Ruler
+    - name: MBPP EvalPlus
+      variant: base, instruct
+      category: Code Generation
+    - name: MGSM
+      variant: multilingual
+      category: Multilingual
+    - name: Multilingual MMLU
+      variant: internal
+      category: Multilingual
+    - name: API-Bank
+      variant: instruct
+      category: Tool Use
+    - name: API-Bench
+      variant: instruct
+      category: Tool Use
+    - name: Needle-in-a-Haystack
       variant: long context
       category: Long Context
+    - name: GRE
+      variant: proficiency exam
+      category: General Knowledge
+    - name: LSAT
+      variant: proficiency exam
+      category: Reasoning
+    - name: SAT
+      variant: proficiency exam
+      category: General Knowledge
+    - name: AP
+      variant: proficiency exam
+      category: General Knowledge
+    - name: GMAT
+      variant: proficiency exam
+      category: General Knowledge
 - id: Qwen/Qwen2.5-72B-Instruct
   model_name: Qwen2.5-72B-Instruct
   lab: Qwen
@@ -415,11 +457,11 @@ expected_behavior:
     - Long Context
 test_statistics:
   llama_31_8b:
-    total_benchmarks: 44
-    unique_benchmark_names: 34
+    total_benchmarks: 62
+    unique_benchmark_names: 48
     documents: 3
     primary_source: HuggingFace model card
-    additional_sources: arXiv paper (long context benchmarks), multilingual MMLU variants
+    additional_sources: arXiv paper Tables 8 and 16 (proficiency exams, adversarial benchmarks, tool use)
   qwen_25_72b_instruct:
     total_benchmarks: 84
     unique_benchmark_names: 38
@@ -427,9 +469,9 @@ test_statistics:
     primary_source: Qwen2.5-LLM blog
     additional_sources: arXiv paper confirms benchmarks
   overall:
-    total_benchmarks: 128
-    unique_benchmark_names: 56
+    total_benchmarks: 146
+    unique_benchmark_names: 68
     models: 2
     expected_extraction_rate: '>90%'
-    notes: Complete extraction from all sources including PDFs, blogs, and model cards
+    notes: Complete extraction from all sources including PDFs, blogs, and model cards. Tables 8 and 16 from Llama arXiv paper fully extracted.
   notes: Ground truth tracks benchmark names and variants only, not scores
