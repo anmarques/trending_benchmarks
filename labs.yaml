@@ -62,3 +62,29 @@ retry_policy:
 # Temporal tracking configuration
 temporal_tracking:
   timeframe_months: 12
+
+# Parallelization configuration
+parallelization:
+  max_concurrent_document_fetches: 5
+  enabled: true
+  timeout_per_document_seconds: 60
+
+# Lab to GitHub organization mapping
+# Maps lab names (from HuggingFace) to their GitHub organization names
+# for reliable README/PDF fetching
+lab_github_mappings:
+  Qwen: QwenLM
+  meta-llama: meta-llama
+  mistralai: mistralai
+  google: google
+  microsoft: microsoft
+  anthropic: anthropics
+  alibaba-pai: alibaba
+  tencent: Tencent
+  deepseek-ai: deepseek-ai
+  OpenGVLab: OpenGVLab
+  THUDM: THUDM
+  baichuan-inc: baichuan-inc
+  internlm: InternLM
+  01-ai: 01-ai
+  MinimaxAI: MiniMaxAI

@@ -494,7 +494,7 @@ def archive_taxonomy_if_changed(
     """
     Archive old taxonomy if it differs from new taxonomy.
 
-    Compares old and new taxonomies and creates an archive copy if different.
+    Compares old and new taxonomies using content hash and creates an archive copy if different.
 
     Args:
         old: Old taxonomy structure
@@ -512,15 +512,19 @@ def archive_taxonomy_if_changed(
         ... )
     """
     try:
-        # Compare category structures
+        # Compare category structures using hash for accurate change detection
         old_categories = sorted([cat["name"] for cat in old.get("categories", [])])
         new_categories = sorted([cat["name"] for cat in new.get("categories", [])])
 
-        if old_categories == new_categories:
-            logger.info("Taxonomy unchanged, no archive created")
+        # Compute hashes of category lists
+        old_hash = hashlib.sha256(str(old_categories).encode('utf-8')).hexdigest()
+        new_hash = hashlib.sha256(str(new_categories).encode('utf-8')).hexdigest()
+
+        if old_hash == new_hash:
+            logger.info("Taxonomy unchanged (hash match), no archive created")
             return None
 
-        logger.info("Taxonomy changed, creating archive")
+        logger.info(f"Taxonomy changed (hash mismatch: {old_hash[:8]} -> {new_hash[:8]}), creating archive")
 
         # Create archive directory
         archive_dir = Path(__file__).parent.parent.parent / "archive"

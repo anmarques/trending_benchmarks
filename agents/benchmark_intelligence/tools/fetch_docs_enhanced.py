@@ -183,7 +183,7 @@ def fetch_github_pdf(
         return None
 
     # Try known patterns first
-    github_org = _get_github_org(lab_name)
+    github_org = _get_github_org(lab_name, config)
     known_patterns = [
         f"https://github.com/{github_org}/{model_name}/releases/download/v1.0/{model_name}_report.pdf",
         f"https://github.com/{github_org}/{model_name}/blob/main/docs/technical_report.pdf",
@@ -400,19 +400,41 @@ def _extract_arxiv_urls(content: str) -> List[str]:
     return urls
 
 
-def _get_github_org(lab_name: str) -> str:
-    """Map lab name to GitHub organization name."""
+def _get_github_org(lab_name: str, config: Optional[Dict] = None) -> str:
+    """
+    Map lab name to GitHub organization name.
+
+    Loads mapping from config if available, otherwise uses fallback defaults.
+
+    Args:
+        lab_name: Name of the lab/organization
+        config: Optional configuration dict with lab_github_mappings
+
+    Returns:
+        GitHub organization name (fallback to lab_name if no mapping found)
+    """
+    # Try to load from config first
+    if config and "lab_github_mappings" in config:
+        mapping = config["lab_github_mappings"]
+        return mapping.get(lab_name, lab_name)
+
+    # Fallback to default mapping if config not available
     mapping = {
         "Qwen": "QwenLM",
         "meta-llama": "meta-llama",
         "mistralai": "mistralai",
-        "google": "google-research",
+        "google": "google",
         "microsoft": "microsoft",
+        "anthropic": "anthropics",
+        "alibaba-pai": "alibaba",
+        "tencent": "Tencent",
         "deepseek-ai": "deepseek-ai",
         "OpenGVLab": "OpenGVLab",
         "THUDM": "THUDM",
-        "01-ai": "01-ai",
+        "baichuan-inc": "baichuan-inc",
         "internlm": "InternLM",
+        "01-ai": "01-ai",
+        "MinimaxAI": "MiniMaxAI",
     }
 
     return mapping.get(lab_name, lab_name)

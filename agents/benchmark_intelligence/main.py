@@ -591,7 +591,10 @@ class BenchmarkIntelligenceAgent:
             logger.debug("Skipping report generation (dry run mode or no cache)")
             return None
 
-        report_generator = ReportGenerator(self.cache)
+        # Get retry configuration from config
+        retry_config = self.config.get("retry_policy", {})
+
+        report_generator = ReportGenerator(self.cache, retry_config=retry_config)
         report_content = report_generator.generate_report()
 
         if not self.dry_run:

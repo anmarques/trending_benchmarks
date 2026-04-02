@@ -14,6 +14,7 @@ from collections import Counter, defaultdict
 import json
 
 from .tools.cache import CacheManager
+from .tools.retry_utils import retry_with_exponential_backoff
 
 
 logger = logging.getLogger(__name__)
@@ -27,18 +28,25 @@ class ReportGenerator:
     from the cached benchmark and model data.
     """
 
-    def __init__(self, cache_manager: CacheManager):
+    def __init__(self, cache_manager: CacheManager, retry_config: Optional[Dict[str, Any]] = None):
         """
         Initialize report generator.
 
         Args:
             cache_manager: Cache manager instance for data access
+            retry_config: Optional retry configuration for report generation
         """
         self.cache = cache_manager
+        self.retry_config = retry_config or {
+            "max_attempts": 3,
+            "initial_delay_seconds": 1,
+            "backoff_multiplier": 2,
+            "max_delay_seconds": 60,
+        }
 
     def generate_report(self) -> str:
         """
-        Generate comprehensive markdown report.
+        Generate comprehensive markdown report with retry logic.
 
         Returns:
             Markdown formatted report string
@@ -52,7 +60,22 @@ class ReportGenerator:
             - Lab-Specific Insights
             - Temporal Trends
         """
-        logger.info("Generating comprehensive report...")
+        logger.info("Generating comprehensive report with retry logic...")
+
+        # Use retry wrapper for report generation
+        return retry_with_exponential_backoff(
+            self._generate_report_internal,
+            self.retry_config
+        )
+
+    def _generate_report_internal(self) -> str:
+        """
+        Internal report generation logic (wrapped by retry).
+
+        Returns:
+            Markdown formatted report string
+        """
+        logger.info("Executing report generation...")
 
         # Gather data
         stats = self.cache.get_stats()

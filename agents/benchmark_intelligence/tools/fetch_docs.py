@@ -557,3 +557,77 @@ def is_pdf_url(url: str) -> bool:
     ]
 
     return any(pattern in url_lower for pattern in pdf_patterns)
+
+
+def get_github_org_for_lab(
+    lab_name: str,
+    config: Optional[Dict[str, Any]] = None
+) -> str:
+    """
+    Map lab name to GitHub organization name.
+
+    Uses lab_github_mappings from config if available, otherwise falls back
+    to default mapping.
+
+    Args:
+        lab_name: Name of the lab/organization (e.g., "Qwen", "meta-llama")
+        config: Optional configuration dict with lab_github_mappings
+
+    Returns:
+        GitHub organization name (defaults to lab_name if no mapping found)
+
+    Example:
+        >>> get_github_org_for_lab("Qwen", config)
+        'QwenLM'
+        >>> get_github_org_for_lab("unknown-lab", config)
+        'unknown-lab'
+    """
+    # Try to load from config first
+    if config and "lab_github_mappings" in config:
+        mapping = config["lab_github_mappings"]
+        return mapping.get(lab_name, lab_name)
+
+    # Fallback to default mapping if config not available
+    mapping = {
+        "Qwen": "QwenLM",
+        "meta-llama": "meta-llama",
+        "mistralai": "mistralai",
+        "google": "google",
+        "microsoft": "microsoft",
+        "anthropic": "anthropics",
+        "alibaba-pai": "alibaba",
+        "tencent": "Tencent",
+        "deepseek-ai": "deepseek-ai",
+        "OpenGVLab": "OpenGVLab",
+        "THUDM": "THUDM",
+        "baichuan-inc": "baichuan-inc",
+        "internlm": "InternLM",
+        "01-ai": "01-ai",
+        "MinimaxAI": "MiniMaxAI",
+    }
+
+    return mapping.get(lab_name, lab_name)
+
+
+def construct_github_readme_url(
+    lab_name: str,
+    model_name: str,
+    config: Optional[Dict[str, Any]] = None
+) -> str:
+    """
+    Construct GitHub README URL for a model using lab→org mapping.
+
+    Args:
+        lab_name: Name of the lab/organization
+        model_name: Name of the model repository
+        config: Optional configuration dict with lab_github_mappings
+
+    Returns:
+        GitHub raw content URL for README.md
+
+    Example:
+        >>> construct_github_readme_url("Qwen", "Qwen2.5", config)
+        'https://raw.githubusercontent.com/QwenLM/Qwen2.5/main/README.md'
+    """
+    github_org = get_github_org_for_lab(lab_name, config)
+    return f"https://raw.githubusercontent.com/{github_org}/{model_name}/main/README.md"
