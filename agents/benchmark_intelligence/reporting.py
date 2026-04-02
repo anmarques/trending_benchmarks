@@ -6,6 +6,7 @@ model statistics, and insights over time.
 """
 
 import logging
+import re
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -396,15 +397,16 @@ No trend data available."""
         # This is simplified - in production would have more sophisticated analysis
 
         lines = ["## Temporal Trends", ""]
-        lines.append("### Benchmark Popularity Over Time")
+        lines.append("### Benchmark Popularity Over Time (Last 12 Months)")
         lines.append("")
-        lines.append("Tracking how benchmark usage evolves over time.")
+        lines.append("Tracking how benchmark usage evolves over the rolling 12-month window.")
         lines.append("")
 
-        # Get benchmarks with activity
+        # Filter to only include benchmarks with activity in the last 12 months
+        twelve_months_ago = (datetime.utcnow() - timedelta(days=365)).isoformat()
         active_benchmarks = [
             b for b in benchmark_trends
-            if b.get("total_models", 0) > 0
+            if b.get("total_models", 0) > 0 and b.get("last_recorded", "") >= twelve_months_ago
         ]
 
         if active_benchmarks:
@@ -425,6 +427,8 @@ No trend data available."""
                 total_models = bench.get("total_models", 0)
 
                 lines.append(f"| {name} | {first} | {last} | {active_days} | {total_models} |")
+        else:
+            lines.append("No benchmark activity in the last 12 months.")
 
         return "\n".join(lines)
 
@@ -448,25 +452,94 @@ For more information, see the [project documentation](../../README.md)."""
         else:
             return str(num)
 
-    def update_readme(self, report_content: str) -> None:
+    def update_readme(self, report_path: str) -> None:
         """
-        Update the main README.md with the report.
+        Update the root README.md with latest report information.
 
         Args:
-            report_content: Markdown report content
+            report_path: Path to the latest report file
         """
-        readme_path = Path(__file__).parent / "README.md"
+        # Root README path
+        root_readme = Path("/workspace/repos/trending_benchmarks/README.md")
 
-        logger.info(f"Updating README at {readme_path}")
+        logger.info(f"Updating root README at {root_readme}")
 
         try:
-            with open(readme_path, "w") as f:
-                f.write(report_content)
+            # Read current README
+            with open(root_readme, "r") as f:
+                readme_content = f.read()
 
-            logger.info("README updated successfully")
+            # Get stats for the latest report section
+            stats = self.cache.get_stats()
+            all_models = self.cache.get_all_models()
+
+            # Get models from last 12 months for accurate count
+            twelve_months_ago = (datetime.utcnow() - timedelta(days=365)).isoformat()
+            recent_models = self.cache.get_trending_models(twelve_months_ago)
+            models_analyzed = len(recent_models)
+
+            # Total unique benchmarks
+            benchmarks_count = stats.get("benchmarks", 0)
+
+            # Format report date
+            report_date = datetime.utcnow().strftime("%B %d, %Y")
+
+            # Get relative path to report from root
+            report_rel_path = Path(report_path).relative_to("/workspace/repos/trending_benchmarks")
+            report_filename = Path(report_path).name
+
+            # Format date for display in link (YYYY-MM-DD)
+            report_date_short = datetime.utcnow().strftime("%Y-%m-%d")
+
+            # Build new Latest Report section
+            new_section = f"""## 📊 Latest Report
+
+**[View Latest Benchmark Report →]({report_rel_path})**
+
+**Key Findings** ({report_date_short}):
+- **{benchmarks_count} unique benchmarks** discovered
+- **{models_analyzed} models** analyzed from major labs
+- **Report Date:** {report_date}"""
+
+            # Find and replace the "## 📊 Latest Report" section
+            # Pattern: from "## 📊 Latest Report" to the next "---" or "##"
+            pattern = r'## 📊 Latest Report.*?(?=\n---|\n##|$)'
+
+            if re.search(pattern, readme_content, re.DOTALL):
+                # Replace existing section
+                updated_content = re.sub(
+                    pattern,
+                    new_section,
+                    readme_content,
+                    flags=re.DOTALL
+                )
+            else:
+                # Section not found - insert after header
+                # Find first --- after header
+                lines = readme_content.split('\n')
+                insert_pos = 0
+                for i, line in enumerate(lines):
+                    if line.strip() == '---':
+                        insert_pos = i + 1
+                        break
+
+                if insert_pos > 0:
+                    lines.insert(insert_pos, '')
+                    lines.insert(insert_pos + 1, new_section)
+                    lines.insert(insert_pos + 2, '')
+                    updated_content = '\n'.join(lines)
+                else:
+                    # Fallback: prepend to content
+                    updated_content = new_section + '\n\n' + readme_content
+
+            # Write updated README
+            with open(root_readme, "w") as f:
+                f.write(updated_content)
+
+            logger.info("Root README updated successfully")
 
         except Exception as e:
-            logger.error(f"Failed to update README: {e}")
+            logger.error(f"Failed to update root README: {e}")
             raise
 
     def save_snapshot(self, report_content: str) -> str:

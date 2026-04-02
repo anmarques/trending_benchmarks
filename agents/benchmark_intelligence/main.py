@@ -595,12 +595,12 @@ class BenchmarkIntelligenceAgent:
         report_content = report_generator.generate_report()
 
         if not self.dry_run:
-            # Update README
-            report_generator.update_readme(report_content)
-
-            # Save historical snapshot
-            report_generator.save_snapshot(report_content)
+            # Save historical snapshot first to get the path
+            report_path = report_generator.save_snapshot(report_content)
             logger.info(f"[Reporting] {SYMBOLS['success']} Report saved")
+
+            # Update root README with link to the saved report
+            report_generator.update_readme(report_path)
             logger.info(f"[Reporting] {SYMBOLS['success']} Updated root README.md")
 
         return report_content
