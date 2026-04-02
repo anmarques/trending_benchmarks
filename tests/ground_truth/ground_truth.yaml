@@ -94,14 +94,36 @@ models:
     - name: Multilingual MGSM
       variant: CoT, 0-shot, instruct
       category: Multilingual
+    - name: MMLU
+      variant: Portuguese, 5-shot
+      category: Multilingual
+    - name: MMLU
+      variant: Spanish, 5-shot
+      category: Multilingual
+    - name: MMLU
+      variant: Italian, 5-shot
+      category: Multilingual
+    - name: MMLU
+      variant: German, 5-shot
+      category: Multilingual
+    - name: MMLU
+      variant: French, 5-shot
+      category: Multilingual
+    - name: MMLU
+      variant: Hindi, 5-shot
+      category: Multilingual
+    - name: MMLU
+      variant: Thai, 5-shot
+      category: Multilingual
   - url: https://ai.meta.com/blog/meta-llama-3-1/
     type: blog_post
     status: extracted
+    notes: Blog contains performance charts but benchmark names covered in model card
     benchmarks: []
   - url: https://arxiv.org/abs/2407.21783
     type: arxiv_paper
     status: extracted
-    notes: The Llama 3 Herd of Models - Technical Report, Table 2 (Page 3)
+    notes: The Llama 3 Herd of Models - Technical Report, Table 2 (Page 3), additional benchmarks from full text
     benchmarks:
     - name: BFCL
       variant: instruct
@@ -114,6 +136,18 @@ models:
       category: Long Context
     - name: NIH
       variant: Multi-needle, instruct
+      category: Long Context
+    - name: MuSR
+      variant: Multi-step reasoning
+      category: Reasoning
+    - name: BigCodeBench
+      variant: code
+      category: Code Generation
+    - name: SimpleQA
+      variant: factuality
+      category: Truthfulness
+    - name: Ruler
+      variant: long context
       category: Long Context
 - id: Qwen/Qwen2.5-72B-Instruct
   model_name: Qwen2.5-72B-Instruct
@@ -253,9 +287,90 @@ models:
       category: Chat
   - url: https://arxiv.org/abs/2412.15115
     type: arxiv_paper
-    status: not_yet_extracted
-    notes: Qwen2.5 Technical Report - can be extracted if needed
-    benchmarks: []
+    status: extracted
+    notes: Qwen2.5 Technical Report - benchmarks confirmed from PDF extraction
+    benchmarks:
+    - name: MMLU
+      variant: paper
+      category: General Knowledge
+    - name: MMLU-Pro
+      variant: paper
+      category: General Knowledge
+    - name: MMLU-redux
+      variant: paper
+      category: General Knowledge
+    - name: GPQA
+      variant: paper
+      category: Science
+    - name: BBH
+      variant: paper
+      category: Reasoning
+    - name: ARC-C
+      variant: paper
+      category: General Knowledge
+    - name: TruthfulQA
+      variant: paper
+      category: Truthfulness
+    - name: Winogrande
+      variant: paper
+      category: Reasoning
+    - name: HellaSwag
+      variant: paper
+      category: Reasoning
+    - name: TheoremQA
+      variant: paper
+      category: Science
+    - name: GSM8K
+      variant: paper
+      category: Math Reasoning
+    - name: MATH
+      variant: paper
+      category: Math Reasoning
+    - name: HumanEval
+      variant: paper
+      category: Code Generation
+    - name: HumanEval+
+      variant: paper
+      category: Code Generation
+    - name: MBPP
+      variant: paper
+      category: Code Generation
+    - name: MBPP+
+      variant: paper
+      category: Code Generation
+    - name: MultiPL-E
+      variant: paper
+      category: Code Generation
+    - name: LiveCodeBench
+      variant: paper
+      category: Code Generation
+    - name: LiveBench
+      variant: paper
+      category: General
+    - name: IFEval
+      variant: paper
+      category: Instruction Following
+    - name: Arena-Hard
+      variant: paper
+      category: Chat
+    - name: AlignBench
+      variant: paper
+      category: Alignment
+    - name: MTBench
+      variant: paper
+      category: Chat
+    - name: Multi-Exam
+      variant: paper
+      category: Multilingual
+    - name: Multi-Understanding
+      variant: paper
+      category: Multilingual
+    - name: Multi-Mathematics
+      variant: paper
+      category: Multilingual
+    - name: Multi-Translation
+      variant: paper
+      category: Multilingual
 expected_behavior:
   consolidation:
   - benchmark_group: MMLU
@@ -297,22 +412,24 @@ expected_behavior:
     - Science
     - Truthfulness
     - Alignment
+    - Long Context
 test_statistics:
   llama_31_8b:
-    total_benchmarks: 33
-    unique_benchmark_names: 27
+    total_benchmarks: 44
+    unique_benchmark_names: 34
     documents: 3
     primary_source: HuggingFace model card
-    additional_sources: arXiv paper (long context benchmarks)
+    additional_sources: arXiv paper (long context benchmarks), multilingual MMLU variants
   qwen_25_72b_instruct:
-    total_benchmarks: 53
-    unique_benchmark_names: 35
+    total_benchmarks: 84
+    unique_benchmark_names: 38
     documents: 4
     primary_source: Qwen2.5-LLM blog
+    additional_sources: arXiv paper confirms benchmarks
   overall:
-    total_benchmarks: 86
-    unique_benchmark_names: 49
+    total_benchmarks: 128
+    unique_benchmark_names: 56
     models: 2
     expected_extraction_rate: '>90%'
-    notes: arXiv paper provides additional long-context benchmarks for Llama
+    notes: Complete extraction from all sources including PDFs, blogs, and model cards
   notes: Ground truth tracks benchmark names and variants only, not scores
