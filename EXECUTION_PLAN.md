@@ -53,7 +53,7 @@
 - [x] P2-8: Archive taxonomy only on change ✅
 
 #### Priority 3: Polish & Optimization
-- [ ] P3-1: Implement document fetching parallelization
+- [x] P3-1: Implement document fetching parallelization ✅
 - [ ] P3-2: Add arXiv author filtering
 - [ ] P3-3: Improve error messages
 - [ ] P3-4: Add unit tests (>80% coverage)
@@ -74,7 +74,7 @@
 - [ ] Phase 2.5: Remaining views (Model Comparison, Lab Analytics, Taxonomy Browser)
 - [ ] Phase 2.6: Polish & deploy to GitHub Pages
 
-**Progress:** 16/41 tasks complete (39.0%)
+**Progress:** 17/41 tasks complete (41.5%)
 
 ---
 
