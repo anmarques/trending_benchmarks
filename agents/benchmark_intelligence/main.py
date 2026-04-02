@@ -567,10 +567,17 @@ class BenchmarkIntelligenceAgent:
 
         stats = self.cache.get_stats()
 
+        # Add taxonomy version if updated
+        taxonomy_version = None
+        if self.stats.get("taxonomy_updated"):
+            timestamp = datetime.utcnow().strftime("%Y%m%d")
+            taxonomy_version = f"benchmark_taxonomy_{timestamp}.md"
+
         summary = {
             "run_stats": self.stats,
             "cache_stats": stats,
             "timestamp": datetime.utcnow().isoformat(),
+            "taxonomy_version": taxonomy_version,
         }
 
         snapshot_id = self.cache.create_snapshot(summary)

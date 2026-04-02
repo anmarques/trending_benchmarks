@@ -121,6 +121,34 @@ def classify_benchmark(
         raise RuntimeError(f"Failed to classify benchmark: {e}")
 
 
+def _load_taxonomy_categories() -> Optional[str]:
+    """
+    Load taxonomy categories from benchmark_taxonomy.md file.
+
+    Returns:
+        String with category information or None if not available
+    """
+    try:
+        # Try to load from project root
+        taxonomy_path = Path(__file__).parent.parent.parent.parent / "benchmark_taxonomy.md"
+
+        if not taxonomy_path.exists():
+            logger.debug("Taxonomy file not found, using prompt default")
+            return None
+
+        with open(taxonomy_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Extract category sections (sections 2.x)
+        # This will provide category names and examples to the classifier
+        logger.debug(f"Loaded taxonomy from {taxonomy_path}")
+        return content
+
+    except Exception as e:
+        logger.warning(f"Failed to load taxonomy: {e}")
+        return None
+
+
 def _build_classification_prompt(
     benchmark_name: str,
     description: Optional[str] = None,
@@ -129,6 +157,7 @@ def _build_classification_prompt(
     Build the prompt for benchmark classification.
 
     Loads the classification prompt template and fills in the benchmark info.
+    Also loads current taxonomy from benchmark_taxonomy.md if available.
 
     Args:
         benchmark_name: Benchmark name
@@ -149,6 +178,12 @@ def _build_classification_prompt(
             "Classify the following benchmark into categories and attributes. "
             "Use the comprehensive taxonomy to assign multi-label categories."
         )
+
+    # Try to load current taxonomy
+    taxonomy_content = _load_taxonomy_categories()
+    if taxonomy_content:
+        # Append taxonomy reference to prompt
+        template = template + "\n\n## Current Taxonomy Reference\n\n" + taxonomy_content[:5000]  # Limit size
 
     # Build input JSON
     import json
