@@ -19,13 +19,10 @@ labs:
 
 # Discovery settings
 discovery:
-  models_per_lab: 20  # Top N models per lab
+  models_per_lab: 5  # Top N models per lab (reduced for faster first run)
   sort_by: "downloads"  # Options: downloads, trending, lastModified
-  filter_tags:
-    - "text-generation"
-    - "image-text-to-text"
-    - "automatic-speech-recognition"
-  min_downloads: 1000  # Minimum downloads to consider
+  filter_tags: []  # Empty = no tag filtering
+  min_downloads: 0  # No minimum (get all models)
 
 # Cadence settings
 schedule:

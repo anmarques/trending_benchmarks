@@ -182,15 +182,13 @@ class HFAPIClient(HFClientBase):
                     f"Must be one of: {', '.join(sort_mapping.keys())}"
                 )
 
-            # Build filter parameters
+            # Build filter parameters (don't include author in filter)
             filter_params = {}
-            if author:
-                filter_params["author"] = author
             if "task" in kwargs:
                 filter_params["task"] = kwargs["task"]
             if "library" in kwargs:
                 filter_params["library"] = kwargs["library"]
-            if "tags" in kwargs:
+            if "tags" in kwargs and kwargs["tags"]:  # Only add if non-empty
                 filter_params["tags"] = kwargs["tags"]
             if "gated" in kwargs:
                 filter_params["gated"] = kwargs["gated"]
@@ -204,7 +202,6 @@ class HFAPIClient(HFClientBase):
                 author=author,
                 search=search_query,
                 sort=sort_mapping[sort],
-                direction=-1,  # Descending order
                 limit=limit,
             )
 
