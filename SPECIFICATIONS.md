@@ -1,8 +1,8 @@
 # Benchmark Intelligence System - Technical Specifications
 
-**Version:** 1.3
+**Version:** 1.4
 **Last Updated:** 2026-04-02
-**Status:** Final - Updated web fetching strategy
+**Status:** Final - Clarified PDF vs HTML fetching
 
 ---
 
@@ -102,9 +102,11 @@ For each model, the system must discover all documentation sources using a multi
    - Parse HTML to extract main content
 
 **Web Fetching Strategy:**
-The system uses the **MCP webfetch tool** (`mcp__webfetch__fetch`) for fetching web content:
 
-- **Primary Method**: MCP webfetch (works reliably, no blocking issues)
+The system uses **different fetching methods** depending on content type:
+
+**For HTML/Blog Content (MCP webfetch):**
+- Use `mcp__webfetch__fetch` tool for web pages and blogs
 - **Advantages**:
   - Handles JavaScript-rendered pages
   - No rate limiting concerns
@@ -119,6 +121,28 @@ The system uses the **MCP webfetch tool** (`mcp__webfetch__fetch`) for fetching 
       max_length=50000  # Adjust based on content size
   )
   ```
+
+**For PDF Content (Direct HTTP Download):**
+- **IMPORTANT**: MCP webfetch does NOT work for PDFs (returns raw binary)
+- Use `requests` library for PDF downloads
+- **Implementation**:
+  ```python
+  import requests
+  import tempfile
+
+  response = requests.get(pdf_url, timeout=120)
+  pdf_path = tempfile.mktemp(suffix='.pdf')
+  with open(pdf_path, 'wb') as f:
+      f.write(response.content)
+
+  # Then parse with pdfplumber (see section 10.2)
+  ```
+- After download, use pdfplumber to extract text (see Section 10.2)
+
+**Content Type Detection:**
+- `.pdf` extension → Use direct HTTP download
+- `arxiv.org/pdf/` URLs → Use direct HTTP download
+- All other URLs → Use MCP webfetch
 
 **Lab→GitHub Organization Mapping:**
 Configuration in `labs.yaml`:
@@ -153,10 +177,13 @@ Google search scraping is implemented but often blocked. Use as last resort:
 
 **For each source, the system MUST:**
 
-1. ✅ Fetch document from URL
+1. ✅ **Fetch document from URL**:
+   - **HTML/Blogs**: Use MCP webfetch tool (`mcp__webfetch__fetch`)
+   - **PDFs**: Use direct HTTP download (`requests` library) - see Section 10.2
+   - **Markdown**: Direct fetch via HTTP or GitHub API
 2. ✅ Extract text content:
    - **Markdown**: Parse directly
-   - **HTML**: Strip tags, extract main content
+   - **HTML**: Use MCP webfetch (auto-converts to markdown)
    - **PDF**: Extract text + tables using pdfplumber (see section 10.2 for details)
    - **Unreadable content**: Ignore PDFs that cannot be parsed or are image-only without text layer
 3. ✅ Compute content hash (SHA256 of extracted text)
@@ -718,8 +745,22 @@ pdf_constraints:
 ```
 
 **Processing steps:**
-1. Download PDF from URL (abort if >10MB or timeout)
-2. Extract all text + tables using pdfplumber:
+1. **Download PDF from URL** (abort if >10MB or timeout):
+   ```python
+   import requests
+   import tempfile
+
+   response = requests.get(pdf_url, timeout=120, stream=True)
+   if int(response.headers.get('content-length', 0)) > 10 * 1024 * 1024:
+       raise ValueError("PDF exceeds 10MB limit")
+
+   pdf_path = tempfile.mktemp(suffix='.pdf')
+   with open(pdf_path, 'wb') as f:
+       f.write(response.content)
+   ```
+   **Note**: Use `requests` library, NOT MCP webfetch (which doesn't work for PDFs)
+
+2. **Extract all text + tables using pdfplumber**:
    ```python
    with pdfplumber.open(pdf_path) as pdf:
        text = '\n'.join(page.extract_text() for page in pdf.pages)
