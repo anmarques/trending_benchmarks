@@ -86,22 +86,33 @@ For each model, the system must use Google search to discover all documentation 
 
 1. **Model Card**: Always fetch from HuggingFace (primary metadata source)
 2. **arXiv Papers**:
-   - First, check model card for arxiv.org URLs → use directly if found
+   - First, check model card for arxiv.org URLs → use directly if found (use only that paper)
    - If not found → Google search: `"{model_name}" {lab_name} arxiv pdf`
-   - Extract arxiv.org links from search results
+   - If multiple papers found, select paper with authors from the lab that released the model
+   - Process max 1 arXiv paper per model
 3. **GitHub Technical Reports**:
    - Check model card for GitHub repo links
    - Try known URL patterns (releases, docs folders)
    - If not found → Google search: `"{model_name}" {lab_name} github technical report pdf`
 4. **Official Blogs**:
    - Google search: `"{lab_name}" "{model_name}" announcement`
-   - Filter results to known blog domains (meta.ai, anthropic.com, qwenlm.github.io, etc.)
+   - Accept results from any domain returned by Google
+   - Parse HTML to extract main content
 
 **Google Search Implementation:**
 - Scrape Google search results directly (no API required)
 - Use `requests` + `BeautifulSoup` to parse result pages
 - Handle rate limiting with exponential backoff
 - Set appropriate user-agent headers to avoid blocking
+- Configuration:
+  ```yaml
+  google_search:
+    max_results_per_query: 10
+    delay_between_searches: 2  # seconds
+    user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    max_retries_on_block: 3
+    fallback_strategy: "skip"  # Skip if blocked after retries
+  ```
 
 ### 2.3 Source Processing Requirements
 
@@ -122,14 +133,23 @@ For each model, the system must use Google search to discover all documentation 
    - Store benchmarks in database
    - Update cached hash (even if extraction fails - prevents infinite retries)
 7. ✅ **Do NOT cache document content** - only store metadata (url, doc_type, content_hash, last_fetched)
-8. ✅ Handle rate limits and retries (3 attempts with exponential backoff)
+8. ✅ Handle rate limits and retries with exponential backoff:
+   ```yaml
+   retry_policy:
+     max_attempts: 3
+     initial_delay: 1.0  # seconds
+     backoff_multiplier: 2.0
+     max_delay: 60  # cap at 1 minute
+   ```
 9. ✅ Log failed fetches but continue processing other sources
 
 **Caching Strategy:**
 - Document content is re-fetched and re-extracted every run
 - Only the content hash is cached for change detection
 - Benchmark extraction (expensive Claude API call) only runs when content hash changes
-- If extraction fails, cache the hash anyway with failure flag to avoid repeated failures
+- If extraction fails, cache the hash with `extraction_failed=true` flag
+- **Never retry failed extractions** - once marked failed, skip even if content hash changes
+- This prevents infinite retries on permanently broken or irrelevant documents
 
 **Note**: If a source document is not found (e.g., no arXiv paper exists) or cannot be read, this is NOT a failure. The system should search all potential sources but gracefully handle missing or unreadable ones.
 
@@ -162,8 +182,9 @@ discovery:
     - "fill-mask"
     - "token-classification"
     - "table-question-answering"
+    - "zero-shot-classification"
   min_downloads: 10000
-  date_filter_months: 12
+  date_filter_months: 12  # Rolling window from current date
 ```
 
 ### 3.2 Discovery Filters
@@ -193,6 +214,10 @@ For each model:
   - Check content hash for each source document
   - Only re-process documents with changed content
   - Do NOT re-extract benchmarks if no sources changed
+- **Deleted models** (no longer on HuggingFace):
+  - Keep in cache with `deleted_at` timestamp
+  - Exclude from "Trending Models" report
+  - Include in historical snapshots for data continuity
 
 ---
 
@@ -251,7 +276,10 @@ A **benchmark** is a standardized evaluation dataset or task with a clear name m
 **Consolidation Method**:
 1. Fuzzy string matching (Levenshtein distance < 0.2)
 2. AI-assisted grouping (Claude identifies variants)
-3. When same benchmark appears with different names across sources, adopt the most common nomenclature
+3. When same benchmark appears with different names across sources, adopt the most common nomenclature:
+   - **Most common** = variant used by the most models
+   - If tie, prefer: uppercase > lowercase > mixed case
+   - Example: If 10 models use "MMLU" and 3 use "mmlu", canonical name is "MMLU"
 4. Store consolidated name in database
 
 ---
@@ -263,18 +291,21 @@ A **benchmark** is a standardized evaluation dataset or task with a clear name m
 **On each run, the agent must**:
 
 1. **Classify all benchmarks** using Claude AI based on benchmark names and descriptions
-2. **Identify gaps**: If many benchmarks don't fit existing categories, propose new ones
-3. **Update taxonomy**:
-   - Add new categories if discovered (e.g., "Robotics", "Scientific Reasoning")
+2. **Analyze taxonomy fit**: Identify benchmarks that don't fit existing categories well
+3. **Propose new categories**: AI suggests new categories based on discovered benchmark types
+4. **Update taxonomy** (always, every run):
+   - Add new categories if AI proposes them
    - Store updated taxonomy at root: `benchmark_taxonomy.md`
-   - Archive previous taxonomy: `benchmark_taxonomy_YYYYMMDD.md`
-4. **Report changes**: Note in report if taxonomy was updated
+   - Archive previous taxonomy only if changes detected: `archive/benchmark_taxonomy_YYYYMMDD.md`
+5. **Report changes**: Note in report if taxonomy was updated
 
 **Classification Rules**:
 - Multi-label: Benchmarks can have multiple categories
-- AI-assisted: Claude classifies based on description
-- Confidence threshold: Minimum 0.6 confidence for assignment
-- Manual override: Users can edit `categories.yaml` at root
+- AI-assisted: Claude classifies based on benchmark name and inferred purpose
+- Confidence threshold: Minimum 0.7 confidence for category assignment
+- Manual override: Users can edit `categories.yaml` at root (takes precedence over AI)
+
+**No thresholds for evolution**: System always attempts to evolve taxonomy based on all discovered benchmarks, regardless of count or percentage
 
 ### 5.2 Taxonomy Storage
 
@@ -301,6 +332,7 @@ CREATE TABLE models (
     release_date TEXT,
     first_seen TEXT NOT NULL,
     last_updated TEXT NOT NULL,
+    deleted_at TEXT,                  -- Timestamp if model deleted from HuggingFace
     downloads INTEGER DEFAULT 0,      -- Updated each run
     likes INTEGER DEFAULT 0,          -- Updated each run
     tags TEXT                         -- JSON array
@@ -351,6 +383,17 @@ CREATE TABLE snapshots (
     taxonomy_version TEXT,             -- Link to archived taxonomy
     summary TEXT                       -- JSON stats
 );
+
+-- Indexes for performance
+CREATE INDEX idx_models_lab ON models(lab);
+CREATE INDEX idx_models_release_date ON models(release_date);
+CREATE INDEX idx_models_deleted ON models(deleted_at);
+CREATE INDEX idx_benchmarks_name ON benchmarks(canonical_name);
+CREATE INDEX idx_benchmarks_last_seen ON benchmarks(last_seen);
+CREATE INDEX idx_model_benchmarks_model ON model_benchmarks(model_id);
+CREATE INDEX idx_model_benchmarks_benchmark ON model_benchmarks(benchmark_id);
+CREATE INDEX idx_documents_model ON documents(model_id);
+CREATE INDEX idx_documents_hash ON documents(content_hash);
 ```
 
 ### 6.2 Incremental Update Logic
@@ -528,15 +571,34 @@ discovery:
 documentation:
   fetch_enabled: true
   max_docs_per_model: 10
-  content_max_size: 50000
+  content_max_size: 50000  # Characters (Unicode code points)
 
 extraction:
   use_ai: true
   consolidation_enabled: true
   classification_enabled: true
 
+pdf_constraints:
+  max_file_size_mb: 10
+  download_timeout_seconds: 120
+  max_extracted_chars: 50000
+
+google_search:
+  max_results_per_query: 10
+  delay_between_searches: 2  # seconds
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+  max_retries_on_block: 3
+  fallback_strategy: "skip"
+
+retry_policy:
+  max_attempts: 3
+  initial_delay: 1.0  # seconds
+  backoff_multiplier: 2.0
+  max_delay: 60  # seconds
+
 reporting:
-  timeframe_months: 12
+  timeframe_months: 12  # Rolling window from current date
+  retry_on_failure: true
 ```
 
 **`categories.yaml`** (project root):
@@ -611,22 +673,32 @@ reporting:
 - Skip PDFs that cannot be parsed (image-only, corrupted)
 
 **Extraction strategy (AI-powered section detection)**:
-1. Download or stream PDF from URL
+
+**PDF constraints:**
+```yaml
+pdf_constraints:
+  max_file_size_mb: 10
+  download_timeout_seconds: 120
+  max_extracted_chars: 50000  # Unicode characters, not bytes
+```
+
+**Processing steps:**
+1. Download PDF from URL (abort if >10MB or timeout)
 2. Extract all text + tables using pdfplumber:
    ```python
    with pdfplumber.open(pdf_path) as pdf:
        text = '\n'.join(page.extract_text() for page in pdf.pages)
        tables = [page.extract_tables() for page in pdf.pages]
    ```
-3. Compute content hash: `SHA256(extracted_text)`
-4. Check cache: If hash matches stored hash, skip processing
-5. **If content changed (new or updated)**:
-   - Send extracted text to Claude AI: "Identify sections containing benchmark/evaluation information"
-   - Claude returns relevant sections (e.g., "Section 4: Evaluation", "Appendix A: Benchmark Results")
-   - Send those sections to Claude: "Extract benchmark names from these sections"
+3. Truncate to 50,000 characters if needed (applied after extraction, tables count toward limit)
+4. Compute content hash: `SHA256(extracted_text)`
+5. Check cache: If hash matches stored hash, skip processing
+6. **If content changed (new or updated)**:
+   - Send extracted text to Claude AI in single call: "Identify sections containing benchmark/evaluation information and extract all benchmark names"
+   - Claude returns: relevant sections + extracted benchmark names
    - Store extracted benchmarks in database
-6. Update cached hash (even if extraction fails)
-7. Discard PDF and extracted text (do not persist)
+7. Update cached hash (even if extraction fails)
+8. Discard PDF and extracted text (do not persist)
 
 **Table handling**:
 - Extract table structure with pdfplumber
@@ -664,17 +736,21 @@ Interactive visualization of benchmark trends and model intelligence.
 - Export data (CSV, JSON)
 - Link to original sources (HuggingFace, GitHub, arXiv)
 
-**Technology Stack** (suggested):
-- Frontend: React + D3.js (charts)
-- Backend: FastAPI (serves data from SQLite)
-- Deployment: Static site generation for GitHub Pages
+**Technology Stack**:
+- **Fully static approach**: Pre-generate all HTML/JSON during agent run
+- Frontend: React + D3.js (charts) compiled to static HTML/JS
+- Data: JSON files generated from SQLite queries
+- Deployment: Static files hosted on GitHub Pages
+- No backend server required
 
 ### 11.3 Data Access
 
-Dashboard reads directly from SQLite database:
-- No real-time updates (uses cached data)
-- Regenerate dashboard after each agent run
-- Static HTML/JS hosted on GitHub Pages
+Dashboard generation:
+- Agent queries SQLite after report generation
+- Generates static JSON files for each view (benchmarks.json, models.json, trends.json, etc.)
+- Compiles React app to static HTML/CSS/JS bundle
+- Static files deployed to GitHub Pages
+- No real-time updates - regenerated on each agent run
 
 ---
 
@@ -699,8 +775,13 @@ Dashboard reads directly from SQLite database:
 - **Cache-first**: Always check cache before processing
 - **Incremental**: Only process changed content
 - **Content limits**: Max 50K chars per document
-- **Database optimization**: Indexed columns, efficient queries
-- **Batch processing**: Process documents in parallel where possible
+- **Database optimization**: Indexed columns (see section 6.1), efficient queries
+- **Parallelization strategy**:
+  - Discovery phase: Serial (HuggingFace API sequential queries per lab)
+  - Document fetching: Parallel (max 5 concurrent downloads per model)
+  - AI extraction: Serial (one Claude API call at a time to avoid rate limits)
+  - Consolidation & classification: Serial
+  - Report generation: Serial
 
 ---
 
