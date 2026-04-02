@@ -199,9 +199,35 @@ models:
       # Document 3: arXiv Paper
       - url: "https://arxiv.org/abs/2407.21783"
         type: "arxiv_paper"
-        status: "too_large_for_extraction"
-        notes: "PDF is 629KB, contains detailed benchmarks but too large to extract in single call"
-        benchmarks: []  # Could be extracted in chunks if needed
+        status: "extracted"
+        notes: "The Llama 3 Herd of Models - Technical Report, Table 2 (Page 3)"
+
+        benchmarks:
+          # These are ADDITIONAL benchmarks not in the model card
+          # Instruct model benchmarks from Table 2
+          - name: "BFCL"
+            variant: "instruct"
+            score: "76.1"
+            category: "Tool Use"
+
+          - name: "ZeroSCROLLS"
+            variant: "QuALITY, instruct"
+            score: "81.0"
+            category: "Long Context"
+
+          - name: "InfiniteBench"
+            variant: "En.MC, instruct"
+            score: "65.1"
+            category: "Long Context"
+
+          - name: "NIH"
+            variant: "Multi-needle, instruct"
+            score: "98.8"
+            category: "Long Context"
+
+          # Note: Model card has more comprehensive coverage
+          # arXiv paper adds: BFCL, ZeroSCROLLS, InfiniteBench, NIH
+          # Model card and arXiv overlap on: MMLU, IFEval, HumanEval, MBPP, GSM8K, MATH, ARC-C, GPQA, Nexus, MGSM
 
   # ==================== MODEL 2: Qwen 2.5 72B-Instruct ====================
   - id: "Qwen/Qwen2.5-72B-Instruct"
@@ -469,10 +495,11 @@ expected_behavior:
 # Test Statistics
 test_statistics:
   llama_31_8b:
-    total_benchmarks: 29
-    unique_benchmark_names: 23
+    total_benchmarks: 33  # 29 from model card + 4 from arXiv paper
+    unique_benchmark_names: 27  # 23 + 4 new (BFCL, ZeroSCROLLS, InfiniteBench, NIH)
     documents: 3
     primary_source: "HuggingFace model card"
+    additional_sources: "arXiv paper (long context benchmarks)"
 
   qwen_25_72b_instruct:
     total_benchmarks: 53
@@ -481,7 +508,8 @@ test_statistics:
     primary_source: "Qwen2.5-LLM blog"
 
   overall:
-    total_benchmarks: 82
-    unique_benchmark_names: 45
+    total_benchmarks: 86  # 33 + 53
+    unique_benchmark_names: 49  # 27 + 35 - overlaps
     models: 2
     expected_extraction_rate: ">90%"
+    notes: "arXiv paper provides additional long-context benchmarks for Llama"
