@@ -123,8 +123,23 @@ models:
   - url: https://arxiv.org/abs/2407.21783
     type: arxiv_paper
     status: extracted
-    notes: The Llama 3 Herd of Models - Technical Report, Tables 8, 9-13, and 16 extracted
+    notes: The Llama 3 Herd of Models - Technical Report, Tables 8-16 fully extracted
     benchmarks:
+    - name: MMLU
+      variant: pre-trained
+      category: General Knowledge
+    - name: MMLU-Pro
+      variant: pre-trained
+      category: General Knowledge
+    - name: AGIEval
+      variant: pre-trained
+      category: General Knowledge
+    - name: BIG-Bench Hard
+      variant: pre-trained
+      category: Reasoning
+    - name: CommonSenseQA
+      variant: base
+      category: Reasoning
     - name: PiQA
       variant: base
       category: Reasoning
@@ -134,18 +149,57 @@ models:
     - name: OpenBookQA
       variant: base
       category: Reasoning
-    - name: WorldSense
+    - name: Winogrande
       variant: base
       category: Reasoning
     - name: HellaSwag
       variant: base
       category: Reasoning
+    - name: WorldSense
+      variant: base
+      category: Reasoning
+    - name: SQuAD
+      variant: base
+      category: Reading Comprehension
+    - name: QuAC
+      variant: base
+      category: Reading Comprehension
     - name: RACE
       variant: base
       category: Reading Comprehension
     - name: SQuAD V2
       variant: base
       category: Reading Comprehension
+    - name: DROP
+      variant: base
+      category: Reading Comprehension
+    - name: HumanEval
+      variant: base
+      category: Code Generation
+    - name: MBPP
+      variant: base
+      category: Code Generation
+    - name: HumanEval+
+      variant: instruct
+      category: Code Generation
+    - name: MBPP EvalPlus
+      variant: base, instruct
+      category: Code Generation
+    - name: MultiPL-E
+      variant: instruct
+      category: Code Generation
+    - name: GSM8K
+      variant: base
+      category: Math Reasoning
+    - name: MATH
+      variant: base
+      category: Math Reasoning
+    - name: ARC-Challenge
+      variant: base
+      category: General Knowledge
+    - name: GPQA
+      variant: instruct
+      category: Science
     - name: PAWS
       variant: paraphrase detection
       category: Reasoning
@@ -173,21 +227,15 @@ models:
     - name: Needle-in-a-Haystack
       variant: long context
       category: Long Context
-    - name: HumanEval+
-      variant: instruct
-      category: Code Generation
-    - name: MBPP EvalPlus
-      variant: base, instruct
-      category: Code Generation
-    - name: MultiPL-E
-      variant: instruct
-      category: Code Generation
     - name: MGSM
       variant: multilingual
       category: Multilingual
     - name: Multilingual MMLU
       variant: internal
       category: Multilingual
+    - name: IFEval
+      variant: instruct
+      category: Instruction Following
     - name: BFCL
       variant: instruct
       category: Tool Use
@@ -481,11 +529,11 @@ expected_behavior:
     - Long Context
 test_statistics:
   llama_31_8b:
-    total_benchmarks: 68
-    unique_benchmark_names: 52
+    total_benchmarks: 83
+    unique_benchmark_names: 58
     documents: 3
     primary_source: HuggingFace model card
-    additional_sources: arXiv paper Tables 8-16 (commonsense, proficiency exams, adversarial, tool use, long context)
+    additional_sources: arXiv paper Tables 8-16 (all benchmark categories fully extracted)
   qwen_25_72b_instruct:
     total_benchmarks: 84
     unique_benchmark_names: 38
@@ -493,8 +541,8 @@ test_statistics:
     primary_source: Qwen2.5-LLM blog
     additional_sources: arXiv paper confirms benchmarks
   overall:
-    total_benchmarks: 152
-    unique_benchmark_names: 72
+    total_benchmarks: 167
+    unique_benchmark_names: 76
     models: 2
     expected_extraction_rate: '>90%'
     notes: Complete extraction from all sources including PDFs, blogs, and model cards. Tables 8-16 from Llama arXiv paper fully extracted.
