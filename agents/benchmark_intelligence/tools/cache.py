@@ -8,7 +8,7 @@ using SQLite with content hashing to detect changes.
 import sqlite3
 import hashlib
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from pathlib import Path
 from contextlib import contextmanager
@@ -51,6 +51,7 @@ class CacheManager:
                     release_date TEXT,
                     first_seen TEXT NOT NULL,
                     last_updated TEXT NOT NULL,
+                    deleted_at TEXT,  -- Timestamp if model deleted from HuggingFace
                     downloads INTEGER DEFAULT 0,
                     likes INTEGER DEFAULT 0,
                     tags TEXT,  -- JSON array
@@ -77,7 +78,9 @@ class CacheManager:
                     benchmark_id INTEGER NOT NULL,
                     score REAL,
                     context TEXT,  -- JSON object for shot count, subset, etc.
+                    source_type TEXT,  -- model_card, blog, paper, arxiv_paper, github_pdf, etc.
                     source_url TEXT,
+                    last_seen TEXT NOT NULL,  -- Track when last mentioned
                     recorded_at TEXT NOT NULL,
                     FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE,
                     FOREIGN KEY (benchmark_id) REFERENCES benchmarks(id) ON DELETE CASCADE,
@@ -85,15 +88,15 @@ class CacheManager:
                 )
             """)
 
-            # Documents table
+            # Documents table (metadata only, no content storage)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS documents (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     model_id TEXT NOT NULL,
-                    doc_type TEXT NOT NULL,  -- model_card, blog, paper, technical_report
+                    doc_type TEXT NOT NULL,  -- model_card, blog, paper, arxiv_paper, github_pdf
                     url TEXT NOT NULL,
                     content_hash TEXT NOT NULL,
-                    content TEXT,
+                    extraction_failed BOOLEAN DEFAULT 0,  -- Flag failed extractions to avoid retries
                     last_fetched TEXT NOT NULL,
                     FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE,
                     UNIQUE(model_id, doc_type, url)
@@ -112,26 +115,36 @@ class CacheManager:
             """)
 
             # Create indexes for better query performance
+            # Models indexes (id, lab, last_updated, deleted_at per spec)
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_models_lab
                 ON models(lab)
             """)
 
             cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_models_release_date
-                ON models(release_date)
+                CREATE INDEX IF NOT EXISTS idx_models_last_updated
+                ON models(last_updated)
             """)
 
             cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_models_first_seen
-                ON models(first_seen)
+                CREATE INDEX IF NOT EXISTS idx_models_deleted
+                ON models(deleted_at)
             """)
 
+            # Benchmarks indexes (id, name, category per spec)
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_benchmarks_name
                 ON benchmarks(canonical_name)
             """)
 
+            # Note: category is stored as JSON TEXT, so we don't index it directly
+            # last_seen tracking index
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_benchmarks_last_seen
+                ON benchmarks(last_seen)
+            """)
+
+            # Model_benchmarks indexes (model_id, benchmark_id, source_type, last_seen per spec)
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_model_benchmarks_model
                 ON model_benchmarks(model_id)
@@ -143,20 +156,32 @@ class CacheManager:
             """)
 
             cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_model_benchmarks_recorded
-                ON model_benchmarks(recorded_at)
+                CREATE INDEX IF NOT EXISTS idx_model_benchmarks_source_type
+                ON model_benchmarks(source_type)
             """)
 
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_model_benchmarks_last_seen
+                ON model_benchmarks(last_seen)
+            """)
+
+            # Documents indexes (model_id, content_hash, source_type per spec)
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_documents_model
                 ON documents(model_id)
             """)
 
             cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_documents_type
+                CREATE INDEX IF NOT EXISTS idx_documents_hash
+                ON documents(content_hash)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_documents_source_type
                 ON documents(doc_type)
             """)
 
+            # Snapshots indexes (timestamp per spec)
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_snapshots_timestamp
                 ON snapshots(timestamp)
@@ -211,15 +236,16 @@ class CacheManager:
             cursor = conn.cursor()
 
             # Check if model exists
-            cursor.execute("SELECT id FROM models WHERE id = ?", (model_id,))
-            exists = cursor.fetchone()
+            cursor.execute("SELECT id, deleted_at FROM models WHERE id = ?", (model_id,))
+            existing = cursor.fetchone()
 
-            if exists:
-                # Update existing model
+            if existing:
+                # Update existing model (and clear deleted_at if it was deleted before)
                 cursor.execute("""
                     UPDATE models
                     SET name = ?, lab = ?, release_date = ?, last_updated = ?,
-                        downloads = ?, likes = ?, tags = ?, model_card_hash = ?
+                        downloads = ?, likes = ?, tags = ?, model_card_hash = ?,
+                        deleted_at = NULL
                     WHERE id = ?
                 """, (name, lab, release_date, now, downloads, likes, tags,
                       model_card_hash, model_id))
@@ -237,19 +263,25 @@ class CacheManager:
 
         return model_id
 
-    def get_model(self, model_id: str) -> Optional[Dict[str, Any]]:
+    def get_model(self, model_id: str, include_deleted: bool = False) -> Optional[Dict[str, Any]]:
         """
         Retrieve model information.
 
         Args:
             model_id: Model identifier
+            include_deleted: If False, return None for deleted models (default: False)
 
         Returns:
             Dictionary with model information or None if not found
         """
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM models WHERE id = ?", (model_id,))
+
+            if include_deleted:
+                cursor.execute("SELECT * FROM models WHERE id = ?", (model_id,))
+            else:
+                cursor.execute("SELECT * FROM models WHERE id = ? AND deleted_at IS NULL", (model_id,))
+
             row = cursor.fetchone()
 
             if not row:
@@ -262,6 +294,7 @@ class CacheManager:
                 'release_date': row['release_date'],
                 'first_seen': row['first_seen'],
                 'last_updated': row['last_updated'],
+                'deleted_at': row['deleted_at'],
                 'downloads': row['downloads'],
                 'likes': row['likes'],
                 'tags': json.loads(row['tags']) if row['tags'] else [],
@@ -447,34 +480,34 @@ class CacheManager:
             return results
 
     def add_document(self, model_id: str, doc_type: str, url: str,
-                    content: str) -> int:
+                    content_hash: str, extraction_failed: bool = False) -> int:
         """
-        Cache a document for a model.
+        Cache document metadata (hash only, not content per spec).
 
         Args:
             model_id: Model identifier
-            doc_type: Document type (model_card, blog, paper, technical_report)
+            doc_type: Document type (model_card, blog, paper, arxiv_paper, github_pdf)
             url: Document URL
-            content: Document content
+            content_hash: SHA256 hash of document content
+            extraction_failed: If True, marks extraction as failed (never retry)
 
         Returns:
             Document ID
         """
-        content_hash = self._compute_hash(content)
         now = self._now()
 
         with self._get_connection() as conn:
             cursor = conn.cursor()
 
-            # Insert or replace document
+            # Insert or update document metadata (no content storage)
             cursor.execute("""
                 INSERT INTO documents
-                (model_id, doc_type, url, content_hash, content, last_fetched)
+                (model_id, doc_type, url, content_hash, extraction_failed, last_fetched)
                 VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(model_id, doc_type, url)
-                DO UPDATE SET content_hash = ?, content = ?, last_fetched = ?
-            """, (model_id, doc_type, url, content_hash, content, now,
-                  content_hash, content, now))
+                DO UPDATE SET content_hash = ?, extraction_failed = ?, last_fetched = ?
+            """, (model_id, doc_type, url, content_hash, extraction_failed, now,
+                  content_hash, extraction_failed, now))
 
             doc_id = cursor.lastrowid
             conn.commit()
@@ -512,7 +545,7 @@ class CacheManager:
                 'doc_type': row['doc_type'],
                 'url': row['url'],
                 'content_hash': row['content_hash'],
-                'content': row['content'],
+                'extraction_failed': bool(row['extraction_failed']),
                 'last_fetched': row['last_fetched']
             }
 
@@ -545,6 +578,72 @@ class CacheManager:
                 return True  # Document doesn't exist, so it's "changed"
 
             return row['content_hash'] != new_hash
+
+    def mark_extraction_failed(self, model_id: str, doc_type: str, url: str) -> None:
+        """
+        Mark a document's extraction as failed (never retry).
+
+        Per SPECIFICATIONS.md Section 2.4: Failed extractions should never be retried,
+        preventing infinite retries on permanently broken or irrelevant documents.
+
+        Args:
+            model_id: Model identifier
+            doc_type: Document type
+            url: Document URL
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE documents
+                SET extraction_failed = 1
+                WHERE model_id = ? AND doc_type = ? AND url = ?
+            """, (model_id, doc_type, url))
+            conn.commit()
+
+    def should_skip_extraction(self, model_id: str, doc_type: str, url: str,
+                               new_content_hash: str) -> bool:
+        """
+        Determine if document extraction should be skipped.
+
+        Skip extraction if:
+        1. extraction_failed=True (never retry failed extractions - P1-7)
+        2. Content hash unchanged and extraction succeeded previously
+
+        Per SPECIFICATIONS.md Section 2.4: Never retry failed extractions.
+
+        Args:
+            model_id: Model identifier
+            doc_type: Document type
+            url: Document URL
+            new_content_hash: Hash of new content to compare
+
+        Returns:
+            True if extraction should be skipped, False if should proceed
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT content_hash, extraction_failed
+                FROM documents
+                WHERE model_id = ? AND doc_type = ? AND url = ?
+            """, (model_id, doc_type, url))
+
+            row = cursor.fetchone()
+
+            if not row:
+                # Document doesn't exist, should extract
+                return False
+
+            extraction_failed = bool(row['extraction_failed'])
+            content_hash = row['content_hash']
+
+            if extraction_failed:
+                # Never retry failed extractions (P1-7)
+                return True
+
+            # Skip if content hash unchanged (extraction succeeded previously)
+            return content_hash == new_content_hash
+
 
     def create_snapshot(self, summary: Optional[Dict[str, Any]] = None) -> int:
         """
@@ -817,6 +916,119 @@ class CacheManager:
             conn.commit()
 
         return deleted
+
+    def mark_model_as_deleted(self, model_id: str) -> bool:
+        """
+        Mark a model as deleted (soft delete) instead of removing it.
+        This preserves historical data while excluding from active queries.
+
+        Args:
+            model_id: Model identifier
+
+        Returns:
+            True if marked as deleted, False if not found
+        """
+        now = self._now()
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE models
+                SET deleted_at = ?
+                WHERE id = ? AND deleted_at IS NULL
+            """, (now, model_id))
+            marked = cursor.rowcount > 0
+            conn.commit()
+
+        return marked
+
+    def get_all_model_ids(self) -> set:
+        """
+        Get all model IDs in the cache (including deleted).
+
+        Returns:
+            Set of model IDs
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM models")
+            return {row['id'] for row in cursor.fetchall()}
+
+    def get_active_model_ids(self) -> set:
+        """
+        Get all active (non-deleted) model IDs.
+
+        Returns:
+            Set of active model IDs
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM models WHERE deleted_at IS NULL")
+            return {row['id'] for row in cursor.fetchall()}
+
+    def mark_extraction_failed(self, model_id: str, doc_type: str, url: str) -> bool:
+        """
+        Mark a document extraction as failed to prevent infinite retries.
+
+        Args:
+            model_id: Model identifier
+            doc_type: Document type
+            url: Document URL
+
+        Returns:
+            True if marked, False if not found
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE documents
+                SET extraction_failed = 1
+                WHERE model_id = ? AND doc_type = ? AND url = ?
+            """, (model_id, doc_type, url))
+            marked = cursor.rowcount > 0
+            conn.commit()
+
+        return marked
+
+    def should_skip_extraction(self, model_id: str, doc_type: str, url: str,
+                               new_hash: str) -> bool:
+        """
+        Check if extraction should be skipped for a document.
+
+        Extraction is skipped if:
+        - extraction_failed=true (never retry failed extractions)
+        - hash unchanged and extraction succeeded previously
+
+        Args:
+            model_id: Model identifier
+            doc_type: Document type
+            url: Document URL
+            new_hash: New content hash to compare
+
+        Returns:
+            True if extraction should be skipped, False otherwise
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT content_hash, extraction_failed FROM documents
+                WHERE model_id = ? AND doc_type = ? AND url = ?
+            """, (model_id, doc_type, url))
+
+            row = cursor.fetchone()
+
+            if not row:
+                return False  # New document, don't skip
+
+            # Skip if extraction failed previously (never retry)
+            if row['extraction_failed']:
+                return True
+
+            # Skip if hash unchanged (content hasn't changed)
+            if row['content_hash'] == new_hash:
+                return True
+
+            return False  # Hash changed, need to extract
 
     def get_stats(self) -> Dict[str, Any]:
         """
