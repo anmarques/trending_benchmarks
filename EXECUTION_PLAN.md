@@ -28,9 +28,9 @@
 
 #### Priority 0: Critical Blockers
 - [x] P0-1: Move labs.yaml to project root ✅
-- [ ] P0-2: Implement PDF parsing (pdfplumber + PyPDF2)
-- [ ] P0-3: Implement Google search scraping
-- [ ] P0-4: Implement adaptive taxonomy evolution
+- [x] P0-2: Implement PDF parsing (pdfplumber + PyPDF2) ✅
+- [x] P0-3: Implement Google search scraping ✅
+- [x] P0-4: Implement adaptive taxonomy evolution ✅
 - [x] P0-5: Fix progress reporting format (add ✓, ✗, ↻, ⊕ symbols) ✅
 
 #### Priority 1: High Importance
@@ -67,7 +67,7 @@
 - [ ] Phase 2.5: Remaining views (Model Comparison, Lab Analytics, Taxonomy Browser)
 - [ ] Phase 2.6: Polish & deploy to GitHub Pages
 
-**Progress:** 2/36 tasks complete (5.6%)
+**Progress:** 5/36 tasks complete (13.9%)
 
 ---
 
