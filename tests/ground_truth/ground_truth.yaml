@@ -118,8 +118,53 @@ models:
   - url: https://ai.meta.com/blog/meta-llama-3-1/
     type: blog_post
     status: extracted
-    notes: Blog contains performance charts but benchmark names covered in model card
-    benchmarks: []
+    notes: Blog contains three benchmark comparison charts
+    benchmarks:
+    - name: MMLU
+      variant: 5-shot, CoT, instruct
+      category: General Knowledge
+    - name: MMLU PRO
+      variant: 5-shot, CoT, instruct
+      category: General Knowledge
+    - name: IFEval
+      variant: instruct
+      category: Instruction Following
+    - name: HumanEval
+      variant: 0-shot, instruct
+      category: Code Generation
+    - name: MBPP EvalPlus
+      variant: base, 0-shot, instruct
+      category: Code Generation
+    - name: GSM8K
+      variant: 8-shot, CoT, instruct
+      category: Math Reasoning
+    - name: MATH
+      variant: 0-shot, CoT, instruct
+      category: Math Reasoning
+    - name: ARC Challenge
+      variant: 0-shot, instruct
+      category: General Knowledge
+    - name: GPQA
+      variant: 0-shot, CoT, instruct
+      category: Science
+    - name: BFCL
+      variant: instruct
+      category: Tool Use
+    - name: Nexus
+      variant: instruct
+      category: Tool Use
+    - name: ZeroSCROLLS
+      variant: QuALITY, instruct
+      category: Long Context
+    - name: InfiniteBench
+      variant: En.MC, instruct
+      category: Long Context
+    - name: NIH
+      variant: Multi-needle, instruct
+      category: Long Context
+    - name: Multilingual MGSM
+      variant: 0-shot, CoT, instruct
+      category: Multilingual
   - url: https://arxiv.org/abs/2407.21783
     type: arxiv_paper
     status: extracted
@@ -526,11 +571,11 @@ expected_behavior:
     - Long Context
 test_statistics:
   llama_31_8b:
-    total_benchmarks: 82
+    total_benchmarks: 97
     unique_benchmark_names: 57
     documents: 3
     primary_source: HuggingFace model card
-    additional_sources: arXiv paper Tables 8-16 (all benchmark categories fully extracted)
+    additional_sources: Meta AI blog charts, arXiv paper Tables 8-16
   qwen_25_72b_instruct:
     total_benchmarks: 84
     unique_benchmark_names: 38
@@ -538,9 +583,9 @@ test_statistics:
     primary_source: Qwen2.5-LLM blog
     additional_sources: arXiv paper confirms benchmarks
   overall:
-    total_benchmarks: 166
+    total_benchmarks: 181
     unique_benchmark_names: 75
     models: 2
     expected_extraction_rate: '>90%'
-    notes: Complete extraction from all sources including PDFs, blogs, and model cards. Tables 8-16 from Llama arXiv paper fully extracted.
+    notes: Complete extraction from all sources including PDFs, blogs, and model cards. All benchmark charts extracted from Meta AI blog.
   notes: Ground truth tracks benchmark names and variants only, not scores
