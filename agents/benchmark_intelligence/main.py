@@ -60,7 +60,7 @@ class BenchmarkIntelligenceAgent:
         Initialize the benchmark intelligence agent.
 
         Args:
-            config_path: Path to configuration YAML file (default: config/labs.yaml)
+            config_path: Path to configuration YAML file (default: labs.yaml at project root)
             cache_path: Path to cache database (default: benchmark_cache.db)
             dry_run: If True, don't write to cache or files
             verbose: If True, enable verbose logging
@@ -73,7 +73,7 @@ class BenchmarkIntelligenceAgent:
 
         # Load configuration
         if config_path is None:
-            config_path = Path(__file__).parent / "config" / "labs.yaml"
+            config_path = Path(__file__).parent.parent.parent / "labs.yaml"
         else:
             config_path = Path(config_path)
 
@@ -540,7 +540,7 @@ Examples:
     parser.add_argument(
         "--config",
         type=str,
-        help="Path to configuration YAML file (default: config/labs.yaml)",
+        help="Path to configuration YAML file (default: labs.yaml at project root)",
     )
 
     parser.add_argument(

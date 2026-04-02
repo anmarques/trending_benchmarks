@@ -23,23 +23,22 @@ discovery:
   models_per_lab: 15  # Increased for better coverage
   sort_by: "downloads"  # Options: downloads, trending, lastModified
 
-  # Task/pipeline tag filters (empty = no filtering)
-  # Common tags: text-generation, text2text-generation, image-text-to-text,
-  # zero-shot-image-classification, automatic-speech-recognition
-  filter_tags:
-    - "text-generation"       # LLMs
-    - "image-text-to-text"    # VLMs
-    - "text2text-generation"  # Some LLMs use this
+  # Task/pipeline tag filters (empty = no filtering at API level, filter after)
+  # Leave empty to get all models, then filter by exclude_tags
+  filter_tags: []
 
   # Additional filters
   min_downloads: 10000       # Skip low-usage models
   date_filter_months: 12     # Only models from last 12 months
 
   # Skip models with these tags (noise reduction)
+  # These are applied AFTER fetching to exclude irrelevant model types
   exclude_tags:
     - "time-series-forecasting"
     - "fill-mask"
     - "token-classification"
+    - "table-question-answering"
+    - "zero-shot-classification"
 
 # Cadence settings
 schedule:
