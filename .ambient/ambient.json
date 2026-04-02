@@ -1,0 +1,23 @@
+{
+  "name": "Benchmark Intelligence",
+  "description": "AI agent that discovers trending models and tracks benchmark usage across LLMs, VLMs, and audio-language models",
+  "version": "1.0.0",
+  "agents": {
+    "benchmark-intelligence": {
+      "description": "Main benchmark tracking agent",
+      "entrypoint": "agents/benchmark_intelligence/main.py",
+      "type": "python",
+      "requires": [
+        "HF_TOKEN",
+        "ANTHROPIC_API_KEY"
+      ]
+    }
+  },
+  "workflows": {
+    "scan-benchmarks": {
+      "description": "Discover models and track benchmarks",
+      "agent": "benchmark-intelligence",
+      "schedule": "0 9 1 * *"
+    }
+  }
+}

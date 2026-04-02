@@ -1,0 +1,8 @@
+# Historical Report Snapshots
+
+This directory contains timestamped snapshots of generated reports.
+
+Reports are automatically saved with filenames in the format:
+- `report_YYYYMMDD_HHMMSS.md`
+
+Example: `report_20260402_143022.md`

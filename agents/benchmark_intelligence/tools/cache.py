@@ -1,0 +1,873 @@
+"""
+Cache Manager for Benchmark Intelligence System
+
+Provides persistent storage for models, benchmarks, documents, and snapshots
+using SQLite with content hashing to detect changes.
+"""
+
+import sqlite3
+import hashlib
+import json
+from datetime import datetime
+from typing import Dict, List, Optional, Any, Tuple
+from pathlib import Path
+from contextlib import contextmanager
+
+
+class CacheManager:
+    """SQLite-backed cache manager for benchmark intelligence data."""
+
+    def __init__(self, db_path: str = "benchmark_cache.db"):
+        """
+        Initialize the cache manager.
+
+        Args:
+            db_path: Path to SQLite database file
+        """
+        self.db_path = db_path
+        self._init_db()
+
+    @contextmanager
+    def _get_connection(self):
+        """Context manager for database connections."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            yield conn
+        finally:
+            conn.close()
+
+    def _init_db(self):
+        """Initialize database schema with all tables and indexes."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Models table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS models (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    lab TEXT,
+                    release_date TEXT,
+                    first_seen TEXT NOT NULL,
+                    last_updated TEXT NOT NULL,
+                    downloads INTEGER DEFAULT 0,
+                    likes INTEGER DEFAULT 0,
+                    tags TEXT,  -- JSON array
+                    model_card_hash TEXT
+                )
+            """)
+
+            # Benchmarks table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS benchmarks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    canonical_name TEXT UNIQUE NOT NULL,
+                    categories TEXT,  -- JSON array
+                    attributes TEXT,  -- JSON object
+                    first_seen TEXT NOT NULL
+                )
+            """)
+
+            # Model_benchmarks table (many-to-many relationship)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS model_benchmarks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    model_id TEXT NOT NULL,
+                    benchmark_id INTEGER NOT NULL,
+                    score REAL,
+                    context TEXT,  -- JSON object for shot count, subset, etc.
+                    source_url TEXT,
+                    recorded_at TEXT NOT NULL,
+                    FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE,
+                    FOREIGN KEY (benchmark_id) REFERENCES benchmarks(id) ON DELETE CASCADE,
+                    UNIQUE(model_id, benchmark_id, context)
+                )
+            """)
+
+            # Documents table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS documents (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    model_id TEXT NOT NULL,
+                    doc_type TEXT NOT NULL,  -- model_card, blog, paper, technical_report
+                    url TEXT NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    content TEXT,
+                    last_fetched TEXT NOT NULL,
+                    FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE,
+                    UNIQUE(model_id, doc_type, url)
+                )
+            """)
+
+            # Snapshots table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS snapshots (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    model_count INTEGER NOT NULL,
+                    benchmark_count INTEGER NOT NULL,
+                    summary TEXT  -- JSON object with additional stats
+                )
+            """)
+
+            # Create indexes for better query performance
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_models_lab
+                ON models(lab)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_models_release_date
+                ON models(release_date)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_models_first_seen
+                ON models(first_seen)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_benchmarks_name
+                ON benchmarks(canonical_name)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_model_benchmarks_model
+                ON model_benchmarks(model_id)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_model_benchmarks_benchmark
+                ON model_benchmarks(benchmark_id)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_model_benchmarks_recorded
+                ON model_benchmarks(recorded_at)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_documents_model
+                ON documents(model_id)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_documents_type
+                ON documents(doc_type)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_snapshots_timestamp
+                ON snapshots(timestamp)
+            """)
+
+            conn.commit()
+
+    @staticmethod
+    def _compute_hash(content: str) -> str:
+        """Compute SHA256 hash of content."""
+        return hashlib.sha256(content.encode('utf-8')).hexdigest()
+
+    @staticmethod
+    def _now() -> str:
+        """Get current timestamp in ISO format."""
+        return datetime.utcnow().isoformat()
+
+    def add_model(self, model_info: Dict[str, Any]) -> str:
+        """
+        Add or update a model in the cache.
+
+        Args:
+            model_info: Dictionary with model information containing:
+                - id: Model identifier (required)
+                - name: Model name (required)
+                - lab: Lab/organization name
+                - release_date: Release date (ISO format)
+                - downloads: Download count
+                - likes: Like count
+                - tags: List of tags
+                - model_card: Model card content (for hashing)
+
+        Returns:
+            Model ID
+        """
+        model_id = model_info['id']
+        name = model_info['name']
+        lab = model_info.get('lab')
+        release_date = model_info.get('release_date')
+        downloads = model_info.get('downloads', 0)
+        likes = model_info.get('likes', 0)
+        tags = json.dumps(model_info.get('tags', []))
+
+        # Compute model card hash if provided
+        model_card_hash = None
+        if 'model_card' in model_info:
+            model_card_hash = self._compute_hash(model_info['model_card'])
+
+        now = self._now()
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Check if model exists
+            cursor.execute("SELECT id FROM models WHERE id = ?", (model_id,))
+            exists = cursor.fetchone()
+
+            if exists:
+                # Update existing model
+                cursor.execute("""
+                    UPDATE models
+                    SET name = ?, lab = ?, release_date = ?, last_updated = ?,
+                        downloads = ?, likes = ?, tags = ?, model_card_hash = ?
+                    WHERE id = ?
+                """, (name, lab, release_date, now, downloads, likes, tags,
+                      model_card_hash, model_id))
+            else:
+                # Insert new model
+                cursor.execute("""
+                    INSERT INTO models
+                    (id, name, lab, release_date, first_seen, last_updated,
+                     downloads, likes, tags, model_card_hash)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (model_id, name, lab, release_date, now, now,
+                      downloads, likes, tags, model_card_hash))
+
+            conn.commit()
+
+        return model_id
+
+    def get_model(self, model_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve model information.
+
+        Args:
+            model_id: Model identifier
+
+        Returns:
+            Dictionary with model information or None if not found
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM models WHERE id = ?", (model_id,))
+            row = cursor.fetchone()
+
+            if not row:
+                return None
+
+            return {
+                'id': row['id'],
+                'name': row['name'],
+                'lab': row['lab'],
+                'release_date': row['release_date'],
+                'first_seen': row['first_seen'],
+                'last_updated': row['last_updated'],
+                'downloads': row['downloads'],
+                'likes': row['likes'],
+                'tags': json.loads(row['tags']) if row['tags'] else [],
+                'model_card_hash': row['model_card_hash']
+            }
+
+    def add_benchmark(self, name: str, categories: Optional[List[str]] = None,
+                     attributes: Optional[Dict[str, Any]] = None) -> int:
+        """
+        Add or update a benchmark in the cache.
+
+        Args:
+            name: Canonical benchmark name
+            categories: List of categories (e.g., ["reasoning", "math"])
+            attributes: Additional attributes as dictionary
+
+        Returns:
+            Benchmark ID
+        """
+        categories_json = json.dumps(categories or [])
+        attributes_json = json.dumps(attributes or {})
+        now = self._now()
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Check if benchmark exists
+            cursor.execute(
+                "SELECT id FROM benchmarks WHERE canonical_name = ?",
+                (name,)
+            )
+            row = cursor.fetchone()
+
+            if row:
+                # Update existing benchmark
+                benchmark_id = row['id']
+                cursor.execute("""
+                    UPDATE benchmarks
+                    SET categories = ?, attributes = ?
+                    WHERE id = ?
+                """, (categories_json, attributes_json, benchmark_id))
+            else:
+                # Insert new benchmark
+                cursor.execute("""
+                    INSERT INTO benchmarks
+                    (canonical_name, categories, attributes, first_seen)
+                    VALUES (?, ?, ?, ?)
+                """, (name, categories_json, attributes_json, now))
+                benchmark_id = cursor.lastrowid
+
+            conn.commit()
+
+        return benchmark_id
+
+    def get_benchmark(self, benchmark_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve benchmark information.
+
+        Args:
+            benchmark_id: Benchmark identifier
+
+        Returns:
+            Dictionary with benchmark information or None if not found
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM benchmarks WHERE id = ?", (benchmark_id,))
+            row = cursor.fetchone()
+
+            if not row:
+                return None
+
+            return {
+                'id': row['id'],
+                'canonical_name': row['canonical_name'],
+                'categories': json.loads(row['categories']) if row['categories'] else [],
+                'attributes': json.loads(row['attributes']) if row['attributes'] else {},
+                'first_seen': row['first_seen']
+            }
+
+    def get_benchmark_by_name(self, name: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve benchmark information by canonical name.
+
+        Args:
+            name: Canonical benchmark name
+
+        Returns:
+            Dictionary with benchmark information or None if not found
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM benchmarks WHERE canonical_name = ?",
+                (name,)
+            )
+            row = cursor.fetchone()
+
+            if not row:
+                return None
+
+            return {
+                'id': row['id'],
+                'canonical_name': row['canonical_name'],
+                'categories': json.loads(row['categories']) if row['categories'] else [],
+                'attributes': json.loads(row['attributes']) if row['attributes'] else {},
+                'first_seen': row['first_seen']
+            }
+
+    def add_model_benchmark(self, model_id: str, benchmark_id: int,
+                           score: Optional[float] = None,
+                           context: Optional[Dict[str, Any]] = None,
+                           source_url: Optional[str] = None) -> int:
+        """
+        Link a model to a benchmark with score and context.
+
+        Args:
+            model_id: Model identifier
+            benchmark_id: Benchmark identifier
+            score: Benchmark score
+            context: Context dict (shot count, subset, etc.)
+            source_url: URL of the source
+
+        Returns:
+            Model-benchmark link ID
+        """
+        context_json = json.dumps(context or {})
+        now = self._now()
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Try to update if exists, otherwise insert
+            cursor.execute("""
+                INSERT INTO model_benchmarks
+                (model_id, benchmark_id, score, context, source_url, recorded_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(model_id, benchmark_id, context)
+                DO UPDATE SET score = ?, source_url = ?, recorded_at = ?
+            """, (model_id, benchmark_id, score, context_json, source_url, now,
+                  score, source_url, now))
+
+            link_id = cursor.lastrowid
+            conn.commit()
+
+        return link_id
+
+    def get_model_benchmarks(self, model_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all benchmarks for a model.
+
+        Args:
+            model_id: Model identifier
+
+        Returns:
+            List of benchmark results
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT mb.*, b.canonical_name, b.categories, b.attributes
+                FROM model_benchmarks mb
+                JOIN benchmarks b ON mb.benchmark_id = b.id
+                WHERE mb.model_id = ?
+                ORDER BY mb.recorded_at DESC
+            """, (model_id,))
+
+            results = []
+            for row in cursor.fetchall():
+                results.append({
+                    'id': row['id'],
+                    'model_id': row['model_id'],
+                    'benchmark_id': row['benchmark_id'],
+                    'benchmark_name': row['canonical_name'],
+                    'score': row['score'],
+                    'context': json.loads(row['context']) if row['context'] else {},
+                    'source_url': row['source_url'],
+                    'recorded_at': row['recorded_at'],
+                    'categories': json.loads(row['categories']) if row['categories'] else [],
+                    'attributes': json.loads(row['attributes']) if row['attributes'] else {}
+                })
+
+            return results
+
+    def add_document(self, model_id: str, doc_type: str, url: str,
+                    content: str) -> int:
+        """
+        Cache a document for a model.
+
+        Args:
+            model_id: Model identifier
+            doc_type: Document type (model_card, blog, paper, technical_report)
+            url: Document URL
+            content: Document content
+
+        Returns:
+            Document ID
+        """
+        content_hash = self._compute_hash(content)
+        now = self._now()
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Insert or replace document
+            cursor.execute("""
+                INSERT INTO documents
+                (model_id, doc_type, url, content_hash, content, last_fetched)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(model_id, doc_type, url)
+                DO UPDATE SET content_hash = ?, content = ?, last_fetched = ?
+            """, (model_id, doc_type, url, content_hash, content, now,
+                  content_hash, content, now))
+
+            doc_id = cursor.lastrowid
+            conn.commit()
+
+        return doc_id
+
+    def get_document(self, model_id: str, doc_type: str,
+                    url: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve a cached document.
+
+        Args:
+            model_id: Model identifier
+            doc_type: Document type
+            url: Document URL
+
+        Returns:
+            Dictionary with document information or None if not found
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM documents
+                WHERE model_id = ? AND doc_type = ? AND url = ?
+            """, (model_id, doc_type, url))
+
+            row = cursor.fetchone()
+
+            if not row:
+                return None
+
+            return {
+                'id': row['id'],
+                'model_id': row['model_id'],
+                'doc_type': row['doc_type'],
+                'url': row['url'],
+                'content_hash': row['content_hash'],
+                'content': row['content'],
+                'last_fetched': row['last_fetched']
+            }
+
+    def document_changed(self, model_id: str, doc_type: str, url: str,
+                        new_content: str) -> bool:
+        """
+        Check if a document has changed.
+
+        Args:
+            model_id: Model identifier
+            doc_type: Document type
+            url: Document URL
+            new_content: New content to compare
+
+        Returns:
+            True if document changed or doesn't exist, False otherwise
+        """
+        new_hash = self._compute_hash(new_content)
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT content_hash FROM documents
+                WHERE model_id = ? AND doc_type = ? AND url = ?
+            """, (model_id, doc_type, url))
+
+            row = cursor.fetchone()
+
+            if not row:
+                return True  # Document doesn't exist, so it's "changed"
+
+            return row['content_hash'] != new_hash
+
+    def create_snapshot(self, summary: Optional[Dict[str, Any]] = None) -> int:
+        """
+        Create a snapshot of the current cache state.
+
+        Args:
+            summary: Additional summary information as dictionary
+
+        Returns:
+            Snapshot ID
+        """
+        now = self._now()
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Get current counts
+            cursor.execute("SELECT COUNT(*) as count FROM models")
+            model_count = cursor.fetchone()['count']
+
+            cursor.execute("SELECT COUNT(*) as count FROM benchmarks")
+            benchmark_count = cursor.fetchone()['count']
+
+            # Create snapshot
+            summary_json = json.dumps(summary or {})
+            cursor.execute("""
+                INSERT INTO snapshots
+                (timestamp, model_count, benchmark_count, summary)
+                VALUES (?, ?, ?, ?)
+            """, (now, model_count, benchmark_count, summary_json))
+
+            snapshot_id = cursor.lastrowid
+            conn.commit()
+
+        return snapshot_id
+
+    def get_snapshot(self, snapshot_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve a snapshot.
+
+        Args:
+            snapshot_id: Snapshot identifier
+
+        Returns:
+            Dictionary with snapshot information or None if not found
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM snapshots WHERE id = ?", (snapshot_id,))
+            row = cursor.fetchone()
+
+            if not row:
+                return None
+
+            return {
+                'id': row['id'],
+                'timestamp': row['timestamp'],
+                'model_count': row['model_count'],
+                'benchmark_count': row['benchmark_count'],
+                'summary': json.loads(row['summary']) if row['summary'] else {}
+            }
+
+    def get_trending_models(self, since_date: str) -> List[Dict[str, Any]]:
+        """
+        Get models added since a specific date.
+
+        Args:
+            since_date: ISO format date string
+
+        Returns:
+            List of models added since the date
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM models
+                WHERE first_seen >= ?
+                ORDER BY first_seen DESC
+            """, (since_date,))
+
+            models = []
+            for row in cursor.fetchall():
+                models.append({
+                    'id': row['id'],
+                    'name': row['name'],
+                    'lab': row['lab'],
+                    'release_date': row['release_date'],
+                    'first_seen': row['first_seen'],
+                    'last_updated': row['last_updated'],
+                    'downloads': row['downloads'],
+                    'likes': row['likes'],
+                    'tags': json.loads(row['tags']) if row['tags'] else [],
+                    'model_card_hash': row['model_card_hash']
+                })
+
+            return models
+
+    def get_benchmark_trends(self) -> List[Dict[str, Any]]:
+        """
+        Get benchmark popularity trends over time.
+
+        Returns:
+            List of benchmarks with usage statistics
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT
+                    b.id,
+                    b.canonical_name,
+                    b.categories,
+                    b.attributes,
+                    b.first_seen,
+                    COUNT(mb.id) as total_models,
+                    COUNT(DISTINCT DATE(mb.recorded_at)) as active_days,
+                    MIN(mb.recorded_at) as first_recorded,
+                    MAX(mb.recorded_at) as last_recorded
+                FROM benchmarks b
+                LEFT JOIN model_benchmarks mb ON b.id = mb.benchmark_id
+                GROUP BY b.id
+                ORDER BY total_models DESC
+            """)
+
+            trends = []
+            for row in cursor.fetchall():
+                trends.append({
+                    'id': row['id'],
+                    'canonical_name': row['canonical_name'],
+                    'categories': json.loads(row['categories']) if row['categories'] else [],
+                    'attributes': json.loads(row['attributes']) if row['attributes'] else {},
+                    'first_seen': row['first_seen'],
+                    'total_models': row['total_models'],
+                    'active_days': row['active_days'],
+                    'first_recorded': row['first_recorded'],
+                    'last_recorded': row['last_recorded']
+                })
+
+            return trends
+
+    def get_all_models(self) -> List[Dict[str, Any]]:
+        """
+        Get all models in the cache.
+
+        Returns:
+            List of all models
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM models ORDER BY first_seen DESC")
+
+            models = []
+            for row in cursor.fetchall():
+                models.append({
+                    'id': row['id'],
+                    'name': row['name'],
+                    'lab': row['lab'],
+                    'release_date': row['release_date'],
+                    'first_seen': row['first_seen'],
+                    'last_updated': row['last_updated'],
+                    'downloads': row['downloads'],
+                    'likes': row['likes'],
+                    'tags': json.loads(row['tags']) if row['tags'] else [],
+                    'model_card_hash': row['model_card_hash']
+                })
+
+            return models
+
+    def get_all_benchmarks(self) -> List[Dict[str, Any]]:
+        """
+        Get all benchmarks in the cache.
+
+        Returns:
+            List of all benchmarks
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM benchmarks ORDER BY canonical_name")
+
+            benchmarks = []
+            for row in cursor.fetchall():
+                benchmarks.append({
+                    'id': row['id'],
+                    'canonical_name': row['canonical_name'],
+                    'categories': json.loads(row['categories']) if row['categories'] else [],
+                    'attributes': json.loads(row['attributes']) if row['attributes'] else {},
+                    'first_seen': row['first_seen']
+                })
+
+            return benchmarks
+
+    def get_recent_snapshots(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Get recent snapshots.
+
+        Args:
+            limit: Maximum number of snapshots to return
+
+        Returns:
+            List of recent snapshots
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM snapshots
+                ORDER BY timestamp DESC
+                LIMIT ?
+            """, (limit,))
+
+            snapshots = []
+            for row in cursor.fetchall():
+                snapshots.append({
+                    'id': row['id'],
+                    'timestamp': row['timestamp'],
+                    'model_count': row['model_count'],
+                    'benchmark_count': row['benchmark_count'],
+                    'summary': json.loads(row['summary']) if row['summary'] else {}
+                })
+
+            return snapshots
+
+    def get_models_by_lab(self, lab: str) -> List[Dict[str, Any]]:
+        """
+        Get all models from a specific lab.
+
+        Args:
+            lab: Lab/organization name
+
+        Returns:
+            List of models from the lab
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM models
+                WHERE lab = ?
+                ORDER BY release_date DESC
+            """, (lab,))
+
+            models = []
+            for row in cursor.fetchall():
+                models.append({
+                    'id': row['id'],
+                    'name': row['name'],
+                    'lab': row['lab'],
+                    'release_date': row['release_date'],
+                    'first_seen': row['first_seen'],
+                    'last_updated': row['last_updated'],
+                    'downloads': row['downloads'],
+                    'likes': row['likes'],
+                    'tags': json.loads(row['tags']) if row['tags'] else [],
+                    'model_card_hash': row['model_card_hash']
+                })
+
+            return models
+
+    def delete_model(self, model_id: str) -> bool:
+        """
+        Delete a model and all associated data.
+
+        Args:
+            model_id: Model identifier
+
+        Returns:
+            True if deleted, False if not found
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM models WHERE id = ?", (model_id,))
+            deleted = cursor.rowcount > 0
+            conn.commit()
+
+        return deleted
+
+    def get_stats(self) -> Dict[str, Any]:
+        """
+        Get overall cache statistics.
+
+        Returns:
+            Dictionary with cache statistics
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Model stats
+            cursor.execute("SELECT COUNT(*) as count FROM models")
+            model_count = cursor.fetchone()['count']
+
+            cursor.execute("""
+                SELECT COUNT(DISTINCT lab) as count
+                FROM models
+                WHERE lab IS NOT NULL
+            """)
+            lab_count = cursor.fetchone()['count']
+
+            # Benchmark stats
+            cursor.execute("SELECT COUNT(*) as count FROM benchmarks")
+            benchmark_count = cursor.fetchone()['count']
+
+            # Model-benchmark links
+            cursor.execute("SELECT COUNT(*) as count FROM model_benchmarks")
+            link_count = cursor.fetchone()['count']
+
+            # Document stats
+            cursor.execute("SELECT COUNT(*) as count FROM documents")
+            document_count = cursor.fetchone()['count']
+
+            cursor.execute("""
+                SELECT doc_type, COUNT(*) as count
+                FROM documents
+                GROUP BY doc_type
+            """)
+            doc_types = {row['doc_type']: row['count'] for row in cursor.fetchall()}
+
+            # Snapshot stats
+            cursor.execute("SELECT COUNT(*) as count FROM snapshots")
+            snapshot_count = cursor.fetchone()['count']
+
+            return {
+                'models': model_count,
+                'labs': lab_count,
+                'benchmarks': benchmark_count,
+                'model_benchmark_links': link_count,
+                'documents': document_count,
+                'documents_by_type': doc_types,
+                'snapshots': snapshot_count
+            }

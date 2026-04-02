@@ -1,0 +1,34 @@
+# Target model creators/organizations to track
+labs:
+  - Qwen
+  - MinimaxAI
+  - 01-ai  # Yi models
+  - meta-llama
+  - mistralai
+  - google
+  - microsoft
+  - anthropic
+  - alibaba-pai
+  - tencent
+  - deepseek-ai
+  - OpenGVLab
+  - THUDM  # ChatGLM
+  - baichuan-inc
+  - internlm
+  - huggingface
+
+# Discovery settings
+discovery:
+  models_per_lab: 20  # Top N models per lab
+  sort_by: "downloads"  # Options: downloads, trending, lastModified
+  filter_tags:
+    - "text-generation"
+    - "image-text-to-text"
+    - "automatic-speech-recognition"
+  min_downloads: 1000  # Minimum downloads to consider
+
+# Cadence settings
+schedule:
+  frequency: "monthly"  # monthly, weekly, daily
+  day_of_month: 1
+  hour: 9

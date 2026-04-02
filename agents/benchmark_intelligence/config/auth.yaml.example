@@ -1,0 +1,11 @@
+# Copy this file to auth.yaml and fill in your credentials
+# auth.yaml is gitignored for security
+
+huggingface:
+  # HuggingFace token - get from https://huggingface.co/settings/tokens
+  # Or set environment variable: export HF_TOKEN=your_token_here
+  token: ${HF_TOKEN}
+
+  # Client preferences
+  use_mcp: true        # Try MCP first if available
+  fallback_api: true   # Fallback to huggingface_hub API if MCP unavailable
