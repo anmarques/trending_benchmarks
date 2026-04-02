@@ -27,7 +27,7 @@
 ### Phase 1: Core System (v1.0)
 
 #### Priority 0: Critical Blockers
-- [ ] P0-1: Move labs.yaml to project root
+- [x] P0-1: Move labs.yaml to project root ✅
 - [ ] P0-2: Implement PDF parsing (pdfplumber + PyPDF2)
 - [ ] P0-3: Implement Google search scraping
 - [ ] P0-4: Implement adaptive taxonomy evolution
@@ -67,7 +67,7 @@
 - [ ] Phase 2.5: Remaining views (Model Comparison, Lab Analytics, Taxonomy Browser)
 - [ ] Phase 2.6: Polish & deploy to GitHub Pages
 
-**Progress:** 0/36 tasks complete (0%)
+**Progress:** 1/36 tasks complete (3%)
 
 ---
 
