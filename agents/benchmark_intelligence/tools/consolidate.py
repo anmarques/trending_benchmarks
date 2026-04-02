@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 def consolidate_benchmarks(
     benchmark_names: List[str],
     claude_fn: Optional[callable] = None,
+    cooccurrences: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
     Consolidate benchmark name variations into canonical forms.
@@ -29,6 +30,9 @@ def consolidate_benchmarks(
         benchmark_names: List of benchmark names to consolidate
         claude_fn: Optional Claude API function for dependency injection.
                    Should accept (prompt, system_prompt) and return dict.
+        cooccurrences: Optional list of benchmark pairs that appear side-by-side
+                      in the same document sections. These pairs will NOT be merged
+                      during consolidation (e.g., "MMLU" and "MMLU-Pro" in same table).
 
     Returns:
         Dictionary containing consolidation results:
@@ -87,6 +91,11 @@ def consolidate_benchmarks(
         if "uncertain_mappings" not in result:
             result["uncertain_mappings"] = []
 
+        # Apply side-by-side disambiguation
+        if cooccurrences:
+            result = _apply_cooccurrence_disambiguation(result, cooccurrences)
+            logger.info(f"Applied {len(cooccurrences)} co-occurrence constraints")
+
         # Add metadata
         if "metadata" not in result:
             result["metadata"] = {}
@@ -94,6 +103,7 @@ def consolidate_benchmarks(
         result["metadata"]["total_input_names"] = len(unique_names)
         result["metadata"]["total_canonical_names"] = len(result["consolidations"])
         result["metadata"]["consolidation_date"] = datetime.utcnow().isoformat()
+        result["metadata"]["cooccurrence_constraints"] = len(cooccurrences) if cooccurrences else 0
 
         logger.info(
             f"Consolidated {len(unique_names)} names into "
@@ -345,6 +355,118 @@ def _apply_most_common_nomenclature(
                     f"Tie-breaking applied: {len(top_variants)} variants tied at {max_count} models. "
                     f"Selected '{selected}' (uppercase > lowercase > mixed case)."
                 ).strip()
+
+    return consolidation_result
+
+
+def _apply_cooccurrence_disambiguation(
+    consolidation_result: Dict[str, Any],
+    cooccurrences: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """
+    Apply side-by-side benchmark disambiguation.
+
+    When two benchmarks appear together in the same document section (same table,
+    same paragraph), they should be treated as distinct benchmarks, not merged.
+
+    This function splits any consolidation groups where members co-occur.
+
+    Args:
+        consolidation_result: Result from Claude consolidation
+        cooccurrences: List of benchmark pairs found side-by-side
+                      [{"benchmark_a": "MMLU", "benchmark_b": "MMLU-Pro", "location": "Table 1"}, ...]
+
+    Returns:
+        Updated consolidation result with co-occurring benchmarks separated
+
+    Example:
+        Before: consolidations = [{"canonical_name": "MMLU", "variations": ["MMLU", "mmlu", "MMLU-Pro"]}]
+        After (with MMLU+MMLU-Pro cooccurrence):
+              consolidations = [
+                  {"canonical_name": "MMLU", "variations": ["MMLU", "mmlu"]},
+                  {"canonical_name": "MMLU-Pro", "variations": ["MMLU-Pro"]}
+              ]
+    """
+    from typing import Tuple
+
+    # Build set of co-occurring pairs (both directions for easy lookup)
+    cooccurring_pairs: Set[Tuple[str, str]] = set()
+    for cooccur in cooccurrences:
+        a = cooccur["benchmark_a"]
+        b = cooccur["benchmark_b"]
+        cooccurring_pairs.add((a, b))
+        cooccurring_pairs.add((b, a))  # Symmetric
+
+    # Process each consolidation group
+    new_consolidations = []
+    split_count = 0
+
+    for consolidation in consolidation_result.get("consolidations", []):
+        variations = consolidation.get("variations", [])
+
+        if len(variations) <= 1:
+            # No variations to split
+            new_consolidations.append(consolidation)
+            continue
+
+        # Check if any variations co-occur
+        needs_split = False
+        for i in range(len(variations)):
+            for j in range(i + 1, len(variations)):
+                if (variations[i], variations[j]) in cooccurring_pairs:
+                    needs_split = True
+                    break
+            if needs_split:
+                break
+
+        if not needs_split:
+            # No co-occurrences, keep as-is
+            new_consolidations.append(consolidation)
+            continue
+
+        # Split the group: separate co-occurring benchmarks
+        # Strategy: Create separate consolidations for each unique variation
+        # that co-occurs with another in this group
+        separated_variations = set()
+        for i in range(len(variations)):
+            for j in range(i + 1, len(variations)):
+                if (variations[i], variations[j]) in cooccurring_pairs:
+                    separated_variations.add(variations[i])
+                    separated_variations.add(variations[j])
+
+        # If some variations need separation, split them out
+        if separated_variations:
+            # Keep non-separated variations together
+            kept_variations = [v for v in variations if v not in separated_variations]
+
+            if kept_variations:
+                # Create consolidation for non-separated variations
+                new_consolidations.append({
+                    "canonical_name": kept_variations[0],
+                    "variations": kept_variations,
+                    "benchmark_type": consolidation.get("benchmark_type", "same"),
+                    "confidence": consolidation.get("confidence", 1.0),
+                    "notes": f"{consolidation.get('notes', '')} (Split from original group due to co-occurrence)".strip()
+                })
+
+            # Create individual consolidations for separated variations
+            for var in sorted(separated_variations):
+                new_consolidations.append({
+                    "canonical_name": var,
+                    "variations": [var],
+                    "benchmark_type": "distinct",
+                    "confidence": 1.0,
+                    "notes": f"Separated due to side-by-side appearance with similar benchmark name"
+                })
+
+            split_count += 1
+        else:
+            new_consolidations.append(consolidation)
+
+    consolidation_result["consolidations"] = new_consolidations
+
+    if split_count > 0:
+        logger.info(f"Split {split_count} consolidation groups due to co-occurrence")
 
     return consolidation_result
 
