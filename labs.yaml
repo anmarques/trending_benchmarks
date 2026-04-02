@@ -45,3 +45,9 @@ schedule:
   frequency: "monthly"  # monthly, weekly, daily
   day_of_month: 1
   hour: 9
+
+# PDF parsing constraints
+pdf_constraints:
+  max_file_size_mb: 10
+  download_timeout_seconds: 120
+  max_extracted_chars: 50000
