@@ -266,3 +266,139 @@ def extract_benchmark_names(
             names.add(name)
 
     return list(names)
+
+
+def _apply_most_common_nomenclature(
+    consolidation_result: Dict[str, Any],
+    usage_counts: Dict[str, int]
+) -> Dict[str, Any]:
+    """
+    Apply "most common nomenclature" rule to select canonical names.
+
+    For each group of consolidated variants, selects the variant used by
+    the most models as the canonical name. Implements tie-breaking rules
+    from SPECIFICATIONS.md Section 4.3.
+
+    Tie-breaking rules (if counts are equal):
+    1. Prefer uppercase > lowercase > mixed case
+    2. Examples: "MMLU" > "mmlu" > "Mmlu"
+
+    Args:
+        consolidation_result: Result from Claude consolidation
+        usage_counts: Dict mapping benchmark names to usage counts
+
+    Returns:
+        Updated consolidation result with canonical names adjusted
+
+    Example:
+        >>> result = {"consolidations": [{"canonical_name": "mmlu", "variations": ["MMLU", "mmlu"]}]}
+        >>> usage = {"MMLU": 10, "mmlu": 3}
+        >>> updated = _apply_most_common_nomenclature(result, usage)
+        >>> print(updated["consolidations"][0]["canonical_name"])  # "MMLU"
+    """
+    for consolidation in consolidation_result.get("consolidations", []):
+        variations = consolidation.get("variations", [])
+        current_canonical = consolidation.get("canonical_name")
+
+        if not variations or len(variations) <= 1:
+            continue
+
+        # Count usage for each variation
+        variant_counts = {}
+        for variant in variations:
+            variant_counts[variant] = usage_counts.get(variant, 0)
+
+        # Find max usage count
+        max_count = max(variant_counts.values()) if variant_counts else 0
+
+        # Get all variants with max count (for tie-breaking)
+        top_variants = [v for v, c in variant_counts.items() if c == max_count]
+
+        if len(top_variants) == 0:
+            # No usage data, keep AI's choice
+            logger.debug(f"No usage data for {current_canonical}, keeping AI choice")
+            continue
+        elif len(top_variants) == 1:
+            # Clear winner
+            selected = top_variants[0]
+            if selected != current_canonical:
+                logger.info(
+                    f"Most common nomenclature: '{selected}' (used by {max_count} models) "
+                    f"selected over '{current_canonical}'"
+                )
+                consolidation["canonical_name"] = selected
+                consolidation["notes"] = (
+                    f"{consolidation.get('notes', '')} "
+                    f"Canonical name selected based on usage: {max_count} models use '{selected}'."
+                ).strip()
+        else:
+            # Tie - apply tie-breaking rules
+            selected = _tie_break_canonical_name(top_variants, max_count)
+            if selected != current_canonical:
+                logger.info(
+                    f"Tie-breaking: '{selected}' selected from {top_variants} "
+                    f"(all used by {max_count} models)"
+                )
+                consolidation["canonical_name"] = selected
+                consolidation["notes"] = (
+                    f"{consolidation.get('notes', '')} "
+                    f"Tie-breaking applied: {len(top_variants)} variants tied at {max_count} models. "
+                    f"Selected '{selected}' (uppercase > lowercase > mixed case)."
+                ).strip()
+
+    return consolidation_result
+
+
+def _tie_break_canonical_name(variants: List[str], count: int) -> str:
+    """
+    Apply tie-breaking rules when multiple variants have equal usage.
+
+    Tie-breaking order:
+    1. Uppercase (all characters uppercase)
+    2. Lowercase (all characters lowercase)
+    3. Mixed case
+
+    Args:
+        variants: List of variant names with equal usage counts
+        count: The tied usage count
+
+    Returns:
+        Selected canonical name
+
+    Example:
+        >>> _tie_break_canonical_name(["MMLU", "mmlu", "Mmlu"], 5)
+        'MMLU'
+        >>> _tie_break_canonical_name(["mmlu", "Mmlu"], 5)
+        'mmlu'
+    """
+    # Categorize variants
+    uppercase = []
+    lowercase = []
+    mixed_case = []
+
+    for variant in variants:
+        # Only consider alphabetic characters for case classification
+        alpha_chars = ''.join(c for c in variant if c.isalpha())
+        if not alpha_chars:
+            # No alphabetic characters, treat as mixed
+            mixed_case.append(variant)
+        elif alpha_chars.isupper():
+            uppercase.append(variant)
+        elif alpha_chars.islower():
+            lowercase.append(variant)
+        else:
+            mixed_case.append(variant)
+
+    # Apply preference: uppercase > lowercase > mixed
+    if uppercase:
+        selected = uppercase[0]
+        logger.debug(f"Tie-break: Selected uppercase variant '{selected}'")
+        return selected
+    elif lowercase:
+        selected = lowercase[0]
+        logger.debug(f"Tie-break: Selected lowercase variant '{selected}'")
+        return selected
+    else:
+        selected = mixed_case[0] if mixed_case else variants[0]
+        logger.debug(f"Tie-break: Selected mixed-case variant '{selected}'")
+        return selected
