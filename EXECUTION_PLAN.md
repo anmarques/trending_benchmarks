@@ -31,7 +31,7 @@
 - [ ] P0-2: Implement PDF parsing (pdfplumber + PyPDF2)
 - [ ] P0-3: Implement Google search scraping
 - [ ] P0-4: Implement adaptive taxonomy evolution
-- [ ] P0-5: Fix progress reporting format (add ✓, ✗, ↻, ⊕ symbols)
+- [x] P0-5: Fix progress reporting format (add ✓, ✗, ↻, ⊕ symbols) ✅
 
 #### Priority 1: High Importance
 - [ ] P1-1: Update database schema (deleted_at, extraction_failed, indexes)
@@ -67,7 +67,7 @@
 - [ ] Phase 2.5: Remaining views (Model Comparison, Lab Analytics, Taxonomy Browser)
 - [ ] Phase 2.6: Polish & deploy to GitHub Pages
 
-**Progress:** 1/36 tasks complete (3%)
+**Progress:** 2/36 tasks complete (5.6%)
 
 ---
 
