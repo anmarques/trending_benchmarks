@@ -317,17 +317,95 @@ models:
   - url: https://qwenlm.github.io/blog/qwen2.5/
     type: blog_post
     status: extracted
-    notes: High-level overview, detailed benchmarks in qwen2.5-llm blog
+    notes: Benchmark charts extracted from blog post figures
     benchmarks:
     - name: MMLU
-      variant: general mention
+      variant: base
+      category: General Knowledge
+    - name: MMLU-Pro
+      variant: base
+      category: General Knowledge
+    - name: MMLU-redux
+      variant: base
+      category: General Knowledge
+    - name: GPQA
+      variant: base
+      category: Science
+    - name: BBH
+      variant: base
+      category: Reasoning
+    - name: ARC-challenge
+      variant: base
       category: General Knowledge
     - name: HumanEval
-      variant: general mention
+      variant: base
       category: Code Generation
-    - name: MATH
-      variant: general mention
+    - name: MBPP
+      variant: base
+      category: Code Generation
+    - name: MultiPL-E
+      variant: base
+      category: Code Generation
+    - name: GSM8K
+      variant: base
       category: Math Reasoning
+    - name: MATH
+      variant: base
+      category: Math Reasoning
+    - name: Multi-Exam
+      variant: multilingual
+      category: Multilingual
+    - name: Multi-Understanding
+      variant: multilingual
+      category: Multilingual
+    - name: Multi-Mathematics
+      variant: multilingual
+      category: Multilingual
+    - name: Multi-Translation
+      variant: multilingual
+      category: Multilingual
+    - name: MMLU-Pro
+      variant: instruct
+      category: General Knowledge
+    - name: MMLU-redux
+      variant: instruct
+      category: General Knowledge
+    - name: GPQA
+      variant: instruct
+      category: Science
+    - name: MATH
+      variant: instruct
+      category: Math Reasoning
+    - name: GSM8K
+      variant: instruct
+      category: Math Reasoning
+    - name: HumanEval
+      variant: instruct
+      category: Code Generation
+    - name: MBPP
+      variant: instruct
+      category: Code Generation
+    - name: MultiPL-E
+      variant: instruct
+      category: Code Generation
+    - name: LiveCodeBench
+      variant: 2305-2409
+      category: Code Generation
+    - name: LiveBench
+      variant: 0831
+      category: General
+    - name: IFEval
+      variant: strict-prompt
+      category: Instruction Following
+    - name: Arena-Hard
+      variant: chat
+      category: Chat
+    - name: AlignBench
+      variant: v1.1
+      category: Alignment
+    - name: MT-bench
+      variant: chat
+      category: Chat
   - url: https://qwenlm.github.io/blog/qwen2.5-llm/
     type: blog_post
     status: extracted
