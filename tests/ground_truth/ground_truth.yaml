@@ -137,9 +137,6 @@ models:
     - name: WorldSense
       variant: base
       category: Reasoning
-    - name: HellaSwag
-      variant: base
-      category: Reasoning
     - name: RACE
       variant: base
       category: Reading Comprehension
