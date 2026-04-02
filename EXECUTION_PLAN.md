@@ -18,7 +18,56 @@
 
 **Total Work Items:**
 - Phase 1 (v1.0): 30 tasks across 4 priority levels
-- Phase 2 (v2.0): Web Dashboard + 5 tasks
+- Phase 2 (v2.0): Web Dashboard + 6 tasks
+
+---
+
+## Implementation Checklist
+
+### Phase 1: Core System (v1.0)
+
+#### Priority 0: Critical Blockers
+- [ ] P0-1: Move labs.yaml to project root
+- [ ] P0-2: Implement PDF parsing (pdfplumber + PyPDF2)
+- [ ] P0-3: Implement Google search scraping
+- [ ] P0-4: Implement adaptive taxonomy evolution
+- [ ] P0-5: Fix progress reporting format (add ✓, ✗, ↻, ⊕ symbols)
+
+#### Priority 1: High Importance
+- [ ] P1-1: Update database schema (deleted_at, extraction_failed, indexes)
+- [ ] P1-2: Implement "most common nomenclature" consolidation
+- [ ] P1-3: Update root README auto-update
+- [ ] P1-4: Implement retry policy configuration
+- [ ] P1-5: Implement 12-month rolling window
+- [ ] P1-6: Handle deleted models
+- [ ] P1-7: Implement failed extraction "never retry" policy
+
+#### Priority 2: Medium Importance
+- [ ] P2-1: Implement side-by-side benchmark disambiguation
+- [ ] P2-2: Add lab→GitHub org mapping
+- [ ] P2-3: Track source type in model_benchmarks
+- [ ] P2-4: Implement deprecated benchmark tracking
+- [ ] P2-5: Add Google search configuration
+- [ ] P2-6: Add PDF constraints configuration
+- [ ] P2-7: Implement report generation retry
+- [ ] P2-8: Archive taxonomy only on change
+
+#### Priority 3: Polish & Optimization
+- [ ] P3-1: Implement document fetching parallelization
+- [ ] P3-2: Add arXiv author filtering
+- [ ] P3-3: Improve error messages
+- [ ] P3-4: Add unit tests (>80% coverage)
+- [ ] P3-5: Update documentation
+
+### Phase 2: Web Dashboard (v2.0)
+- [ ] Phase 2.1: Data export (JSON generation)
+- [ ] Phase 2.2: React dashboard shell
+- [ ] Phase 2.3: Benchmark Explorer view
+- [ ] Phase 2.4: Visualizations (D3.js charts)
+- [ ] Phase 2.5: Remaining views (Model Comparison, Lab Analytics, Taxonomy Browser)
+- [ ] Phase 2.6: Polish & deploy to GitHub Pages
+
+**Progress:** 0/36 tasks complete (0%)
 
 ---
 
