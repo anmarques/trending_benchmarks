@@ -453,6 +453,31 @@ No trend data available."""
         else:
             lines.append("No benchmark activity in the last 12 months.")
 
+        # Add Deprecated Benchmarks subsection
+        lines.append("")
+        lines.append("### Deprecated Benchmarks")
+        lines.append("")
+        lines.append("Benchmarks not seen in the last 6 months (potentially deprecated):")
+        lines.append("")
+
+        # Get deprecated benchmarks
+        deprecated = self.cache.get_deprecated_benchmarks(months=6)
+
+        if deprecated:
+            lines.append("| Benchmark | Categories | Last Seen |")
+            lines.append("|-----------|------------|-----------|")
+
+            for bench in deprecated:
+                name = bench.get("canonical_name", "Unknown")
+                categories = ", ".join(bench.get("categories", [])[:3])
+                if not categories:
+                    categories = "Uncategorized"
+                last_seen = bench.get("last_seen", "N/A")[:10]
+
+                lines.append(f"| {name} | {categories} | {last_seen} |")
+        else:
+            lines.append("No deprecated benchmarks detected. All benchmarks have been mentioned in the last 6 months.")
+
         return "\n".join(lines)
 
     def _generate_footer(self) -> str:

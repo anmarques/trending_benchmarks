@@ -330,20 +330,20 @@ class CacheManager:
             row = cursor.fetchone()
 
             if row:
-                # Update existing benchmark
+                # Update existing benchmark and last_seen timestamp
                 benchmark_id = row['id']
                 cursor.execute("""
                     UPDATE benchmarks
-                    SET categories = ?, attributes = ?
+                    SET categories = ?, attributes = ?, last_seen = ?
                     WHERE id = ?
-                """, (categories_json, attributes_json, benchmark_id))
+                """, (categories_json, attributes_json, now, benchmark_id))
             else:
                 # Insert new benchmark
                 cursor.execute("""
                     INSERT INTO benchmarks
-                    (canonical_name, categories, attributes, first_seen)
-                    VALUES (?, ?, ?, ?)
-                """, (name, categories_json, attributes_json, now))
+                    (canonical_name, categories, attributes, first_seen, last_seen)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (name, categories_json, attributes_json, now, now))
                 benchmark_id = cursor.lastrowid
 
             conn.commit()
@@ -408,7 +408,8 @@ class CacheManager:
     def add_model_benchmark(self, model_id: str, benchmark_id: int,
                            score: Optional[float] = None,
                            context: Optional[Dict[str, Any]] = None,
-                           source_url: Optional[str] = None) -> int:
+                           source_url: Optional[str] = None,
+                           source_type: Optional[str] = None) -> int:
         """
         Link a model to a benchmark with score and context.
 
@@ -418,6 +419,7 @@ class CacheManager:
             score: Benchmark score
             context: Context dict (shot count, subset, etc.)
             source_url: URL of the source
+            source_type: Type of source (model_card, arxiv_paper, blog_post, github_pdf, etc.)
 
         Returns:
             Model-benchmark link ID
@@ -429,14 +431,15 @@ class CacheManager:
             cursor = conn.cursor()
 
             # Try to update if exists, otherwise insert
+            # Update last_seen timestamp on every mention
             cursor.execute("""
                 INSERT INTO model_benchmarks
-                (model_id, benchmark_id, score, context, source_url, recorded_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                (model_id, benchmark_id, score, context, source_url, source_type, last_seen, recorded_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(model_id, benchmark_id, context)
-                DO UPDATE SET score = ?, source_url = ?, recorded_at = ?
-            """, (model_id, benchmark_id, score, context_json, source_url, now,
-                  score, source_url, now))
+                DO UPDATE SET score = ?, source_url = ?, source_type = ?, last_seen = ?, recorded_at = ?
+            """, (model_id, benchmark_id, score, context_json, source_url, source_type, now, now,
+                  score, source_url, source_type, now, now))
 
             link_id = cursor.lastrowid
             conn.commit()
@@ -1242,3 +1245,49 @@ class CacheManager:
                 })
 
             return trends
+
+
+    def get_deprecated_benchmarks(self, months: int = 6) -> List[Dict[str, Any]]:
+        """
+        Get benchmarks not seen in the last N months (potentially deprecated).
+
+        Uses the last_seen timestamp from the benchmarks table to identify
+        benchmarks that haven't been mentioned recently.
+
+        Args:
+            months: Number of months to look back (default: 6)
+
+        Returns:
+            List of potentially deprecated benchmarks with last_seen dates
+        """
+        cutoff_date = (datetime.utcnow() - timedelta(days=months * 30)).isoformat()
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT
+                    b.id,
+                    b.canonical_name,
+                    b.categories,
+                    b.attributes,
+                    b.first_seen,
+                    b.last_seen
+                FROM benchmarks b
+                WHERE b.last_seen IS NOT NULL
+                  AND b.last_seen < ?
+                ORDER BY b.last_seen DESC
+            """, (cutoff_date,))
+
+            deprecated = []
+            for row in cursor.fetchall():
+                deprecated.append({
+                    'id': row['id'],
+                    'canonical_name': row['canonical_name'],
+                    'categories': json.loads(row['categories']) if row['categories'] else [],
+                    'attributes': json.loads(row['attributes']) if row['attributes'] else {},
+                    'first_seen': row['first_seen'],
+                    'last_seen': row['last_seen']
+                })
+
+            return deprecated
+

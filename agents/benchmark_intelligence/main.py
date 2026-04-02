@@ -27,6 +27,7 @@ from .tools.extract_benchmarks import (
     aggregate_benchmark_results,
 )
 from .tools.fetch_docs import fetch_documentation
+from .tools.parallel_fetcher import fetch_documents_parallel, prepare_document_specs_for_model
 from .tools.consolidate import (
     consolidate_benchmarks,
     extract_benchmark_names,
@@ -317,13 +318,16 @@ class BenchmarkIntelligenceAgent:
             source_name=model_id,
         )
 
-        # Step 2c: Fetch related documentation
+        # Tag benchmarks with source_type for tracking
+        for bench in card_benchmarks.get("benchmarks", []):
+            bench["source_type"] = "model_card"
+
+        # Step 2c: Fetch related documentation in parallel
         logger.info(f"Fetching related documentation...")
         try:
-            # Note: Web search/fetch would be injected here in production
-            # For now, we skip this step if no web functions are available
-            docs = []
-            logger.debug("Skipping documentation fetch (no web functions configured)")
+            docs = self._fetch_documents_parallel(model_id, model, model_card_data)
+            if docs:
+                logger.info(f"  {SYMBOLS['success']} Fetched {len(docs)} documents in parallel")
         except Exception as e:
             logger.warning(f"Failed to fetch documentation: {e}")
             docs = []
@@ -345,6 +349,12 @@ class BenchmarkIntelligenceAgent:
                 doc_extraction_results = extract_benchmarks_from_multiple_sources(sources)
                 doc_benchmarks_agg = aggregate_benchmark_results(doc_extraction_results)
                 doc_benchmarks = doc_benchmarks_agg.get("benchmarks", [])
+
+                # Tag benchmarks with source_type from their respective documents
+                for i, source in enumerate(sources):
+                    if i < len(doc_extraction_results):
+                        for bench in doc_extraction_results[i].get("benchmarks", []):
+                            bench["source_type"] = source.get("source_type", "unknown")
 
         # Step 2e: Consolidate benchmarks
         all_benchmarks = card_benchmarks.get("benchmarks", []) + doc_benchmarks
@@ -443,6 +453,7 @@ class BenchmarkIntelligenceAgent:
                 benchmark_id=benchmark_id,
                 score=bench.get("score"),
                 context=bench.get("context", {}),
+                source_type=bench.get("source_type", "unknown"),
                 source_url=bench.get("source_url"),
             )
 
@@ -457,6 +468,148 @@ class BenchmarkIntelligenceAgent:
                 )
 
         self.stats["documents_fetched"] += len(docs)
+
+    def _fetch_documents_parallel(
+        self,
+        model_id: str,
+        model: Dict[str, Any],
+        model_card_data: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch all documents for a model in parallel.
+
+        Args:
+            model_id: Model identifier
+            model: Model metadata dictionary
+            model_card_data: Parsed model card data
+
+        Returns:
+            List of fetched document dictionaries
+        """
+        # Check if parallelization is enabled
+        parallel_config = self.config.get("parallelization", {})
+        if not parallel_config.get("enabled", True):
+            logger.debug("Parallel fetching disabled, using sequential fetch")
+            return self._fetch_documents_sequential(model_id, model, model_card_data)
+
+        max_concurrent = parallel_config.get("max_concurrent_document_fetches", 5)
+        timeout_per_doc = parallel_config.get("timeout_per_document_seconds", 60)
+
+        # Import the enhanced fetch functions
+        try:
+            from .tools.fetch_docs_enhanced import (
+                fetch_model_card,
+                fetch_arxiv_paper,
+                fetch_github_pdf,
+                fetch_blog_posts,
+            )
+        except ImportError:
+            logger.warning("Enhanced fetch functions not available, skipping additional docs")
+            return []
+
+        # Prepare document URLs to fetch
+        # Note: Model card is already fetched, so we prepare other documents
+        model_name = model_id.split("/")[-1] if "/" in model_id else model_id
+        lab_name = model.get("author", model_id.split("/")[0] if "/" in model_id else "")
+
+        # Create a simple fetch wrapper that matches the expected signature
+        def fetch_document(url: str, doc_type: str, **params) -> Optional[Dict[str, Any]]:
+            """Wrapper to fetch a single document."""
+            try:
+                if doc_type == "arxiv_paper":
+                    # For arXiv, we need model card reference
+                    return fetch_arxiv_paper(
+                        model_name=model_name,
+                        lab_name=lab_name,
+                        model_card_doc={
+                            "content": model_card_data.get("content", ""),
+                            "metadata": model_card_data.get("metadata", {}),
+                        },
+                        config=self.config,
+                    )
+                elif doc_type == "github_pdf":
+                    return fetch_github_pdf(
+                        model_name=model_name,
+                        lab_name=lab_name,
+                        model_card_doc={
+                            "content": model_card_data.get("content", ""),
+                            "metadata": model_card_data.get("metadata", {}),
+                        },
+                        config=self.config,
+                    )
+                elif doc_type == "blog":
+                    # Fetch blog posts returns a list, get first one
+                    blogs = fetch_blog_posts(
+                        model_name=model_name,
+                        lab_name=lab_name,
+                        config=self.config,
+                        max_posts=params.get("max_posts", 1),
+                    )
+                    return blogs[0] if blogs else None
+                else:
+                    logger.warning(f"Unknown document type: {doc_type}")
+                    return None
+            except Exception as e:
+                logger.debug(f"Failed to fetch {doc_type}: {e}")
+                return None
+
+        # Prepare document specifications for parallel fetching
+        # We fetch: arXiv paper, GitHub PDF, and blog post(s)
+        doc_specs = [
+            {"url": "arxiv_search", "doc_type": "arxiv_paper", "fetch_params": {}},
+            {"url": "github_search", "doc_type": "github_pdf", "fetch_params": {}},
+            {"url": "blog_search", "doc_type": "blog", "fetch_params": {"max_posts": 1}},
+        ]
+
+        logger.debug(
+            f"Fetching {len(doc_specs)} document types in parallel "
+            f"(max {max_concurrent} concurrent)"
+        )
+
+        # Fetch documents in parallel
+        docs = fetch_documents_parallel(
+            document_urls=doc_specs,
+            fetch_function=fetch_document,
+            max_concurrent=max_concurrent,
+            timeout_per_doc=timeout_per_doc,
+        )
+
+        return docs
+
+    def _fetch_documents_sequential(
+        self,
+        model_id: str,
+        model: Dict[str, Any],
+        model_card_data: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch documents sequentially (fallback method).
+
+        Args:
+            model_id: Model identifier
+            model: Model metadata dictionary
+            model_card_data: Parsed model card data
+
+        Returns:
+            List of fetched document dictionaries
+        """
+        try:
+            from .tools.fetch_docs_enhanced import fetch_all_documentation
+
+            model_name = model_id.split("/")[-1] if "/" in model_id else model_id
+            lab_name = model.get("author", model_id.split("/")[0] if "/" in model_id else "")
+
+            docs = fetch_all_documentation(
+                model_id=model_id,
+                model_name=model_name,
+                lab_name=lab_name,
+                config=self.config,
+            )
+            # Filter out the model card since we already have it
+            return [doc for doc in docs if doc.get("doc_type") != "model_card"]
+        except Exception as e:
+            logger.warning(f"Sequential fetch failed: {e}")
+            return []
 
     def _consolidate_all_benchmarks(self):
         """Consolidate benchmarks across all models in cache."""
