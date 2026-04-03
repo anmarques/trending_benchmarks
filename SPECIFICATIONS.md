@@ -529,7 +529,11 @@ CREATE INDEX idx_benchmark_mentions_status ON benchmark_mentions(status);
 
 ### 6.2 Snapshot Creation
 
-**When**: After every successful run (after processing all models)
+**When**: After successful pipeline completion in `snapshot` or `full` mode
+
+**Trigger**:
+- User runs `python main.py snapshot` or `python main.py full`
+- OR scheduled task (e.g., Ambient scheduled execution)
 
 **Process**:
 1. **Define time window**:
@@ -731,7 +735,12 @@ MMLU:
 
 The agent MUST report short progress summaries as it executes:
 
-**During Discovery**:
+**Mode Indication**:
+```
+[Mode: full] Starting benchmark intelligence pipeline...
+```
+
+**During Discovery** (snapshot/full modes):
 ```
 [Discovery] Querying 15 labs...
 [Discovery] Found 127 models from Qwen, meta-llama, mistralai, ...
@@ -757,10 +766,22 @@ The agent MUST report short progress summaries as it executes:
 [Classification] Classified 72 benchmarks across 13 categories
 ```
 
-**During Reporting**:
+**During Snapshot Creation** (snapshot/full modes):
 ```
+[Snapshot] Calculating 12-month window: 2025-04-03 to 2026-04-03
+[Snapshot] Found 150 models in window
+[Snapshot] Processing 72 unique benchmarks...
+[Snapshot] ✓ Snapshot created: ID=42, timestamp=2026-04-03T16:30:45
+[Snapshot]   - Emerging: 5 benchmarks
+[Snapshot]   - Active: 62 benchmarks
+[Snapshot]   - Almost Extinct: 5 benchmarks
+```
+
+**During Reporting** (report/full modes):
+```
+[Reporting] Loading snapshot ID=42 (2026-04-03T16:30:45)
 [Reporting] Generating 7 sections...
-[Reporting] ✓ Report saved: reports/report_20260402_163045.md
+[Reporting] ✓ Report saved: reports/report_20260403_163045.md
 [Reporting] ✓ Updated root README.md
 ```
 
@@ -826,6 +847,12 @@ retry_policy:
 reporting:
   timeframe_months: 12  # Rolling window from current date
   retry_on_failure: true
+
+execution:
+  default_mode: "full"  # Options: "snapshot", "report", "full"
+  # Note: Execution is triggered manually by user or via scheduled task (e.g., Ambient)
+  # Snapshots are created after pipeline runs (snapshot or full mode)
+  # Reports are generated from snapshots (report or full mode)
 ```
 
 **`categories.yaml`** (project root):
@@ -846,8 +873,99 @@ reporting:
 
 ## 10. Architecture
 
-### 10.1 Execution Flow
+### 10.1 Scheduling & Triggering
 
+**Execution Trigger**: User-initiated or scheduled task
+- Manual execution: User runs `python main.py [mode]`
+- Scheduled execution: Ambient scheduled task runs agent periodically
+- No automatic/continuous execution
+
+**Typical Workflow**:
+1. User schedules weekly `full` mode execution via Ambient
+2. Each run: Updates DB → Creates snapshot → Generates report
+3. Reports accumulate over time, enabling temporal trend analysis
+4. User can manually run `report` mode to regenerate latest report without re-running pipeline
+
+---
+
+### 10.2 Execution Modes
+
+The system supports three execution modes:
+
+**Mode 1: `snapshot`** (pipeline + snapshot, no report)
+```bash
+python main.py snapshot
+```
+- Run full pipeline: Discovery → Processing → Consolidation → Classification
+- Create temporal snapshot with benchmark metrics
+- Update taxonomy if needed
+- NO report generation
+
+**Use case**: Regular scheduled updates to keep database current without generating reports
+
+---
+
+**Mode 2: `report`** (report only, no pipeline)
+```bash
+python main.py report
+```
+- Query latest snapshot from database
+- Generate 7-section markdown report
+- Update root README with latest report link
+- NO pipeline execution, NO new snapshot
+
+**Use case**: Regenerate report after manual data fixes or when report template changes
+
+---
+
+**Mode 3: `full`** (default - pipeline + snapshot + report)
+```bash
+python main.py        # defaults to full mode
+python main.py full
+```
+- Run full pipeline: Discovery → Processing → Consolidation → Classification
+- Create temporal snapshot
+- Generate report from snapshot
+- Update root README
+
+**Use case**: Complete execution - typically run on-demand by user or via scheduled task
+
+---
+
+### 10.1.1 Command-Line Interface
+
+**Usage**:
+```bash
+python agents/benchmark_intelligence/main.py [mode]
+```
+
+**Arguments**:
+- `mode` (optional): Execution mode - `snapshot`, `report`, or `full`
+  - Default: `full`
+
+**Examples**:
+```bash
+# Full execution (default)
+python agents/benchmark_intelligence/main.py
+python agents/benchmark_intelligence/main.py full
+
+# Update database and create snapshot only
+python agents/benchmark_intelligence/main.py snapshot
+
+# Regenerate report from latest snapshot
+python agents/benchmark_intelligence/main.py report
+```
+
+**Exit Codes**:
+- `0`: Success
+- `1`: General error (configuration, API failures, etc.)
+- `2`: No snapshots found (when running `report` mode on fresh database)
+
+---
+
+### 10.2 Execution Flow by Mode
+
+**`snapshot` mode flow:**
 ```
 1. Discovery Phase
    ├── Load configuration from labs.yaml
@@ -878,7 +996,7 @@ reporting:
    ├── Report: "Consolidated X to Y names"
    └── Store canonical benchmarks
 
-4. Snapshot Phase
+4. Snapshot Phase (always executed after pipeline)
    ├── Calculate 12-month window (current_date - 12 months to current_date)
    ├── Query all models in window (by release_date)
    ├── For each benchmark:
@@ -889,9 +1007,30 @@ reporting:
    ├── Create snapshot record with window boundaries
    ├── Store current taxonomy version reference
    └── Archive old taxonomy if updated
+   └── Report: "Snapshot created at X"
+```
+
+**`report` mode flow:**
+```
+1. Load Latest Snapshot
+   ├── Query most recent snapshot from database
+   ├── Load benchmark_mentions for that snapshot
+   └── Validate snapshot exists (error if none found)
+
+2. Reporting Phase
+   ├── Generate 7 report sections from snapshot data
+   ├── Note taxonomy version used
+   ├── Write markdown file
+   ├── Update root README
+   └── Report: "Report saved at X"
+```
+
+**`full` mode flow:**
+```
+1-4. Same as snapshot mode (Discovery → Processing → Consolidation → Snapshot)
 
 5. Reporting Phase
-   ├── Query cache for data
+   ├── Query latest snapshot (just created)
    ├── Generate 7 report sections
    ├── Note taxonomy updates
    ├── Write markdown file
@@ -1258,12 +1397,16 @@ python tests/generate_test_reports.py
 - ✅ Zero irrelevant models in output (proper filtering applied)
 - ✅ Audio-to-text models discovered (e.g., Whisper-style ASR models)
 - ✅ Text-to-audio and audio-to-audio models excluded
+- ✅ All three execution modes work correctly (snapshot, report, full)
+- ✅ Default mode is `full`
+- ✅ Snapshots created after pipeline runs (snapshot/full mode) with correct time windows
+- ✅ Reports generated from snapshots (report/full mode)
+- ✅ Report mode can regenerate reports without re-running pipeline
 - ✅ Reports show ALL discovered models (no arbitrary limits)
 - ✅ Progress is reported to user during execution
 - ✅ Incremental updates work (skip unchanged documents)
 - ✅ Taxonomy updated when new benchmark types discovered
 - ✅ Historical taxonomy versions archived
-- ✅ Snapshots created after each run with correct time windows
 - ✅ Benchmark status correctly classified (emerging / active / almost extinct)
 - ✅ Temporal trends show historical data when multiple snapshots exist
 - ✅ Relative frequency calculated correctly (mentions / total models in window)
