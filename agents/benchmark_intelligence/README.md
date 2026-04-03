@@ -1,219 +1,142 @@
-# Benchmark Intelligence Report
+# Benchmark Intelligence Agent
 
-**Generated:** 2026-04-02 16:27:23 UTC
+Automated system for discovering, extracting, and tracking AI model benchmarks from HuggingFace, blogs, papers, and GitHub.
 
----
+## Overview
 
-## Executive Summary
+This agent monitors trending AI models and identifies which benchmarks are being used for evaluation. It provides insights into:
+- Most commonly used benchmarks
+- Emerging benchmarks (first seen ≤3 months)
+- Almost extinct benchmarks (last seen ≥9 months)
+- Benchmark usage trends over time
+- Lab-specific benchmark preferences
 
-- **Total Models Tracked:** 43
-- **Total Unique Benchmarks:** 84
-- **Labs/Organizations:** 12
-- **Benchmark Measurements:** 192
-- **Time Period:** 2026-04-02 to 2026-04-02
+**Full specification**: See [SPECIFICATIONS.md](/SPECIFICATIONS.md)
 
-The Benchmark Intelligence system continuously tracks trending AI models from leading labs
-and organizations, extracting and analyzing benchmark results to provide insights into
-evaluation trends, emerging benchmarks, and lab-specific preferences.
+## Quick Start
 
-## Trending Models This Month
+```bash
+# Full execution (discovery + snapshot + report)
+python main.py
 
-Discovered 43 new models in the last 30 days.
+# Update database and create snapshot only
+python main.py snapshot
 
-| Model | Lab | Downloads | Likes | First Seen |
-|-------|-----|-----------|-------|------------|
-| huggingface/CodeBERTa-language-id | huggingface | 637 | 68 | 2026-04-02 |
-| huggingface/time-series-transformer-tourism-monthly | huggingface | 2.4K | 30 | 2026-04-02 |
-| huggingface/autoformer-tourism-monthly | huggingface | 7.8K | 10 | 2026-04-02 |
-| huggingface/informer-tourism-monthly | huggingface | 15.7K | 9 | 2026-04-02 |
-| huggingface/CodeBERTa-small-v1 | huggingface | 29.3K | 88 | 2026-04-02 |
-| internlm/Intern-S1-Pro | internlm | 134.7K | 272 | 2026-04-02 |
-| internlm/internlm2-1_8b-reward | internlm | 160.6K | 16 | 2026-04-02 |
-| baichuan-inc/Baichuan-7B | baichuan-inc | 59.0K | 842 | 2026-04-02 |
-| baichuan-inc/Baichuan-M2-32B | baichuan-inc | 191.4K | 119 | 2026-04-02 |
-| OpenGVLab/InternVL3_5-1B-Instruct | OpenGVLab | 240.3K | 7 | 2026-04-02 |
-| OpenGVLab/InternVL3_5-GPT-OSS-20B-A4B-Preview-HF | OpenGVLab | 613.9K | 9 | 2026-04-02 |
-| deepseek-ai/DeepSeek-OCR-2 | deepseek-ai | 1.3M | 889 | 2026-04-02 |
-| deepseek-ai/DeepSeek-OCR | deepseek-ai | 2.4M | 3.2K | 2026-04-02 |
-| tencent/DepthCrafter | tencent | 65.5K | 108 | 2026-04-02 |
-| tencent/Hunyuan3D-2 | tencent | 94.2K | 1.7K | 2026-04-02 |
-| tencent/HunyuanImage-3.0 | tencent | 105.0K | 656 | 2026-04-02 |
-| tencent/HunyuanOCR | tencent | 278.6K | 558 | 2026-04-02 |
-| alibaba-pai/Z-Image-Fun-Lora-Distill | alibaba-pai | 16.3K | 131 | 2026-04-02 |
-| alibaba-pai/Qwen-Image-2512-Fun-Controlnet-Union | alibaba-pai | 19.2K | 45 | 2026-04-02 |
-| alibaba-pai/Wan2.2-Fun-Reward-LoRAs | alibaba-pai | 27.6K | 65 | 2026-04-02 |
-
-## Most Common Benchmarks
-
-### All-Time Top 20
-
-| Benchmark | Models | Categories | First Seen |
-|-----------|--------|------------|------------|
-| C-Eval | 13 | Knowledge, Multilingual | 2026-04-02 |
-| MMLU | 9 | Knowledge | 2026-04-02 |
-| GSM8K | 6 | Math, Reasoning | 2026-04-02 |
-| MMMU | 5 | Knowledge, Vision, Reasoning | 2026-04-02 |
-| RewardBench | 5 | Safety, Instruction-Following | 2026-04-02 |
-| SQuAD | 4 | Knowledge, Reasoning | 2026-04-02 |
-| MATH | 4 | Math, Reasoning | 2026-04-02 |
-| GPQA | 4 | Knowledge, Reasoning | 2026-04-02 |
-| AIME | 4 | Math, Reasoning | 2026-04-02 |
-| CMMLU | 3 | Knowledge, Multilingual | 2026-04-02 |
-| BBH | 3 | Reasoning, Knowledge | 2026-04-02 |
-| PIQA | 3 | Reasoning, Knowledge | 2026-04-02 |
-| SIQA | 3 | Reasoning, Knowledge | 2026-04-02 |
-| HellaSwag | 3 | Reasoning, Knowledge | 2026-04-02 |
-| WinoGrande | 3 | Reasoning, Knowledge | 2026-04-02 |
-| ARC | 3 | Reasoning, Knowledge | 2026-04-02 |
-| OBQA | 3 | Reasoning, Knowledge | 2026-04-02 |
-| CSQA | 3 | Reasoning, Knowledge | 2026-04-02 |
-| QuAC | 3 | Reasoning, Knowledge, Instruction-Following | 2026-04-02 |
-| BoolQ | 3 | Reasoning, Knowledge | 2026-04-02 |
-
-### This Month's Top 20
-
-| Benchmark | Models | Categories | Last Recorded |
-|-----------|--------|------------|---------------|
-| C-Eval | 13 | Knowledge, Multilingual | 2026-04-02 |
-| MMLU | 9 | Knowledge | 2026-04-02 |
-| GSM8K | 6 | Math, Reasoning | 2026-04-02 |
-| MMMU | 5 | Knowledge, Vision, Reasoning | 2026-04-02 |
-| RewardBench | 5 | Safety, Instruction-Following | 2026-04-02 |
-| SQuAD | 4 | Knowledge, Reasoning | 2026-04-02 |
-| MATH | 4 | Math, Reasoning | 2026-04-02 |
-| GPQA | 4 | Knowledge, Reasoning | 2026-04-02 |
-| AIME | 4 | Math, Reasoning | 2026-04-02 |
-| CMMLU | 3 | Knowledge, Multilingual | 2026-04-02 |
-| BBH | 3 | Reasoning, Knowledge | 2026-04-02 |
-| PIQA | 3 | Reasoning, Knowledge | 2026-04-02 |
-| SIQA | 3 | Reasoning, Knowledge | 2026-04-02 |
-| HellaSwag | 3 | Reasoning, Knowledge | 2026-04-02 |
-| WinoGrande | 3 | Reasoning, Knowledge | 2026-04-02 |
-| ARC | 3 | Reasoning, Knowledge | 2026-04-02 |
-| OBQA | 3 | Reasoning, Knowledge | 2026-04-02 |
-| CSQA | 3 | Reasoning, Knowledge | 2026-04-02 |
-| QuAC | 3 | Reasoning, Knowledge, Instruction-Following | 2026-04-02 |
-| BoolQ | 3 | Reasoning, Knowledge | 2026-04-02 |
-
-## Emerging Benchmarks
-
-Discovered 84 new benchmarks in the last 90 days.
-
-| Benchmark | Categories | First Seen |
-|-----------|------------|------------|
-| CodeSearchNet Language ID | Code | 2026-04-02 |
-| Long-term forecasting benchmarks | Reasoning | 2026-04-02 |
-| RewardBench | Safety, Instruction-Following | 2026-04-02 |
-| AGIEval | Knowledge, Reasoning, Multilingual | 2026-04-02 |
-| Gaokao | Knowledge, Reasoning, Math | 2026-04-02 |
-| WritingBench | Instruction-Following | 2026-04-02 |
-| CFBench | Code, Reasoning, Math | 2026-04-02 |
-| HealthBench-Consensus | Domain-Specific, Knowledge | 2026-04-02 |
-| HealthBench-Hard | Domain-Specific, Knowledge, Reasoning | 2026-04-02 |
-| HealthBench | Domain-Specific, Knowledge | 2026-04-02 |
-| AIME | Math, Reasoning | 2026-04-02 |
-| OmniSpatial | Vision, Reasoning | 2026-04-02 |
-| SpaCE-10 | Reasoning | 2026-04-02 |
-| ERQA | Knowledge, Reasoning | 2026-04-02 |
-| VSI-Bench | Vision, Reasoning | 2026-04-02 |
-
-## Benchmark Categories
-
-Distribution of benchmarks across categories:
-
-| Category | Count | Percentage |
-|----------|-------|------------|
-| Reasoning | 54 | 32.5% |
-| Knowledge | 46 | 27.7% |
-| Vision | 25 | 15.1% |
-| Math | 16 | 9.6% |
-| Multilingual | 7 | 4.2% |
-| Instruction-Following | 6 | 3.6% |
-| Code | 6 | 3.6% |
-| Safety | 3 | 1.8% |
-| Domain-Specific | 3 | 1.8% |
-
-### Category Distribution Data
-
-```json
-{
-  "categories": [
-    "Reasoning",
-    "Knowledge",
-    "Vision",
-    "Math",
-    "Multilingual",
-    "Instruction-Following",
-    "Code",
-    "Safety",
-    "Domain-Specific"
-  ],
-  "counts": [
-    54,
-    46,
-    25,
-    16,
-    7,
-    6,
-    6,
-    3,
-    3
-  ]
-}
+# Regenerate report from latest snapshot
+python main.py report
 ```
 
-## Lab-Specific Insights
+## Directory Structure
 
-### Models by Lab
+```
+agents/benchmark_intelligence/
+├── main.py                    # Entry point
+├── reporting.py               # Report generation
+├── clients/                   # API client abstractions
+│   ├── api_client.py          # Direct Anthropic API client
+│   ├── mcp_client.py          # MCP integration client
+│   ├── factory.py             # Client factory
+│   └── base.py                # Base client interface
+├── tools/                     # Core processing modules
+│   ├── discover_models.py     # HuggingFace model discovery
+│   ├── fetch_docs.py          # Document fetching (blogs, papers, GitHub)
+│   ├── extract_benchmarks.py # AI-powered benchmark extraction
+│   ├── consolidate.py         # Fuzzy matching and deduplication
+│   ├── classify.py            # Benchmark categorization
+│   ├── taxonomy_manager.py    # Taxonomy evolution
+│   ├── cache.py               # SQLite persistence
+│   └── pdf_parser.py          # PDF parsing (pdfplumber + PyPDF2)
+├── prompts/                   # AI prompts
+│   ├── extract_benchmarks.md
+│   ├── consolidate.md
+│   └── classify.md
+├── config/
+│   ├── auth.yaml.example      # Authentication template
+│   └── (benchmark_taxonomy.md and categories.yaml auto-generated at root)
+└── reports/                   # Generated reports
+    └── .gitkeep
+```
 
-| Lab | Models | Avg Downloads | Avg Likes |
-|-----|--------|---------------|-----------|
-| huggingface | 5 | 11.2K | 41 |
-| alibaba-pai | 5 | 46.2K | 193 |
-| 01-ai | 5 | 21.9K | 159 |
-| Qwen | 5 | 11.2M | 888 |
-| tencent | 4 | 135.8K | 761 |
-| microsoft | 4 | 2.5M | 1.2K |
-| google | 4 | 15.1M | 526 |
-| mistralai | 3 | 1.8M | 2.1K |
-| internlm | 2 | 147.6K | 144 |
-| baichuan-inc | 2 | 125.2K | 480 |
-| OpenGVLab | 2 | 427.1K | 8 |
-| deepseek-ai | 2 | 1.9M | 2.0K |
+## Configuration
 
-### Benchmark Preferences by Lab
+### 1. Labs Configuration (`labs.yaml` at root)
 
-Top benchmarks used by each lab (coming soon).
+Define which organizations to track:
 
-## Temporal Trends
+```yaml
+labs:
+  - id: meta
+    name: Meta AI
+    aliases: [meta-llama, facebook]
+  - id: openai
+    name: OpenAI
+    aliases: [openai]
+```
 
-### Benchmark Popularity Over Time
+### 2. Authentication (`config/auth.yaml`)
 
-Tracking how benchmark usage evolves over time.
+Required for document fetching:
 
-| Benchmark | First Recorded | Last Recorded | Active Days | Total Models |
-|-----------|----------------|---------------|-------------|--------------|
-| CodeSearchNet Language ID | 2026-04-02 | 2026-04-02 | 1 | 1 |
-| Long-term forecasting benchmarks | 2026-04-02 | 2026-04-02 | 1 | 1 |
-| RewardBench | 2026-04-02 | 2026-04-02 | 1 | 5 |
-| MMLU | 2026-04-02 | 2026-04-02 | 1 | 9 |
-| AGIEval | 2026-04-02 | 2026-04-02 | 1 | 1 |
-| Gaokao | 2026-04-02 | 2026-04-02 | 1 | 1 |
-| C-Eval | 2026-04-02 | 2026-04-02 | 1 | 13 |
-| WritingBench | 2026-04-02 | 2026-04-02 | 1 | 1 |
-| CFBench | 2026-04-02 | 2026-04-02 | 1 | 1 |
-| Arena-Hard | 2026-04-02 | 2026-04-02 | 1 | 2 |
-| AIME | 2026-04-02 | 2026-04-02 | 1 | 4 |
-| HealthBench-Consensus | 2026-04-02 | 2026-04-02 | 1 | 1 |
-| HealthBench-Hard | 2026-04-02 | 2026-04-02 | 1 | 1 |
-| HealthBench | 2026-04-02 | 2026-04-02 | 1 | 1 |
-| OmniSpatial | 2026-04-02 | 2026-04-02 | 1 | 2 |
+```bash
+cp config/auth.yaml.example config/auth.yaml
+# Edit config/auth.yaml with your credentials
+```
+
+### 3. Environment Variables
+
+```bash
+# Anthropic API key (required)
+export ANTHROPIC_API_KEY="your-key-here"
+
+# Optional: GitHub token for higher rate limits
+export GITHUB_TOKEN="your-token-here"
+```
+
+## Execution Modes
+
+### Mode 1: `snapshot` (pipeline + snapshot, no report)
+Runs full discovery and processing pipeline, creates snapshot, skips report generation. Use for scheduled updates.
+
+### Mode 2: `report` (report only)
+Regenerates report from latest snapshot without running pipeline. Use when updating report templates.
+
+### Mode 3: `full` (default)
+Complete execution: pipeline → snapshot → report. Use for typical manual runs.
+
+## Data Storage
+
+- **Database**: SQLite database at root (gitignored)
+- **Taxonomy**: Auto-generated at root level
+  - `benchmark_taxonomy.md` - Complete reference
+  - `categories.yaml` - Category definitions
+- **Reports**: `reports/report_YYYYMMDD_HHMMSS.md`
+
+## Key Features
+
+- **Multi-source extraction**: Model cards, blogs, arXiv papers, GitHub
+- **Figure extraction**: Vision AI analyzes charts and tables in images
+- **Variant tracking**: Captures shots (0-shot, 5-shot), methods (CoT, PoT), model types (base, instruct)
+- **Temporal tracking**: 12-month rolling window with snapshot history
+- **Smart caching**: Content-hash based caching to avoid re-processing unchanged sources
+- **Taxonomy evolution**: AI-powered taxonomy that evolves as new benchmarks are discovered
+
+## Testing
+
+Ground truth data for validation:
+- See `tests/ground_truth/ground_truth.yaml`
+- Testing framework defined in SPECIFICATIONS.md Section 12
+
+## Output
+
+Generated reports include:
+1. Executive Summary
+2. Most Common Benchmarks (absolute counts)
+3. Trending Benchmarks (relative frequency)
+4. Emerging Benchmarks (first seen ≤3 months)
+5. Almost Extinct Benchmarks (last seen ≥9 months)
+6. Benchmark Categories
+7. Lab-Specific Insights
 
 ---
 
-**Report Generation Details:**
-- System: Benchmark Intelligence Agent
-- Data Source: SQLite Cache Database
-- Last Updated: 2026-04-02 16:27:23 UTC
-
-For more information, see the [project documentation](../../README.md).
+**For complete technical specifications**, see [SPECIFICATIONS.md](/SPECIFICATIONS.md)
