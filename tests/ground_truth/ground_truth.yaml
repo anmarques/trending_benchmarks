@@ -510,9 +510,6 @@ models:
     - name: IFeval
       variant: strict-prompt, instruct
       category: Instruction Following
-    - name: IFeval
-      variant: multilingual, instruct
-      category: Instruction Following
     - name: Arena-Hard
       variant: instruct
       category: Chat
@@ -522,34 +519,10 @@ models:
     - name: MTbench
       variant: instruct
       category: Chat
-    - name: AMMLU
-      variant: Arabic, instruct
-      category: Multilingual
-    - name: JMMLU
-      variant: Japanese, instruct
-      category: Multilingual
-    - name: KMMLU
-      variant: Korean, instruct
-      category: Multilingual
-    - name: IndoMMLU
-      variant: Indonesian, instruct
-      category: Multilingual
-    - name: TurkishMMLU
-      variant: Turkish, instruct
-      category: Multilingual
-    - name: okapi MMLU
-      variant: translated, instruct
-      category: Multilingual
-    - name: MGSM8K
-      variant: extended, multilingual, instruct
-      category: Multilingual
-    - name: BLEnD
-      variant: cultural nuances, instruct
-      category: Multilingual
   - url: https://arxiv.org/abs/2412.15115
     type: arxiv_paper
     status: extracted
-    notes: Qwen2.5 Technical Report - benchmarks confirmed from PDF extraction
+    notes: Qwen2.5 Technical Report - comprehensive benchmarks including multilingual and long-context evals
     benchmarks:
     - name: MMLU
       variant: paper
@@ -560,6 +533,9 @@ models:
     - name: MMLU-redux
       variant: paper
       category: General Knowledge
+    - name: MMLU-stem
+      variant: paper
+      category: Science
     - name: GPQA
       variant: paper
       category: Science
@@ -611,6 +587,9 @@ models:
     - name: IFEval
       variant: paper
       category: Instruction Following
+    - name: IFEval
+      variant: multilingual, paper
+      category: Instruction Following
     - name: Arena-Hard
       variant: paper
       category: Chat
@@ -632,6 +611,39 @@ models:
     - name: Multi-Translation
       variant: paper
       category: Multilingual
+    - name: AMMLU
+      variant: Arabic, paper
+      category: Multilingual
+    - name: JMMLU
+      variant: Japanese, paper
+      category: Multilingual
+    - name: KMMLU
+      variant: Korean, paper
+      category: Multilingual
+    - name: IndoMMLU
+      variant: Indonesian, paper
+      category: Multilingual
+    - name: TurkishMMLU
+      variant: Turkish, paper
+      category: Multilingual
+    - name: okapi MMLU
+      variant: translated, paper
+      category: Multilingual
+    - name: MGSM8K
+      variant: extended, multilingual, paper
+      category: Multilingual
+    - name: BLEnD
+      variant: cultural nuances, paper
+      category: Multilingual
+    - name: RULER
+      variant: long-context, paper
+      category: Long Context
+    - name: LV-Eval
+      variant: long-context, paper
+      category: Long Context
+    - name: LongBench-Chat
+      variant: long-context, paper
+      category: Long Context
 expected_behavior:
   consolidation:
   - benchmark_group: MMLU
