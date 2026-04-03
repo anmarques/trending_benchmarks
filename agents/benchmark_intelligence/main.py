@@ -1110,12 +1110,6 @@ For detailed documentation, see: specs/001-benchmark-intelligence/quickstart.md
 
     # Optional arguments
     parser.add_argument(
-        "-h", "--help",
-        action="help",
-        help="Show this help message and exit",
-    )
-
-    parser.add_argument(
         "-v", "--version",
         action="store_true",
         help="Show version and exit",
