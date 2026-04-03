@@ -1,86 +1,55 @@
-# Ground Truth Data - Ready for Your Verification
+# Ground Truth Data
 
-## 🎯 What You Need to Do
+## Overview
 
-I've prepared ground truth data for testing the Benchmark Intelligence System. **Your verification is needed** to ensure accuracy.
+This directory contains verified ground truth data for testing the Benchmark Intelligence System. The data has been manually extracted and validated to serve as a reference for automated testing.
 
-### Files Created:
-1. ✅ **ground_truth_draft.yaml** - Benchmark data (Llama complete, Qwen needs your input)
-2. ✅ **MANUAL_VERIFICATION_CHECKLIST.md** - Step-by-step instructions
-3. ✅ **COLLECTION_NOTES.md** - My collection process and findings
+## Files
 
----
+- **`ground_truth.yaml`**: Complete ground truth data for 2 test models
+  - `meta-llama/Llama-3.1-8B`
+  - `Qwen/Qwen2.5-72B-Instruct`
 
-## 📊 Current Status
+## Data Structure
 
-### Model 1: meta-llama/Llama-3.1-8B ✅
-- **Status:** Data collected, ready for your verification
-- **Benchmarks Found:** 29 unique benchmarks from model card
-- **What I Need:** Quick verification that I didn't miss anything
+Each test model includes:
+- **Model ID**: HuggingFace model identifier
+- **Sources**: All documents where benchmarks were found (model card, blog, arXiv paper)
+- **Benchmarks**: For each source:
+  - Benchmark name
+  - Variant (e.g., "5-shot", "0-shot CoT", "proficiency exam")
+  - Category (e.g., "General Knowledge", "Reasoning", "Code Generation")
 
-### Model 2: Qwen/Qwen2.5-72B-Instruct ⏳
-- **Status:** NEEDS YOUR INPUT
-- **Issue:** Benchmarks are in external blog (https://qwenlm.github.io/blog/qwen2.5/)
-- **What I Need:** You to visit the blog and extract benchmarks for 72B-Instruct
+**Note**: Ground truth tracks only benchmark names, variants, and categories. Scores are intentionally excluded—we're testing benchmark discovery, not score accuracy.
 
----
+## Coverage
 
-## 🚀 Quick Start
+### meta-llama/Llama-3.1-8B
+- **Model card**: 29 benchmarks (MMLU variants, GSM8K, MATH, HumanEval, etc.)
+- **Blog**: 14 benchmarks from charts (IFEval, BBH, GPQA, etc.)
+- **arXiv paper**: 25+ benchmarks from Tables 8-16 (GRE, LSAT, adversarial tests, multilingual)
 
-1. **Open the checklist:**
-   ```bash
-   cat tests/ground_truth/MANUAL_VERIFICATION_CHECKLIST.md
-   ```
+### Qwen/Qwen2.5-72B-Instruct
+- **Model card**: 8 benchmarks (MMLU, GPQA, MATH, LiveCodeBench, etc.)
+- **Blog**: 40+ benchmarks from charts (multilingual variants, long-context tests, code tasks)
+- **arXiv paper**: 15+ benchmarks (AMMLU, JMMLU, KMMLU, RULER, LongBench-Chat, etc.)
 
-2. **Verify Llama benchmarks:**
-   - Visit: https://huggingface.co/meta-llama/Llama-3.1-8B
-   - Check that my 29 benchmarks match the model card
+## Usage
 
-3. **Extract Qwen benchmarks:**
-   - Visit: https://qwenlm.github.io/blog/qwen2.5/
-   - Find 72B-Instruct results
-   - Add them to `ground_truth_draft.yaml` (line 215)
+This ground truth data is used for automated testing as defined in **SPECIFICATIONS.md Section 12**:
 
-4. **Tell me when done:**
-   - Say "Ground truth verification complete"
+1. **Extraction Accuracy Test**: Verify system discovers all benchmarks from each source
+2. **Consolidation Test**: Validate fuzzy matching and variant grouping
+3. **Classification Test**: Check category assignments
+4. **End-to-End Test**: Full pipeline validation
 
----
+## Maintenance
 
-## ⏱️ Time Estimate
-
-- **Llama verification:** 5-10 minutes (just checking my work)
-- **Qwen extraction:** 20-30 minutes (finding and recording benchmarks)
-- **Total:** ~30-45 minutes
+Ground truth data should be updated when:
+- Adding new test models
+- Test model sources are updated with new benchmarks
+- Category taxonomy changes significantly
 
 ---
 
-## 🎁 What You'll Get
-
-Once verification is complete, I will:
-- ✅ Create automated test suite
-- ✅ Run system on these 2 models
-- ✅ Compare results vs ground truth
-- ✅ Generate comprehensive test report showing:
-  - Document discovery accuracy
-  - Benchmark extraction accuracy
-  - Consolidation correctness
-  - Classification accuracy
-  - Issues and recommendations
-
----
-
-## 📝 Example of What I Need for Qwen
-
-When you visit the Qwen blog, you'll see benchmark tables. For each one, record like this:
-
-```yaml
-- name: "MMLU"
-  variant: "5-shot"
-  score: "86.1"  # Use exact number from blog
-  metric: "accuracy"
-  category: "General Knowledge"
-```
-
----
-
-**Questions?** Just ask in the chat and I'll help!
+**Reference**: See [SPECIFICATIONS.md](/SPECIFICATIONS.md) Section 12 for complete testing framework.
