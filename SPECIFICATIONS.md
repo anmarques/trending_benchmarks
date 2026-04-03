@@ -932,7 +932,7 @@ python main.py full
 
 ---
 
-### 10.1.1 Command-Line Interface
+### 10.3 Command-Line Interface
 
 **Usage**:
 ```bash
@@ -963,7 +963,7 @@ python agents/benchmark_intelligence/main.py report
 
 ---
 
-### 10.2 Execution Flow by Mode
+### 10.4 Execution Flow by Mode
 
 **`snapshot` mode flow:**
 ```
@@ -1038,7 +1038,7 @@ python agents/benchmark_intelligence/main.py report
    └── Report: "Report saved at X"
 ```
 
-### 10.2 PDF Parsing
+### 10.5 PDF Parsing
 
 **PDF parsing library**:
 - Use `pdfplumber` as primary library (better table extraction and structure handling)
