@@ -1,8 +1,8 @@
 # Benchmark Intelligence System - Technical Specifications
 
-**Version:** 1.4
-**Last Updated:** 2026-04-02
-**Status:** Final - Clarified PDF vs HTML fetching
+**Version:** 1.5
+**Last Updated:** 2026-04-03
+**Status:** Final - Added modular testing requirements and figure extraction
 
 ---
 
@@ -305,7 +305,18 @@ A **benchmark** is a standardized evaluation dataset or task with a clear name m
 - Parse markdown tables
 - Extract from prose ("evaluated on MMLU")
 - Handle multiple formats (tables, lists, inline mentions)
+- **Extract from figures and charts**: Blog posts and papers often present benchmark results in bar charts, comparison tables as images, and other visual formats
+  - For HTML/blogs: Images embedded in content
+  - For PDFs: Charts and tables rendered as figures
+  - Use vision-capable AI (Claude) to analyze images and extract benchmark names
 - Normalize names (case-insensitive, handle variants)
+
+**Figure Processing Requirements**:
+- ✅ Detect benchmark charts in blog posts (e.g., performance comparison bar charts)
+- ✅ Extract benchmark names from chart axes, legends, and labels
+- ✅ Handle tables presented as images in PDFs
+- ✅ Process multi-panel figures showing different benchmark categories
+- ✅ Validate extracted names against text mentions for consistency
 
 **Output Format**:
 ```json
@@ -318,6 +329,10 @@ A **benchmark** is a standardized evaluation dataset or task with a clear name m
     {
       "name": "GSM8K",
       "source": "technical_report"
+    },
+    {
+      "name": "HumanEval",
+      "source": "blog_chart"
     }
   ]
 }
@@ -861,7 +876,227 @@ Dashboard generation:
 
 ---
 
-## 13. Acceptance Criteria
+## 13. Testing Framework
+
+### 13.1 Testing Philosophy
+
+Testing must be **modular** and **incremental**, with each phase validating a specific component before moving to the next. Each phase produces artifacts for manual verification.
+
+### 13.2 Ground Truth Data
+
+**Location**: `/tests/ground_truth/ground_truth.yaml`
+
+**Purpose**: Known-good data for two test models to validate system accuracy
+
+**Structure**:
+```yaml
+models:
+  - id: meta-llama/Llama-3.1-8B
+    model_name: Llama-3.1-8B
+    lab: meta-llama
+    documents:
+      - url: https://huggingface.co/meta-llama/Llama-3.1-8B
+        type: model_card
+        status: verified_by_user
+        benchmarks:
+          - name: MMLU
+            variant: 5-shot, base
+            category: General Knowledge
+          - name: GSM-8K
+            variant: CoT, 8-shot, instruct
+            category: Math Reasoning
+      - url: https://ai.meta.com/blog/meta-llama-3-1/
+        type: blog_post
+        status: extracted
+        benchmarks:
+          - name: HumanEval
+            variant: 0-shot, instruct
+            category: Code Generation
+```
+
+**Contents**:
+- 2 test models (one from each of two different labs)
+- All known source URLs for each model (model cards, blogs, arXiv papers)
+- **Benchmark names only** (no scores)
+- Benchmark variants and categories for classification testing
+- Status field indicating verification level
+
+### 13.3 Test Phases
+
+#### Phase 1: Source Discovery Validation
+
+**Goal**: Confirm the system can discover all documented sources for test models
+
+**Test**: `tests/test_source_discovery.py`
+
+**Steps**:
+1. Load ground truth data
+2. For each test model:
+   - Run source discovery logic
+   - Compare discovered sources against ground truth URLs
+   - Report: Found sources, Missing sources, Extra sources
+3. Generate validation report: `tests/reports/source_discovery_validation.md`
+
+**Success Criteria**:
+- ✅ All ground truth sources are discovered (100% recall)
+- ✅ No false positive sources (precision check)
+- ✅ Correct source type classification (model_card vs blog vs arxiv_paper)
+
+**Output Artifacts**:
+- `tests/reports/source_discovery_validation.md`: Detailed comparison report
+- Console: Summary table showing found/missing sources per model
+
+---
+
+#### Phase 2: Benchmark Extraction Validation
+
+**Goal**: Confirm parsing detects all ground truth benchmarks from each source
+
+**Test**: `tests/test_benchmark_extraction.py`
+
+**Steps**:
+1. Load ground truth data
+2. For each test model:
+   - For each documented source:
+     - Fetch source content (use cached copy if available)
+     - Run extraction logic (including figure processing)
+     - Compare extracted benchmarks against ground truth
+     - Report: Precision, Recall, F1 score per source
+3. Generate validation report: `tests/reports/extraction_validation.md`
+
+**Success Criteria**:
+- ✅ Extraction recall ≥ 90% (finds at least 90% of ground truth benchmarks)
+- ✅ Extraction precision ≥ 85% (max 15% false positives)
+- ✅ Figure/chart benchmarks are detected (when present in ground truth)
+- ✅ Both text-based and visual benchmark mentions are captured
+
+**Output Artifacts**:
+- `tests/reports/extraction_validation.md`: Per-source extraction metrics
+- `tests/reports/extraction_errors.json`: List of false positives and false negatives
+- Console: Summary table with precision/recall per source type
+
+**Figure Extraction Validation**:
+- Ground truth must include benchmarks extracted from charts/figures
+- Test must validate that vision-based extraction captures these benchmarks
+- Report must distinguish between text-extracted vs figure-extracted benchmarks
+
+---
+
+#### Phase 3: Taxonomy Validation
+
+**Goal**: Generate test taxonomy for manual approval
+
+**Test**: `tests/test_taxonomy_generation.py`
+
+**Steps**:
+1. Load all extracted benchmarks from Phase 2
+2. Run classification logic on ground truth benchmarks
+3. Generate taxonomy with:
+   - Discovered categories
+   - Benchmark assignments to categories
+   - Confidence scores (if applicable)
+4. Output taxonomy for manual review: `tests/taxonomy/test_taxonomy_proposal.md`
+
+**Manual Review Required**:
+- User reviews proposed categories
+- User validates benchmark→category assignments
+- User approves or requests changes
+
+**Success Criteria**:
+- ✅ Taxonomy includes all expected categories from ground truth
+- ✅ Benchmark classifications match ground truth categories (≥85% agreement)
+- ✅ New categories are proposed with clear rationale
+- ✅ Multi-label assignments are correctly handled
+
+**Output Artifacts**:
+- `tests/taxonomy/test_taxonomy_proposal.md`: Proposed taxonomy with examples
+- `tests/taxonomy/classification_comparison.json`: Ground truth vs system classifications
+- Console: Category distribution and misclassification summary
+
+---
+
+#### Phase 4: End-to-End Report Validation
+
+**Goal**: Generate complete test report for manual approval
+
+**Test**: `tests/test_report_generation.py`
+
+**Steps**:
+1. Run full pipeline on test models:
+   - Discovery → Extraction → Consolidation → Classification
+2. Generate all 7 report sections using test data
+3. Output test report: `tests/reports/test_report.md`
+4. Validate report quality:
+   - All sections present
+   - Data sourced from test run (not hardcoded)
+   - Links functional
+   - Formatting correct
+
+**Manual Review Required**:
+- User reviews report completeness
+- User validates data accuracy
+- User checks formatting and presentation
+- User approves for production use
+
+**Success Criteria**:
+- ✅ All 7 report sections generated successfully
+- ✅ No hardcoded data (all from test run)
+- ✅ Temporal trends work (if multiple snapshots exist)
+- ✅ Links to sources are valid
+- ✅ Numbers formatted correctly (K/M suffixes)
+
+**Output Artifacts**:
+- `tests/reports/test_report.md`: Full report for test models
+- `tests/reports/report_quality_metrics.json`: Validation metrics
+- Console: Report generation summary
+
+---
+
+### 13.4 Test Data Management
+
+**Test Models**:
+- Minimum 2 models from different labs
+- At least 1 model with blog post benchmarks
+- At least 1 model with arXiv paper
+- At least 1 model with figure-based benchmark charts
+
+**Ground Truth Updates**:
+- Ground truth data is version-controlled
+- Updates require manual verification before commit
+- Each update documented in `tests/ground_truth/CHANGELOG.md`
+
+**Test Execution**:
+```bash
+# Run individual phases
+pytest tests/test_source_discovery.py -v
+pytest tests/test_benchmark_extraction.py -v
+pytest tests/test_taxonomy_generation.py -v
+pytest tests/test_report_generation.py -v
+
+# Run all tests
+pytest tests/ -v
+
+# Generate all test reports
+python tests/generate_test_reports.py
+```
+
+### 13.5 Continuous Validation
+
+**After each ground truth update**:
+1. Re-run all test phases
+2. Validate extraction accuracy maintained
+3. Review any new failure modes
+4. Update system if regressions detected
+
+**Test Coverage Goals**:
+- Source discovery: 100% of ground truth sources found
+- Benchmark extraction: ≥90% recall, ≥85% precision
+- Figure extraction: ≥80% recall for visual benchmarks
+- Classification: ≥85% agreement with ground truth categories
+
+---
+
+## 14. Acceptance Criteria
 
 **The system is considered complete when:**
 
