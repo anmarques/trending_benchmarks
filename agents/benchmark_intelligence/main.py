@@ -8,7 +8,12 @@ This module provides the main agent that coordinates the full workflow:
 4. Generate reports
 
 Usage:
-    python -m agents.benchmark_intelligence.main [OPTIONS]
+    python agents/benchmark_intelligence/main.py [MODE] [OPTIONS]
+
+Modes:
+    snapshot - Run pipeline + create snapshot (no report)
+    report   - Generate report from latest snapshot (no pipeline)
+    full     - Complete execution (pipeline + snapshot + report) [default]
 """
 
 import logging
@@ -18,6 +23,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 import yaml
+import time
 
 from .tools.discover_models import discover_trending_models
 from .tools.parse_model_card import parse_model_card
@@ -50,8 +56,15 @@ from .clients.factory import get_hf_client
 # Progress reporting symbols
 SYMBOLS = {"success": "✓", "error": "✗", "cached": "↻", "new": "⊕"}
 
+# Version information
+VERSION = "1.0.0"
 
 logger = logging.getLogger(__name__)
+
+
+class NoSnapshotsError(Exception):
+    """Exception raised when no snapshots are found in the database."""
+    pass
 
 
 class BenchmarkIntelligenceAgent:
@@ -74,15 +87,12 @@ class BenchmarkIntelligenceAgent:
 
         Args:
             config_path: Path to configuration YAML file (default: labs.yaml at project root)
-            cache_path: Path to cache database (default: benchmark_cache.db)
+            cache_path: Path to cache database (default: benchmark_intelligence.db)
             dry_run: If True, don't write to cache or files
             verbose: If True, enable verbose logging
         """
         self.dry_run = dry_run
         self.verbose = verbose
-
-        # Setup logging
-        self._setup_logging()
 
         # Load configuration
         if config_path is None:
@@ -90,19 +100,19 @@ class BenchmarkIntelligenceAgent:
         else:
             config_path = Path(config_path)
 
-        logger.info(f"Loading configuration from {config_path}")
+        logger.debug(f"Loading configuration from {config_path}")
         with open(config_path, "r") as f:
             self.config = yaml.safe_load(f)
 
         # Initialize cache manager
         if cache_path is None:
-            cache_path = "benchmark_cache.db"
+            cache_path = "benchmark_intelligence.db"
 
         if self.dry_run:
             logger.info("DRY RUN MODE: No cache or file writes will occur")
             self.cache = None
         else:
-            logger.info(f"Initializing cache at {cache_path}")
+            logger.debug(f"Initializing cache at {cache_path}")
             self.cache = CacheManager(cache_path)
 
         # Initialize clients
@@ -118,21 +128,6 @@ class BenchmarkIntelligenceAgent:
             "documents_fetched": 0,
             "errors": [],
         }
-
-    def _setup_logging(self):
-        """Configure logging based on verbosity."""
-        level = logging.DEBUG if self.verbose else logging.INFO
-
-        logging.basicConfig(
-            level=level,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S',
-        )
-
-        # Reduce noise from other libraries
-        logging.getLogger("httpx").setLevel(logging.WARNING)
-        logging.getLogger("anthropic").setLevel(logging.WARNING)
-        logging.getLogger("huggingface_hub").setLevel(logging.WARNING)
 
     def run(self, incremental: bool = True, force_reprocess: bool = False) -> Dict[str, Any]:
         """
@@ -713,7 +708,11 @@ class BenchmarkIntelligenceAgent:
             # Don't fail the entire run if taxonomy evolution fails
 
     def _create_snapshot(self) -> Optional[int]:
-        """Create a snapshot of current cache state."""
+        """
+        Create a temporal snapshot of current cache state.
+
+        T032: Update main.py to call create_temporal_snapshot
+        """
         if self.dry_run or self.cache is None:
             logger.debug("Skipping snapshot creation (dry run mode or no cache)")
             return None
@@ -730,11 +729,14 @@ class BenchmarkIntelligenceAgent:
             "run_stats": self.stats,
             "cache_stats": stats,
             "timestamp": datetime.utcnow().isoformat(),
-            "taxonomy_version": taxonomy_version,
         }
 
-        snapshot_id = self.cache.create_snapshot(summary)
-        logger.info(f"Created snapshot #{snapshot_id}")
+        # Use create_temporal_snapshot with 12-month window calculation
+        snapshot_id = self.cache.create_temporal_snapshot(
+            taxonomy_version=taxonomy_version,
+            summary=summary
+        )
+        logger.info(f"Created temporal snapshot #{snapshot_id}")
 
         return snapshot_id
 
@@ -778,31 +780,357 @@ class BenchmarkIntelligenceAgent:
             "timestamp": datetime.utcnow().isoformat(),
         }
 
+    def run_snapshot_only(self, incremental: bool = True, force_reprocess: bool = False) -> Dict[str, Any]:
+        """
+        Run pipeline and create snapshot without generating report.
 
-def main():
-    """Command-line interface for the Benchmark Intelligence Agent."""
+        Args:
+            incremental: If True, only process new/changed models
+            force_reprocess: If True, reprocess all models (ignores cache)
+
+        Returns:
+            Dictionary with run statistics and results
+        """
+        try:
+            start_time = time.time()
+            logger.info("=" * 80)
+            logger.info("[Mode: snapshot] Starting benchmark intelligence pipeline...")
+            logger.info("=" * 80)
+
+            # Step 1: Discover trending models
+            logger.info("\n[Discovery] Starting model discovery...")
+            models = self._discover_models()
+            self.stats["models_discovered"] = len(models)
+
+            # Get lab names for reporting
+            labs = self.config.get("labs", [])
+            lab_preview = ', '.join(labs[:3]) + ('...' if len(labs) > 3 else '')
+            logger.info(f"[Discovery] Found {len(models)} models from {lab_preview}")
+
+            if not models:
+                logger.warning("No models discovered. Exiting.")
+                return self._create_result(success=False, message="No models discovered")
+
+            # Apply filters and report results
+            logger.info(f"[Discovery] Applied filters: {len(models)} models passed")
+
+            # Step 2: Process each model
+            logger.info(f"\n[Processing] Processing {len(models)} models...")
+            for i, model in enumerate(models, 1):
+                try:
+                    logger.info(f"[Processing] Model {i}/{len(models)}: {model['id']}")
+
+                    # Check if we should process this model
+                    if incremental and not force_reprocess:
+                        if self._should_skip_model(model):
+                            logger.info(f"  {SYMBOLS['cached']} Cached (no changes)")
+                            self.stats["models_skipped"] += 1
+                            continue
+
+                    # Process the model
+                    self._process_model(model)
+                    self.stats["models_processed"] += 1
+
+                except Exception as e:
+                    logger.error(f"  {SYMBOLS['error']} Failed to process model {model.get('id', 'unknown')}: {e}")
+                    self.stats["models_failed"] += 1
+                    self.stats["errors"].append({
+                        "model_id": model.get("id"),
+                        "error": str(e),
+                    })
+                    # Continue with next model
+                    continue
+
+            # Step 3: Consolidate benchmarks
+            logger.info("\n[Consolidation] Consolidating benchmarks...")
+            self._consolidate_all_benchmarks()
+
+            # Step 4: Create snapshot
+            logger.info("\n[Snapshot] Creating temporal snapshot...")
+            snapshot_id = self._create_snapshot()
+
+            if snapshot_id:
+                logger.info(f"[Snapshot] {SYMBOLS['success']} Snapshot created: ID={snapshot_id}, timestamp={datetime.utcnow().isoformat()}")
+
+            # Calculate runtime
+            runtime_seconds = time.time() - start_time
+            runtime_str = self._format_runtime(runtime_seconds)
+
+            # Summary
+            logger.info("\n" + "=" * 80)
+            logger.info(f"{SYMBOLS['success']} Pipeline complete! (Runtime: {runtime_str})")
+            logger.info("=" * 80)
+
+            return self._create_result(
+                success=True,
+                snapshot_id=snapshot_id,
+            )
+
+        except Exception as e:
+            logger.error(f"{SYMBOLS['error']} Error in snapshot mode: {e}", exc_info=True)
+            return self._create_result(
+                success=False,
+                message=f"Fatal error: {e}",
+            )
+
+    def run_report_only(self) -> Dict[str, Any]:
+        """
+        Generate report from latest snapshot without running pipeline.
+
+        Returns:
+            Dictionary with run statistics and results
+
+        Raises:
+            NoSnapshotsError: If no snapshots are found in database
+        """
+        try:
+            start_time = time.time()
+            logger.info("=" * 80)
+            logger.info("[Mode: report] Generating report from latest snapshot...")
+            logger.info("=" * 80)
+
+            if self.dry_run or self.cache is None:
+                logger.error("Cannot run report mode without cache")
+                return self._create_result(success=False, message="Cache required for report mode")
+
+            # Check if snapshots exist
+            snapshots = self.cache.get_recent_snapshots(limit=1)
+            if not snapshots:
+                raise NoSnapshotsError("No snapshots found in database")
+
+            # Get latest snapshot
+            latest_snapshot = snapshots[0]
+            snapshot_id = latest_snapshot.get("id")
+            snapshot_timestamp = latest_snapshot.get("timestamp", "unknown")
+
+            logger.info(f"[Reporting] Loading snapshot ID={snapshot_id} ({snapshot_timestamp})")
+
+            # Generate report
+            logger.info("[Reporting] Generating 7 sections...")
+            report = self._generate_report()
+
+            # Calculate runtime
+            runtime_seconds = time.time() - start_time
+            runtime_str = self._format_runtime(runtime_seconds)
+
+            # Summary
+            logger.info("\n" + "=" * 80)
+            logger.info(f"{SYMBOLS['success']} Report generation complete! (Runtime: {runtime_str})")
+            logger.info("=" * 80)
+
+            return self._create_result(
+                success=True,
+                snapshot_id=snapshot_id,
+                report=report,
+            )
+
+        except NoSnapshotsError:
+            logger.error(f"\n{SYMBOLS['error']} Error: No snapshots found in database")
+            logger.error("\nPlease run in 'snapshot' or 'full' mode first:")
+            logger.error("  python agents/benchmark_intelligence/main.py snapshot")
+            raise
+        except Exception as e:
+            logger.error(f"{SYMBOLS['error']} Error in report mode: {e}", exc_info=True)
+            return self._create_result(
+                success=False,
+                message=f"Fatal error: {e}",
+            )
+
+    def run_full_pipeline(self, incremental: bool = True, force_reprocess: bool = False) -> Dict[str, Any]:
+        """
+        Run complete execution: pipeline + snapshot + report.
+
+        Args:
+            incremental: If True, only process new/changed models
+            force_reprocess: If True, reprocess all models (ignores cache)
+
+        Returns:
+            Dictionary with run statistics and results
+        """
+        try:
+            start_time = time.time()
+            logger.info("=" * 80)
+            logger.info("[Mode: full] Starting benchmark intelligence pipeline...")
+            logger.info("=" * 80)
+
+            # Step 1: Discover trending models
+            logger.info("\n[Discovery] Starting model discovery...")
+            models = self._discover_models()
+            self.stats["models_discovered"] = len(models)
+
+            # Get lab names for reporting
+            labs = self.config.get("labs", [])
+            lab_preview = ', '.join(labs[:3]) + ('...' if len(labs) > 3 else '')
+            logger.info(f"[Discovery] Found {len(models)} models from {lab_preview}")
+
+            if not models:
+                logger.warning("No models discovered. Exiting.")
+                return self._create_result(success=False, message="No models discovered")
+
+            # Apply filters and report results
+            logger.info(f"[Discovery] Applied filters: {len(models)} models passed")
+
+            # Step 2: Process each model
+            logger.info(f"\n[Processing] Processing {len(models)} models...")
+            for i, model in enumerate(models, 1):
+                try:
+                    logger.info(f"[Processing] Model {i}/{len(models)}: {model['id']}")
+
+                    # Check if we should process this model
+                    if incremental and not force_reprocess:
+                        if self._should_skip_model(model):
+                            logger.info(f"  {SYMBOLS['cached']} Cached (no changes)")
+                            self.stats["models_skipped"] += 1
+                            continue
+
+                    # Process the model
+                    self._process_model(model)
+                    self.stats["models_processed"] += 1
+
+                except Exception as e:
+                    logger.error(f"  {SYMBOLS['error']} Failed to process model {model.get('id', 'unknown')}: {e}")
+                    self.stats["models_failed"] += 1
+                    self.stats["errors"].append({
+                        "model_id": model.get("id"),
+                        "error": str(e),
+                    })
+                    # Continue with next model
+                    continue
+
+            # Step 3: Consolidate benchmarks
+            logger.info("\n[Consolidation] Consolidating benchmarks...")
+            self._consolidate_all_benchmarks()
+
+            # Step 4: Create snapshot
+            logger.info("\n[Snapshot] Creating temporal snapshot...")
+            snapshot_id = self._create_snapshot()
+
+            if snapshot_id:
+                logger.info(f"[Snapshot] {SYMBOLS['success']} Snapshot created: ID={snapshot_id}, timestamp={datetime.utcnow().isoformat()}")
+
+            # Step 5: Generate report
+            logger.info("\n[Reporting] Generating 7 sections...")
+            report = self._generate_report()
+
+            # Calculate runtime
+            runtime_seconds = time.time() - start_time
+            runtime_str = self._format_runtime(runtime_seconds)
+
+            # Summary
+            logger.info("\n" + "=" * 80)
+            logger.info(f"{SYMBOLS['success']} Pipeline complete! (Runtime: {runtime_str})")
+            logger.info("=" * 80)
+
+            return self._create_result(
+                success=True,
+                snapshot_id=snapshot_id,
+                report=report,
+            )
+
+        except Exception as e:
+            logger.error(f"{SYMBOLS['error']} Error in full pipeline: {e}", exc_info=True)
+            return self._create_result(
+                success=False,
+                message=f"Fatal error: {e}",
+            )
+
+    def _format_runtime(self, seconds: float) -> str:
+        """
+        Format runtime in human-readable format.
+
+        Args:
+            seconds: Runtime in seconds
+
+        Returns:
+            Formatted string (e.g., "1h 23m 15s")
+        """
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+
+        parts = []
+        if hours > 0:
+            parts.append(f"{hours}h")
+        if minutes > 0:
+            parts.append(f"{minutes}m")
+        if secs > 0 or not parts:
+            parts.append(f"{secs}s")
+
+        return " ".join(parts)
+
+
+def parse_args():
+    """
+    Parse command-line arguments.
+
+    Returns:
+        Parsed arguments namespace
+    """
     parser = argparse.ArgumentParser(
-        description="Benchmark Intelligence Agent - Track and analyze AI model benchmarks",
+        description="""Benchmark Intelligence System
+
+Track and analyze benchmark evaluation trends across LLMs, VLMs,
+and Audio-to-Text models from major AI research labs.""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Run full workflow (incremental)
-  python -m agents.benchmark_intelligence.main
+        epilog="""EXAMPLES:
+    # Full execution (default)
+    python agents/benchmark_intelligence/main.py
+    python agents/benchmark_intelligence/main.py full
 
-  # Force reprocess all models
-  python -m agents.benchmark_intelligence.main --force
+    # Update database only (no report)
+    python agents/benchmark_intelligence/main.py snapshot
 
-  # Dry run (don't write to cache/files)
-  python -m agents.benchmark_intelligence.main --dry-run
+    # Regenerate report from cached data
+    python agents/benchmark_intelligence/main.py report
 
-  # Verbose output
-  python -m agents.benchmark_intelligence.main --verbose
+    # Verbose debugging
+    python agents/benchmark_intelligence/main.py full --verbose
 
-  # Custom config and cache paths
-  python -m agents.benchmark_intelligence.main \\
-    --config /path/to/config.yaml \\
-    --cache /path/to/cache.db
+    # Quiet mode for cron jobs
+    python agents/benchmark_intelligence/main.py snapshot --quiet
+
+EXIT CODES:
+    0    Success
+    1    Error (configuration, API, database)
+    2    No snapshots found (run snapshot or full mode first)
+
+For detailed documentation, see: specs/001-benchmark-intelligence/quickstart.md
         """,
+        usage="python agents/benchmark_intelligence/main.py [MODE] [OPTIONS]",
+    )
+
+    # Positional argument for mode
+    parser.add_argument(
+        "mode",
+        nargs="?",
+        default="full",
+        choices=["snapshot", "report", "full"],
+        help="Execution mode: snapshot (pipeline only), report (report only), full (both) [default: full]",
+    )
+
+    # Optional arguments
+    parser.add_argument(
+        "-h", "--help",
+        action="help",
+        help="Show this help message and exit",
+    )
+
+    parser.add_argument(
+        "-v", "--version",
+        action="store_true",
+        help="Show version and exit",
+    )
+
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable debug logging",
+    )
+
+    parser.add_argument(
+        "-q", "--quiet",
+        action="store_true",
+        help="Suppress progress output (errors only)",
     )
 
     parser.add_argument(
@@ -814,19 +1142,13 @@ Examples:
     parser.add_argument(
         "--cache",
         type=str,
-        help="Path to cache database (default: benchmark_cache.db)",
+        help="Path to cache database (default: benchmark_intelligence.db)",
     )
 
     parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Dry run mode - don't write to cache or files",
-    )
-
-    parser.add_argument(
-        "--verbose", "-v",
-        action="store_true",
-        help="Enable verbose logging (DEBUG level)",
     )
 
     parser.add_argument(
@@ -841,27 +1163,105 @@ Examples:
         help="Disable incremental mode (process all models)",
     )
 
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    # Create and run agent
-    agent = BenchmarkIntelligenceAgent(
-        config_path=args.config,
-        cache_path=args.cache,
-        dry_run=args.dry_run,
-        verbose=args.verbose,
-    )
 
-    result = agent.run(
-        incremental=not args.no_incremental,
-        force_reprocess=args.force,
-    )
+def print_version():
+    """Print version information and exit."""
+    print(f"Benchmark Intelligence System v{VERSION}")
+    print(f"Python {sys.version.split()[0]}")
+    print("SQLite 3.x")
+    sys.exit(0)
 
-    # Exit with appropriate code
-    if result["success"]:
-        logger.info("Agent run completed successfully")
-        sys.exit(0)
+
+def setup_logging(verbose: bool = False, quiet: bool = False):
+    """
+    Setup logging based on verbosity flags.
+
+    Args:
+        verbose: Enable debug logging
+        quiet: Only show errors
+    """
+    if quiet:
+        level = logging.ERROR
+    elif verbose:
+        level = logging.DEBUG
     else:
-        logger.error(f"Agent run failed: {result.get('message', 'Unknown error')}")
+        level = logging.INFO
+
+    logging.basicConfig(
+        level=level,
+        format='%(message)s' if not verbose else '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+    )
+
+    # Reduce noise from other libraries
+    if not verbose:
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+        logging.getLogger("anthropic").setLevel(logging.WARNING)
+        logging.getLogger("huggingface_hub").setLevel(logging.WARNING)
+
+
+def main():
+    """
+    Main entry point for CLI.
+
+    Exit codes:
+        0: Success
+        1: Error (configuration, API, database)
+        2: No snapshots found (report mode only)
+    """
+    # Parse arguments
+    args = parse_args()
+
+    # Handle version flag
+    if args.version:
+        print_version()
+
+    # Setup logging
+    setup_logging(verbose=args.verbose, quiet=args.quiet)
+
+    try:
+        # Create agent
+        agent = BenchmarkIntelligenceAgent(
+            config_path=args.config,
+            cache_path=args.cache or "benchmark_intelligence.db",
+            dry_run=args.dry_run,
+            verbose=args.verbose,
+        )
+
+        # Route to appropriate mode
+        if args.mode == "snapshot":
+            result = agent.run_snapshot_only(
+                incremental=not args.no_incremental,
+                force_reprocess=args.force,
+            )
+        elif args.mode == "report":
+            result = agent.run_report_only()
+        elif args.mode == "full":
+            result = agent.run_full_pipeline(
+                incremental=not args.no_incremental,
+                force_reprocess=args.force,
+            )
+        else:
+            logger.error(f"Invalid mode: {args.mode}")
+            sys.exit(1)
+
+        # Exit with appropriate code
+        if result["success"]:
+            sys.exit(0)
+        else:
+            logger.error(f"{SYMBOLS['error']} Error: {result.get('message', 'Unknown error')}")
+            sys.exit(1)
+
+    except NoSnapshotsError:
+        # Exit code 2 for no snapshots found
+        sys.exit(2)
+    except KeyboardInterrupt:
+        logger.info("\n\nInterrupted by user")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"{SYMBOLS['error']} Fatal error: {e}", exc_info=args.verbose)
         sys.exit(1)
 
 

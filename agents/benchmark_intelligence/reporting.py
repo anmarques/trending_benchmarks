@@ -74,6 +74,8 @@ class ReportGenerator:
 
         Returns:
             Markdown formatted report string
+
+        T033: Integrate temporal snapshot data into report generation
         """
         logger.info("Executing report generation...")
 
@@ -98,17 +100,23 @@ class ReportGenerator:
         # Most Common Benchmarks
         report_sections.append(self._generate_most_common_benchmarks(benchmark_trends))
 
-        # Emerging Benchmarks
-        report_sections.append(self._generate_emerging_benchmarks(all_benchmarks))
+        # Temporal Trends (T028 - updated with snapshot-based tracking)
+        report_sections.append(self._generate_temporal_trends(benchmark_trends))
+
+        # Emerging Benchmarks (T029 - from temporal snapshot)
+        report_sections.append(self._generate_emerging_benchmarks_section())
+
+        # Almost Extinct Benchmarks (T030 - from temporal snapshot)
+        report_sections.append(self._generate_almost_extinct_section())
+
+        # Historical Snapshot Comparison (T031)
+        report_sections.append(self._generate_historical_comparison())
 
         # Benchmark Categories
         report_sections.append(self._generate_category_distribution(all_benchmarks))
 
         # Lab-Specific Insights
         report_sections.append(self._generate_lab_insights(all_models))
-
-        # Temporal Trends
-        report_sections.append(self._generate_temporal_trends(benchmark_trends))
 
         # Footer
         report_sections.append(self._generate_footer())
@@ -151,13 +159,41 @@ class ReportGenerator:
         else:
             time_period = "N/A"
 
+        # Calculate variant statistics
+        all_benchmarks = self.cache.get_all_benchmarks()
+        variant_count = 0
+        for model in all_models:
+            benchmarks = self.cache.get_model_benchmarks(model.get("id"))
+            for bench in benchmarks:
+                context = bench.get("context", {})
+                # Count variants based on context (shots, subset, etc.)
+                if context:
+                    variant_count += 1
+
+        # Calculate benchmark status distribution
+        status_distribution = {"emerging": 0, "active": 0, "almost_extinct": 0}
+        three_months_ago = (datetime.utcnow() - timedelta(days=90)).isoformat()
+        nine_months_ago = (datetime.utcnow() - timedelta(days=270)).isoformat()
+
+        for bench in all_benchmarks:
+            first_seen = bench.get("first_seen", "")
+            last_seen = bench.get("last_seen", "")
+            status = self.cache.determine_benchmark_status(first_seen, last_seen)
+            status_distribution[status] = status_distribution.get(status, 0) + 1
+
         return f"""## Executive Summary
 
 - **Total Models Tracked:** {total_models}
 - **Total Unique Benchmarks:** {total_benchmarks}
+- **Benchmark Variants:** {variant_count}
 - **Labs/Organizations:** {total_labs}
 - **Benchmark Measurements:** {total_links}
 - **Time Period:** {time_period}
+
+**Benchmark Status Distribution:**
+- **Emerging** (first seen ≤ 3 months): {status_distribution['emerging']}
+- **Active** (stable activity): {status_distribution['active']}
+- **Almost Extinct** (not seen ≥ 9 months): {status_distribution['almost_extinct']}
 
 The Benchmark Intelligence system continuously tracks trending AI models from leading labs
 and organizations, extracting and analyzing benchmark results to provide insights into
@@ -233,8 +269,8 @@ No benchmark data available."""
         # All-time top benchmarks
         lines.append("### All-Time Top 20")
         lines.append("")
-        lines.append("| Benchmark | Models | Categories | First Seen |")
-        lines.append("|-----------|--------|------------|------------|")
+        lines.append("| Benchmark | Models | Categories | Status | First Seen |")
+        lines.append("|-----------|--------|------------|--------|------------|")
 
         for bench in all_time:
             name = bench.get("canonical_name", "Unknown")
@@ -242,17 +278,25 @@ No benchmark data available."""
             categories = ", ".join(bench.get("categories", [])[:3])
             if not categories:
                 categories = "Uncategorized"
-            first_seen = bench.get("first_seen", "")[:10]
+            first_seen = bench.get("first_seen", "")
+            last_seen = bench.get("last_recorded", bench.get("last_seen", ""))
 
-            lines.append(f"| {name} | {models} | {categories} | {first_seen} |")
+            # Determine status
+            status = self.cache.determine_benchmark_status(first_seen, last_seen)
+            status_icon = {"emerging": "🆕", "active": "✅", "almost_extinct": "⚠️"}.get(status, "")
+            status_label = f"{status_icon} {status.replace('_', ' ').title()}"
+
+            first_seen_date = first_seen[:10]
+
+            lines.append(f"| {name} | {models} | {categories} | {status_label} | {first_seen_date} |")
 
         # Recent benchmarks
         if recent:
             lines.append("")
             lines.append("### This Month's Top 20")
             lines.append("")
-            lines.append("| Benchmark | Models | Categories | Last Recorded |")
-            lines.append("|-----------|--------|------------|---------------|")
+            lines.append("| Benchmark | Models | Categories | Status | Last Recorded |")
+            lines.append("|-----------|--------|------------|--------|---------------|")
 
             for bench in recent:
                 name = bench.get("canonical_name", "Unknown")
@@ -260,9 +304,17 @@ No benchmark data available."""
                 categories = ", ".join(bench.get("categories", [])[:3])
                 if not categories:
                     categories = "Uncategorized"
-                last_recorded = bench.get("last_recorded", "")[:10]
+                first_seen = bench.get("first_seen", "")
+                last_recorded = bench.get("last_recorded", "")
 
-                lines.append(f"| {name} | {models} | {categories} | {last_recorded} |")
+                # Determine status
+                status = self.cache.determine_benchmark_status(first_seen, last_recorded)
+                status_icon = {"emerging": "🆕", "active": "✅", "almost_extinct": "⚠️"}.get(status, "")
+                status_label = f"{status_icon} {status.replace('_', ' ').title()}"
+
+                last_recorded_date = last_recorded[:10]
+
+                lines.append(f"| {name} | {models} | {categories} | {status_label} | {last_recorded_date} |")
 
         return "\n".join(lines)
 
@@ -331,6 +383,18 @@ No category data available."""
         lines = ["## Benchmark Categories", ""]
         lines.append("Distribution of benchmarks across categories:")
         lines.append("")
+
+        # Get taxonomy version info from latest snapshot
+        recent_snapshots = self.cache.get_recent_snapshots(limit=1)
+        taxonomy_info = ""
+        if recent_snapshots:
+            snapshot = recent_snapshots[0]
+            taxonomy_version = snapshot.get("taxonomy_version")
+            if taxonomy_version:
+                taxonomy_info = f"\n**Taxonomy Version:** {taxonomy_version}"
+                lines.append(f"_Current taxonomy version: {taxonomy_version}_")
+                lines.append("")
+
         lines.append("| Category | Count | Percentage |")
         lines.append("|----------|-------|------------|")
 
@@ -339,6 +403,35 @@ No category data available."""
         for category, count in top_categories:
             percentage = (count / total * 100) if total > 0 else 0
             lines.append(f"| {category} | {count} | {percentage:.1f}% |")
+
+        # Add taxonomy change notes
+        lines.append("")
+        lines.append("### Taxonomy Evolution Notes")
+        lines.append("")
+        lines.append("The benchmark taxonomy is automatically evolved and refined over time as new benchmarks are discovered.")
+        lines.append("Categories are generated based on benchmark names, descriptions, and usage patterns across models.")
+        lines.append("")
+        lines.append("**Key Features:**")
+        lines.append("- **Automatic Evolution**: New categories emerge as new benchmarks are discovered")
+        lines.append("- **Versioned History**: All taxonomy changes are archived for historical tracking")
+        lines.append("- **Multi-Label Support**: Benchmarks can belong to multiple categories")
+        lines.append("- **Manual Overrides**: Categories can be manually refined via `categories.yaml`")
+
+        # Check if there are multiple snapshots to show taxonomy changes
+        all_snapshots = self.cache.get_recent_snapshots(limit=5)
+        if len(all_snapshots) > 1:
+            lines.append("")
+            lines.append("**Recent Taxonomy Updates:**")
+            lines.append("")
+            lines.append("| Snapshot Date | Taxonomy Version | Notes |")
+            lines.append("|---------------|------------------|-------|")
+            for snap in all_snapshots:
+                snap_date = snap.get("timestamp", "")[:10]
+                tax_ver = snap.get("taxonomy_version", "N/A")
+                # Extract summary if available
+                summary = snap.get("summary", {})
+                notes = summary.get("taxonomy_notes", "Standard taxonomy")
+                lines.append(f"| {snap_date} | {tax_ver} | {notes} |")
 
         # Add pie chart data (for visualization)
         lines.append("")
@@ -410,73 +503,292 @@ No lab data available."""
         self,
         benchmark_trends: List[Dict[str, Any]]
     ) -> str:
-        """Generate temporal trends section."""
-        if not benchmark_trends:
-            return """## Temporal Trends
+        """
+        Generate temporal trends section with snapshot-based tracking.
 
-No trend data available."""
-
-        # Calculate growth metrics
-        # This is simplified - in production would have more sophisticated analysis
-
+        T028: Temporal Trends Section
+        """
         lines = ["## Temporal Trends", ""]
-        lines.append("### Benchmark Popularity Over Time (Last 12 Months)")
-        lines.append("")
-        lines.append("Tracking how benchmark usage evolves over the rolling 12-month window.")
-        lines.append("")
 
-        # Filter to only include benchmarks with activity in the last 12 months
-        twelve_months_ago = (datetime.utcnow() - timedelta(days=365)).isoformat()
-        active_benchmarks = [
-            b for b in benchmark_trends
-            if b.get("total_models", 0) > 0 and b.get("last_recorded", "") >= twelve_months_ago
-        ]
+        # Get latest snapshot
+        snapshots = self.cache.get_recent_snapshots(limit=1)
+        if not snapshots:
+            lines.append("No temporal snapshot data available yet.")
+            lines.append("")
+            lines.append("_Run the pipeline in snapshot or full mode to generate temporal data._")
+            return "\n".join(lines)
 
-        if active_benchmarks:
-            # Sort by last_recorded
-            active_benchmarks.sort(
-                key=lambda b: b.get("last_recorded", ""),
-                reverse=True
-            )
+        latest_snapshot = snapshots[0]
+        snapshot_id = latest_snapshot['id']
+        window_start = latest_snapshot['window_start'][:10]
+        window_end = latest_snapshot['window_end'][:10]
 
-            lines.append("| Benchmark | First Recorded | Last Recorded | Active Days | Total Models |")
-            lines.append("|-----------|----------------|---------------|-------------|--------------|")
-
-            for bench in active_benchmarks[:15]:
-                name = bench.get("canonical_name", "Unknown")
-                first = bench.get("first_recorded", "N/A")[:10]
-                last = bench.get("last_recorded", "N/A")[:10]
-                active_days = bench.get("active_days", 0)
-                total_models = bench.get("total_models", 0)
-
-                lines.append(f"| {name} | {first} | {last} | {active_days} | {total_models} |")
-        else:
-            lines.append("No benchmark activity in the last 12 months.")
-
-        # Add Deprecated Benchmarks subsection
-        lines.append("")
-        lines.append("### Deprecated Benchmarks")
-        lines.append("")
-        lines.append("Benchmarks not seen in the last 6 months (potentially deprecated):")
+        lines.append(f"**Rolling Window:** {window_start} to {window_end} (12 months)")
         lines.append("")
 
-        # Get deprecated benchmarks
-        deprecated = self.cache.get_deprecated_benchmarks(months=6)
+        # Get benchmark mentions for this snapshot
+        mentions = self.cache.get_benchmark_mentions_for_snapshot(snapshot_id)
 
-        if deprecated:
-            lines.append("| Benchmark | Categories | Last Seen |")
-            lines.append("|-----------|------------|-----------|")
+        if not mentions:
+            lines.append("No benchmark mentions in current snapshot.")
+            return "\n".join(lines)
 
-            for bench in deprecated:
-                name = bench.get("canonical_name", "Unknown")
-                categories = ", ".join(bench.get("categories", [])[:3])
-                if not categories:
-                    categories = "Uncategorized"
-                last_seen = bench.get("last_seen", "N/A")[:10]
+        # Sort by relative frequency
+        mentions.sort(key=lambda m: m['relative_frequency'], reverse=True)
 
-                lines.append(f"| {name} | {categories} | {last_seen} |")
-        else:
-            lines.append("No deprecated benchmarks detected. All benchmarks have been mentioned in the last 6 months.")
+        lines.append("### Top Benchmarks by Frequency")
+        lines.append("")
+        lines.append("| Benchmark | Mentions | Frequency | Status | Categories |")
+        lines.append("|-----------|----------|-----------|--------|------------|")
+
+        for mention in mentions[:20]:
+            name = mention.get('benchmark_name', 'Unknown')
+            abs_mentions = mention.get('absolute_mentions', 0)
+            rel_freq = mention.get('relative_frequency', 0.0)
+            status = mention.get('status', 'active')
+            categories = ", ".join(mention.get('categories', [])[:2])
+            if not categories:
+                categories = "Uncategorized"
+
+            # Format frequency as percentage
+            freq_pct = f"{rel_freq * 100:.1f}%"
+
+            lines.append(f"| {name} | {abs_mentions} | {freq_pct} | {status} | {categories} |")
+
+        return "\n".join(lines)
+
+    def _generate_emerging_benchmarks_section(self) -> str:
+        """
+        Generate Emerging Benchmarks section from temporal snapshot.
+
+        Shows benchmarks first seen ≤ 3 months ago.
+
+        T029: Emerging Benchmarks Section
+        """
+        lines = ["## Emerging Benchmarks", ""]
+
+        # Get latest snapshot
+        snapshots = self.cache.get_recent_snapshots(limit=1)
+        if not snapshots:
+            lines.append("No temporal snapshot data available yet.")
+            return "\n".join(lines)
+
+        latest_snapshot = snapshots[0]
+        snapshot_id = latest_snapshot['id']
+
+        # Get benchmark mentions with "emerging" status
+        mentions = self.cache.get_benchmark_mentions_for_snapshot(snapshot_id)
+        emerging = [m for m in mentions if m.get('status') == 'emerging']
+
+        if not emerging:
+            lines.append("No emerging benchmarks detected in the current snapshot.")
+            lines.append("")
+            lines.append("_Emerging benchmarks are those first seen within the last 3 months._")
+            return "\n".join(lines)
+
+        # Sort by first_seen (most recent first)
+        emerging.sort(key=lambda m: m.get('first_seen', ''), reverse=True)
+
+        lines.append(f"Discovered **{len(emerging)}** new benchmarks in the last 3 months.")
+        lines.append("")
+        lines.append("| Benchmark | First Seen | Mentions | Frequency | Categories |")
+        lines.append("|-----------|------------|----------|-----------|------------|")
+
+        for bench in emerging:
+            name = bench.get('benchmark_name', 'Unknown')
+            first_seen = bench.get('first_seen', '')[:10]
+            mentions = bench.get('absolute_mentions', 0)
+            rel_freq = bench.get('relative_frequency', 0.0)
+            categories = ", ".join(bench.get('categories', [])[:2])
+            if not categories:
+                categories = "Uncategorized"
+
+            freq_pct = f"{rel_freq * 100:.1f}%"
+
+            lines.append(f"| {name} | {first_seen} | {mentions} | {freq_pct} | {categories} |")
+
+        return "\n".join(lines)
+
+    def _generate_almost_extinct_section(self) -> str:
+        """
+        Generate Almost Extinct Benchmarks section from temporal snapshot.
+
+        Shows benchmarks last seen ≥ 9 months ago.
+
+        T030: Almost Extinct Benchmarks Section
+        """
+        lines = ["## Almost Extinct Benchmarks", ""]
+
+        # Get latest snapshot
+        snapshots = self.cache.get_recent_snapshots(limit=1)
+        if not snapshots:
+            lines.append("No temporal snapshot data available yet.")
+            return "\n".join(lines)
+
+        latest_snapshot = snapshots[0]
+        snapshot_id = latest_snapshot['id']
+
+        # Get benchmark mentions with "almost_extinct" status
+        mentions = self.cache.get_benchmark_mentions_for_snapshot(snapshot_id)
+        almost_extinct = [m for m in mentions if m.get('status') == 'almost_extinct']
+
+        if not almost_extinct:
+            lines.append("No almost-extinct benchmarks detected in the current snapshot.")
+            lines.append("")
+            lines.append("_Almost-extinct benchmarks are those last seen ≥ 9 months ago._")
+            return "\n".join(lines)
+
+        # Sort by last_seen (oldest first)
+        almost_extinct.sort(key=lambda m: m.get('last_seen', ''))
+
+        lines.append(f"Identified **{len(almost_extinct)}** benchmarks nearing extinction.")
+        lines.append("")
+        lines.append("| Benchmark | Last Seen | Mentions | Categories |")
+        lines.append("|-----------|-----------|----------|------------|")
+
+        for bench in almost_extinct:
+            name = bench.get('benchmark_name', 'Unknown')
+            last_seen = bench.get('last_seen', '')[:10]
+            mentions = bench.get('absolute_mentions', 0)
+            categories = ", ".join(bench.get('categories', [])[:2])
+            if not categories:
+                categories = "Uncategorized"
+
+            lines.append(f"| {name} | {last_seen} | {mentions} | {categories} |")
+
+        return "\n".join(lines)
+
+    def _generate_historical_comparison(self) -> str:
+        """
+        Generate Historical Snapshot Comparison section.
+
+        Compares current snapshot with previous snapshot to show trends.
+
+        T031: Historical Snapshot Comparison
+        """
+        lines = ["## Historical Snapshot Comparison", ""]
+
+        # Get last 2 snapshots
+        snapshots = self.cache.get_recent_snapshots(limit=2)
+        if len(snapshots) < 2:
+            lines.append("Not enough snapshots for historical comparison.")
+            lines.append("")
+            lines.append("_At least 2 snapshots are required. Run the pipeline multiple times._")
+            return "\n".join(lines)
+
+        current_snapshot = snapshots[0]
+        previous_snapshot = snapshots[1]
+
+        current_id = current_snapshot['id']
+        previous_id = previous_snapshot['id']
+
+        current_date = current_snapshot['timestamp'][:10]
+        previous_date = previous_snapshot['timestamp'][:10]
+
+        lines.append(f"**Current Snapshot:** {current_date}")
+        lines.append(f"**Previous Snapshot:** {previous_date}")
+        lines.append("")
+
+        # Get mentions for both snapshots
+        current_mentions = self.cache.get_benchmark_mentions_for_snapshot(current_id)
+        previous_mentions = self.cache.get_benchmark_mentions_for_snapshot(previous_id)
+
+        # Create lookup dictionaries
+        current_dict = {m['benchmark_id']: m for m in current_mentions}
+        previous_dict = {m['benchmark_id']: m for m in previous_mentions}
+
+        # Calculate changes
+        changes = []
+        all_benchmark_ids = set(current_dict.keys()) | set(previous_dict.keys())
+
+        for benchmark_id in all_benchmark_ids:
+            current = current_dict.get(benchmark_id)
+            previous = previous_dict.get(benchmark_id)
+
+            if current and previous:
+                # Benchmark in both snapshots
+                freq_change = current['relative_frequency'] - previous['relative_frequency']
+                mention_change = current['absolute_mentions'] - previous['absolute_mentions']
+                changes.append({
+                    'benchmark_name': current['benchmark_name'],
+                    'status': 'changed',
+                    'current_freq': current['relative_frequency'],
+                    'previous_freq': previous['relative_frequency'],
+                    'freq_change': freq_change,
+                    'mention_change': mention_change,
+                    'categories': current.get('categories', [])
+                })
+            elif current:
+                # New benchmark
+                changes.append({
+                    'benchmark_name': current['benchmark_name'],
+                    'status': 'new',
+                    'current_freq': current['relative_frequency'],
+                    'previous_freq': 0.0,
+                    'freq_change': current['relative_frequency'],
+                    'mention_change': current['absolute_mentions'],
+                    'categories': current.get('categories', [])
+                })
+            else:
+                # Disappeared benchmark
+                changes.append({
+                    'benchmark_name': previous['benchmark_name'],
+                    'status': 'disappeared',
+                    'current_freq': 0.0,
+                    'previous_freq': previous['relative_frequency'],
+                    'freq_change': -previous['relative_frequency'],
+                    'mention_change': -previous['absolute_mentions'],
+                    'categories': previous.get('categories', [])
+                })
+
+        # Sort by absolute frequency change
+        changes.sort(key=lambda c: abs(c['freq_change']), reverse=True)
+
+        # Show top gainers
+        gainers = [c for c in changes if c['freq_change'] > 0][:10]
+        if gainers:
+            lines.append("### Top Gainers")
+            lines.append("")
+            lines.append("| Benchmark | Previous | Current | Change |")
+            lines.append("|-----------|----------|---------|--------|")
+
+            for change in gainers:
+                name = change['benchmark_name']
+                prev = f"{change['previous_freq'] * 100:.1f}%"
+                curr = f"{change['current_freq'] * 100:.1f}%"
+                delta = f"+{change['freq_change'] * 100:.1f}%"
+
+                lines.append(f"| {name} | {prev} | {curr} | {delta} |")
+
+            lines.append("")
+
+        # Show top decliners
+        decliners = [c for c in changes if c['freq_change'] < 0][:10]
+        if decliners:
+            lines.append("### Top Decliners")
+            lines.append("")
+            lines.append("| Benchmark | Previous | Current | Change |")
+            lines.append("|-----------|----------|---------|--------|")
+
+            for change in decliners:
+                name = change['benchmark_name']
+                prev = f"{change['previous_freq'] * 100:.1f}%"
+                curr = f"{change['current_freq'] * 100:.1f}%"
+                delta = f"{change['freq_change'] * 100:.1f}%"
+
+                lines.append(f"| {name} | {prev} | {curr} | {delta} |")
+
+            lines.append("")
+
+        # Summary stats
+        new_count = len([c for c in changes if c['status'] == 'new'])
+        disappeared_count = len([c for c in changes if c['status'] == 'disappeared'])
+
+        lines.append("### Summary")
+        lines.append("")
+        lines.append(f"- **New benchmarks:** {new_count}")
+        lines.append(f"- **Disappeared benchmarks:** {disappeared_count}")
+        lines.append(f"- **Model count change:** {current_snapshot['model_count']} vs {previous_snapshot['model_count']}")
 
         return "\n".join(lines)
 

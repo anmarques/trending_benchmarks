@@ -64,6 +64,71 @@ python -m agents.benchmark_intelligence.main
 
 ---
 
+## 🎮 CLI Modes
+
+The system supports three execution modes for different workflows:
+
+```bash
+# Mode 1: Full Pipeline (default) - Discovery + Snapshot + Report
+python -m agents.benchmark_intelligence.main full
+python -m agents.benchmark_intelligence.main  # full is default
+
+# Mode 2: Snapshot Only - Update database without regenerating report
+python -m agents.benchmark_intelligence.main snapshot
+
+# Mode 3: Report Only - Regenerate report from latest snapshot
+python -m agents.benchmark_intelligence.main report
+```
+
+### CLI Options
+
+```bash
+# Verbose debugging
+python -m agents.benchmark_intelligence.main full --verbose
+
+# Quiet mode (errors only, for cron jobs)
+python -m agents.benchmark_intelligence.main snapshot --quiet
+
+# Force reprocess all models (ignore cache)
+python -m agents.benchmark_intelligence.main full --force
+
+# Dry run (no writes)
+python -m agents.benchmark_intelligence.main full --dry-run
+
+# Show version
+python -m agents.benchmark_intelligence.main --version
+
+# Custom config
+python -m agents.benchmark_intelligence.main --config my_labs.yaml
+```
+
+### Exit Codes
+
+- `0` - Success
+- `1` - Error (configuration, API, database)
+- `2` - No snapshots found (report mode requires prior snapshot)
+
+### Usage Examples
+
+**Monthly scheduled update:**
+```bash
+# Cron: First Sunday of each month at 2 AM
+0 2 * * 0 cd /path/to/trending_benchmarks && python -m agents.benchmark_intelligence.main snapshot --quiet
+```
+
+**Quick report refresh after config changes:**
+```bash
+# Update categories.yaml, then regenerate report
+python -m agents.benchmark_intelligence.main report
+```
+
+**Testing configuration changes:**
+```bash
+python -m agents.benchmark_intelligence.main full --dry-run --verbose
+```
+
+---
+
 ## 📚 Documentation & Configuration
 
 ### Core Configuration Files

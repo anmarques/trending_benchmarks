@@ -1,0 +1,174 @@
+# Benchmark Category Definitions
+# Sourced from ground truth data extraction
+# Last Updated: 2026-04-03
+#
+# This file defines the initial taxonomy categories for benchmark classification.
+# Categories are extracted from the ground truth dataset and represent the observed
+# categorization patterns in model cards and technical documents.
+
+categories:
+  - name: General Knowledge
+    description: Benchmarks evaluating factual knowledge, world understanding, and general question answering across diverse topics
+    examples:
+      - MMLU
+      - MMLU-Pro
+      - MMLU-redux
+      - MMLU-stem
+      - AGIEval
+      - ARC-Challenge
+      - ARC-C
+      - TriviaQA-Wiki
+      - GRE
+      - SAT
+      - AP
+      - GMAT
+
+  - name: Reasoning
+    description: Benchmarks evaluating logical reasoning, commonsense understanding, and analytical thinking
+    examples:
+      - CommonSenseQA
+      - Winogrande
+      - BIG-Bench Hard
+      - BBH
+      - GPQA
+      - PiQA
+      - SiQA
+      - OpenBookQA
+      - WorldSense
+      - PAWS
+      - HellaSwag
+      - LSAT
+
+  - name: Math Reasoning
+    description: Benchmarks evaluating mathematical problem solving, quantitative reasoning, and numerical understanding
+    examples:
+      - GSM-8K
+      - GSM8K
+      - MATH
+      - AIME
+      - GSM-Plus
+      - many-shot GSM8K
+      - MGSM
+      - TheoremQA
+      - Theoremqa
+
+  - name: Code Generation
+    description: Benchmarks evaluating code generation, software engineering, and programming capabilities
+    examples:
+      - HumanEval
+      - HumanEval+
+      - MBPP
+      - MBPP+
+      - MBPP++
+      - MBPP EvalPlus
+      - Multipl-E HumanEval
+      - Multipl-E MBPP
+      - MultiPL-E
+      - LiveCodeBench
+      - SWE-bench
+
+  - name: Reading Comprehension
+    description: Benchmarks evaluating reading comprehension, text understanding, and question answering based on provided context
+    examples:
+      - SQuAD
+      - SQuAD V2
+      - QuAC
+      - BoolQ
+      - DROP
+      - RACE
+      - Adv SQuAD
+      - Dynabench SQuAD
+
+  - name: Instruction Following
+    description: Benchmarks evaluating the ability to follow instructions, execute commands, and adhere to specified formats
+    examples:
+      - IFEval
+      - IFeval
+
+  - name: Tool Use
+    description: Benchmarks evaluating function calling, API usage, and integration with external tools
+    examples:
+      - API-Bank
+      - BFCL
+      - Gorilla Benchmark API Bench
+      - API-Bench
+      - Nexus
+
+  - name: Multilingual
+    description: Benchmarks evaluating performance across multiple languages and multilingual understanding
+    examples:
+      - Multilingual MGSM
+      - MMLU (Portuguese)
+      - MMLU (Spanish)
+      - MMLU (Italian)
+      - MMLU (German)
+      - MMLU (French)
+      - MMLU (Hindi)
+      - MMLU (Thai)
+      - Multi-Exam
+      - Multi-Understanding
+      - Multi-Mathematics
+      - Multi-Translation
+      - Multilingual MMLU
+      - AMMLU
+      - JMMLU
+      - KMMLU
+      - IndoMMLU
+      - TurkishMMLU
+      - okapi MMLU
+      - MGSM8K
+      - BLEnD
+
+  - name: Long Context
+    description: Benchmarks evaluating performance on long-context tasks, extended documents, and information retrieval from large texts
+    examples:
+      - ZeroSCROLLS
+      - InfiniteBench
+      - NIH (Multi-needle)
+      - Needle-in-a-Haystack
+      - QuALITY
+      - many-shot GSM8K
+      - RULER
+      - LV-Eval
+      - LongBench-Chat
+
+  - name: Science
+    description: Benchmarks evaluating scientific knowledge, STEM understanding, and domain-specific scientific reasoning
+    examples:
+      - GPQA
+      - MMLU-stem
+      - TheoremQA
+      - Theoremqa
+
+  - name: Chat
+    description: Benchmarks evaluating conversational abilities, dialogue quality, and multi-turn interaction
+    examples:
+      - Arena-Hard
+      - MT-bench
+      - MTBench
+
+  - name: Alignment
+    description: Benchmarks evaluating model alignment with human preferences, helpfulness, and harmlessness
+    examples:
+      - AlignBench
+
+  - name: Truthfulness
+    description: Benchmarks evaluating factual accuracy, hallucination detection, and truthful response generation
+    examples:
+      - TruthfulQA
+
+  - name: General
+    description: Comprehensive benchmarks evaluating multiple capabilities across different dimensions
+    examples:
+      - LiveBench
+
+metadata:
+  version: "1.0.0"
+  created_date: "2026-04-03"
+  source: "ground_truth.yaml"
+  total_categories: 14
+  total_unique_benchmarks: 75
+  notes: |
+    Initial taxonomy extracted from ground truth dataset containing 181 total benchmarks
+    across 2 models (Llama-3.1-8B and Qwen2.5-72B-Instruct). Categories represent the
+    observed patterns in model documentation and technical reports.

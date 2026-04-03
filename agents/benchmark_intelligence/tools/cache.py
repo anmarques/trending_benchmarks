@@ -109,9 +109,29 @@ class CacheManager:
                 CREATE TABLE IF NOT EXISTS snapshots (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     timestamp TEXT NOT NULL,
+                    window_start TEXT NOT NULL,  -- ISO 8601 start of 12-month window
+                    window_end TEXT NOT NULL,  -- ISO 8601 end of 12-month window
                     model_count INTEGER NOT NULL,
                     benchmark_count INTEGER NOT NULL,
+                    taxonomy_version TEXT,  -- Reference to archived taxonomy file
                     summary TEXT  -- JSON object with additional stats
+                )
+            """)
+
+            # Benchmark mentions table (denormalized for fast temporal queries)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS benchmark_mentions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    snapshot_id INTEGER NOT NULL,
+                    benchmark_id INTEGER NOT NULL,
+                    absolute_mentions INTEGER NOT NULL,  -- Count of models using this benchmark
+                    relative_frequency REAL NOT NULL,  -- mentions / total_models_in_window
+                    first_seen TEXT NOT NULL,  -- When benchmark was first discovered
+                    last_seen TEXT NOT NULL,  -- Most recent model using this benchmark in window
+                    status TEXT NOT NULL,  -- "emerging", "active", "almost_extinct"
+                    FOREIGN KEY (snapshot_id) REFERENCES snapshots(id) ON DELETE CASCADE,
+                    FOREIGN KEY (benchmark_id) REFERENCES benchmarks(id) ON DELETE CASCADE,
+                    UNIQUE(snapshot_id, benchmark_id)
                 )
             """)
 
@@ -186,6 +206,22 @@ class CacheManager:
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_snapshots_timestamp
                 ON snapshots(timestamp)
+            """)
+
+            # Benchmark mentions indexes (snapshot_id, benchmark_id, status per spec)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_benchmark_mentions_snapshot
+                ON benchmark_mentions(snapshot_id)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_benchmark_mentions_benchmark
+                ON benchmark_mentions(benchmark_id)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_benchmark_mentions_status
+                ON benchmark_mentions(status)
             """)
 
             conn.commit()
@@ -649,9 +685,48 @@ class CacheManager:
             return content_hash == new_content_hash
 
 
+    def add_snapshot(self, window_start: str, window_end: str,
+                    model_count: int, benchmark_count: int,
+                    taxonomy_version: Optional[str] = None,
+                    summary: Optional[Dict[str, Any]] = None) -> int:
+        """
+        Create a snapshot of the current cache state with temporal window.
+
+        Args:
+            window_start: ISO 8601 start of 12-month window
+            window_end: ISO 8601 end of 12-month window (usually current date)
+            model_count: Total models in this time window
+            benchmark_count: Total unique benchmarks in this window
+            taxonomy_version: Reference to archived taxonomy file (e.g., "benchmark_taxonomy_20260403.md")
+            summary: Additional summary information as dictionary
+
+        Returns:
+            Snapshot ID
+        """
+        now = self._now()
+        summary_json = json.dumps(summary or {})
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                INSERT INTO snapshots
+                (timestamp, window_start, window_end, model_count, benchmark_count,
+                 taxonomy_version, summary)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (now, window_start, window_end, model_count, benchmark_count,
+                  taxonomy_version, summary_json))
+
+            snapshot_id = cursor.lastrowid
+            conn.commit()
+
+        return snapshot_id
+
     def create_snapshot(self, summary: Optional[Dict[str, Any]] = None) -> int:
         """
-        Create a snapshot of the current cache state.
+        Create a snapshot of the current cache state (legacy method).
+
+        DEPRECATED: Use add_snapshot() with explicit window parameters instead.
 
         Args:
             summary: Additional summary information as dictionary
@@ -660,29 +735,190 @@ class CacheManager:
             Snapshot ID
         """
         now = self._now()
+        # Default to 12-month window ending now
+        window_end = now
+        window_start = (datetime.utcnow() - timedelta(days=365)).isoformat()
 
         with self._get_connection() as conn:
             cursor = conn.cursor()
 
             # Get current counts
-            cursor.execute("SELECT COUNT(*) as count FROM models")
+            cursor.execute("SELECT COUNT(*) as count FROM models WHERE deleted_at IS NULL")
             model_count = cursor.fetchone()['count']
 
             cursor.execute("SELECT COUNT(*) as count FROM benchmarks")
             benchmark_count = cursor.fetchone()['count']
 
-            # Create snapshot
-            summary_json = json.dumps(summary or {})
-            cursor.execute("""
-                INSERT INTO snapshots
-                (timestamp, model_count, benchmark_count, summary)
-                VALUES (?, ?, ?, ?)
-            """, (now, model_count, benchmark_count, summary_json))
+        return self.add_snapshot(window_start, window_end, model_count, benchmark_count,
+                                None, summary)
 
-            snapshot_id = cursor.lastrowid
+    def add_benchmark_mention(self, snapshot_id: int, benchmark_id: int,
+                             absolute_mentions: int, relative_frequency: float,
+                             first_seen: str, last_seen: str, status: str) -> int:
+        """
+        Add a benchmark mention record for a snapshot.
+
+        Args:
+            snapshot_id: Reference to snapshot
+            benchmark_id: Reference to benchmark
+            absolute_mentions: Count of models using this benchmark
+            relative_frequency: mentions / total_models_in_window (as decimal, e.g., 0.30 for 30%)
+            first_seen: When benchmark was first discovered (ISO 8601)
+            last_seen: Most recent model using this benchmark in window (ISO 8601)
+            status: Benchmark status ("emerging", "active", "almost_extinct")
+
+        Returns:
+            Benchmark mention ID
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                INSERT INTO benchmark_mentions
+                (snapshot_id, benchmark_id, absolute_mentions, relative_frequency,
+                 first_seen, last_seen, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(snapshot_id, benchmark_id)
+                DO UPDATE SET absolute_mentions = ?, relative_frequency = ?,
+                              first_seen = ?, last_seen = ?, status = ?
+            """, (snapshot_id, benchmark_id, absolute_mentions, relative_frequency,
+                  first_seen, last_seen, status,
+                  absolute_mentions, relative_frequency, first_seen, last_seen, status))
+
+            mention_id = cursor.lastrowid
             conn.commit()
 
-        return snapshot_id
+        return mention_id
+
+    def get_models_in_date_range(self, start_date: str, end_date: str,
+                                 include_deleted: bool = False) -> List[Dict[str, Any]]:
+        """
+        Get models with release dates within a specific date range.
+
+        Used for 12-month rolling window queries in temporal tracking.
+
+        Args:
+            start_date: Start of date range (ISO 8601)
+            end_date: End of date range (ISO 8601)
+            include_deleted: If True, include models marked as deleted
+
+        Returns:
+            List of models within the date range
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            if include_deleted:
+                cursor.execute("""
+                    SELECT * FROM models
+                    WHERE release_date >= ? AND release_date <= ?
+                    ORDER BY release_date DESC
+                """, (start_date, end_date))
+            else:
+                cursor.execute("""
+                    SELECT * FROM models
+                    WHERE release_date >= ? AND release_date <= ?
+                      AND deleted_at IS NULL
+                    ORDER BY release_date DESC
+                """, (start_date, end_date))
+
+            models = []
+            for row in cursor.fetchall():
+                models.append({
+                    'id': row['id'],
+                    'name': row['name'],
+                    'lab': row['lab'],
+                    'release_date': row['release_date'],
+                    'first_seen': row['first_seen'],
+                    'last_updated': row['last_updated'],
+                    'deleted_at': row['deleted_at'],
+                    'downloads': row['downloads'],
+                    'likes': row['likes'],
+                    'tags': json.loads(row['tags']) if row['tags'] else [],
+                    'model_card_hash': row['model_card_hash']
+                })
+
+            return models
+
+    def get_benchmark_mentions_for_snapshot(self, snapshot_id: int) -> List[Dict[str, Any]]:
+        """
+        Get all benchmark mentions for a specific snapshot.
+
+        Args:
+            snapshot_id: Snapshot identifier
+
+        Returns:
+            List of benchmark mentions with benchmark details
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT
+                    bm.*,
+                    b.canonical_name,
+                    b.categories,
+                    b.attributes
+                FROM benchmark_mentions bm
+                JOIN benchmarks b ON bm.benchmark_id = b.id
+                WHERE bm.snapshot_id = ?
+                ORDER BY bm.relative_frequency DESC
+            """, (snapshot_id,))
+
+            mentions = []
+            for row in cursor.fetchall():
+                mentions.append({
+                    'id': row['id'],
+                    'snapshot_id': row['snapshot_id'],
+                    'benchmark_id': row['benchmark_id'],
+                    'benchmark_name': row['canonical_name'],
+                    'absolute_mentions': row['absolute_mentions'],
+                    'relative_frequency': row['relative_frequency'],
+                    'first_seen': row['first_seen'],
+                    'last_seen': row['last_seen'],
+                    'status': row['status'],
+                    'categories': json.loads(row['categories']) if row['categories'] else [],
+                    'attributes': json.loads(row['attributes']) if row['attributes'] else {}
+                })
+
+            return mentions
+
+    def determine_benchmark_status(self, first_seen: str, last_seen: str,
+                                   current_date: Optional[str] = None) -> str:
+        """
+        Determine benchmark status based on first_seen and last_seen timestamps.
+
+        Status logic per data-model.md:
+        - "emerging": first_seen >= current_date - 3 months
+        - "almost_extinct": last_seen <= current_date - 9 months
+        - "active": All others
+
+        Args:
+            first_seen: When benchmark was first discovered (ISO 8601)
+            last_seen: Most recent model using this benchmark (ISO 8601)
+            current_date: Reference date for calculation (ISO 8601, defaults to now)
+
+        Returns:
+            Status string: "emerging", "active", or "almost_extinct"
+        """
+        if current_date is None:
+            current_date = self._now()
+
+        # Parse dates
+        current_dt = datetime.fromisoformat(current_date.replace('Z', '+00:00'))
+        first_seen_dt = datetime.fromisoformat(first_seen.replace('Z', '+00:00'))
+        last_seen_dt = datetime.fromisoformat(last_seen.replace('Z', '+00:00'))
+
+        # Calculate thresholds
+        emerging_threshold = current_dt - timedelta(days=90)  # 3 months
+        extinct_threshold = current_dt - timedelta(days=270)  # 9 months
+
+        # Determine status
+        if first_seen_dt >= emerging_threshold:
+            return "emerging"
+        elif last_seen_dt <= extinct_threshold:
+            return "almost_extinct"
+        else:
+            return "active"
 
     def get_snapshot(self, snapshot_id: int) -> Optional[Dict[str, Any]]:
         """
@@ -705,8 +941,11 @@ class CacheManager:
             return {
                 'id': row['id'],
                 'timestamp': row['timestamp'],
+                'window_start': row['window_start'],
+                'window_end': row['window_end'],
                 'model_count': row['model_count'],
                 'benchmark_count': row['benchmark_count'],
+                'taxonomy_version': row['taxonomy_version'],
                 'summary': json.loads(row['summary']) if row['summary'] else {}
             }
 
@@ -861,8 +1100,11 @@ class CacheManager:
                 snapshots.append({
                     'id': row['id'],
                     'timestamp': row['timestamp'],
+                    'window_start': row['window_start'],
+                    'window_end': row['window_end'],
                     'model_count': row['model_count'],
                     'benchmark_count': row['benchmark_count'],
+                    'taxonomy_version': row['taxonomy_version'],
                     'summary': json.loads(row['summary']) if row['summary'] else {}
                 })
 
@@ -1149,8 +1391,11 @@ class CacheManager:
                 snapshots.append({
                     'id': row['id'],
                     'timestamp': row['timestamp'],
+                    'window_start': row['window_start'],
+                    'window_end': row['window_end'],
                     'model_count': row['model_count'],
                     'benchmark_count': row['benchmark_count'],
+                    'taxonomy_version': row['taxonomy_version'],
                     'summary': json.loads(row['summary']) if row['summary'] else {}
                 })
 
@@ -1290,4 +1535,174 @@ class CacheManager:
                 })
 
             return deprecated
+
+    def create_temporal_snapshot(
+        self,
+        taxonomy_version: Optional[str] = None,
+        summary: Optional[Dict[str, Any]] = None
+    ) -> int:
+        """
+        Create a temporal snapshot with 12-month rolling window and benchmark tracking.
+
+        This method:
+        1. Calculates 12-month window (models released in last 12 months)
+        2. Computes benchmark mentions and frequencies
+        3. Determines benchmark status (emerging/active/almost_extinct)
+        4. Creates snapshot and benchmark_mentions records
+
+        Args:
+            taxonomy_version: Reference to archived taxonomy file
+            summary: Additional summary information as dictionary
+
+        Returns:
+            Snapshot ID
+
+        T025: Temporal Snapshot Creation
+        """
+        now = self._now()
+        window_end = now
+        # 12-month window: from (now - 365 days) to now
+        window_start = (datetime.utcnow() - timedelta(days=365)).isoformat()
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Step 1: Get models in 12-month window (based on release_date)
+            cursor.execute("""
+                SELECT id, release_date
+                FROM models
+                WHERE release_date IS NOT NULL
+                  AND release_date >= ?
+                  AND release_date <= ?
+                  AND deleted_at IS NULL
+            """, (window_start, window_end))
+
+            models_in_window = cursor.fetchall()
+            model_ids_in_window = [row['id'] for row in models_in_window]
+            model_count = len(model_ids_in_window)
+
+            # Step 2: Get benchmarks used by models in window
+            if model_ids_in_window:
+                # Build query with proper placeholders
+                placeholders = ','.join('?' * len(model_ids_in_window))
+                cursor.execute(f"""
+                    SELECT
+                        mb.benchmark_id,
+                        COUNT(DISTINCT mb.model_id) as mention_count,
+                        MIN(mb.last_seen) as earliest_mention,
+                        MAX(mb.last_seen) as latest_mention
+                    FROM model_benchmarks mb
+                    WHERE mb.model_id IN ({placeholders})
+                    GROUP BY mb.benchmark_id
+                """, model_ids_in_window)
+
+                benchmark_mentions = cursor.fetchall()
+            else:
+                benchmark_mentions = []
+
+            # Get total unique benchmarks (for benchmark_count)
+            benchmark_ids = {row['benchmark_id'] for row in benchmark_mentions}
+            benchmark_count = len(benchmark_ids)
+
+            # Step 3: Create snapshot
+            snapshot_id = self.add_snapshot(
+                window_start=window_start,
+                window_end=window_end,
+                model_count=model_count,
+                benchmark_count=benchmark_count,
+                taxonomy_version=taxonomy_version,
+                summary=summary
+            )
+
+            # Step 4: Create benchmark_mentions records
+            for mention in benchmark_mentions:
+                benchmark_id = mention['benchmark_id']
+                absolute_mentions = mention['mention_count']
+
+                # Calculate relative frequency (T027)
+                relative_frequency = self.calculate_relative_frequency(
+                    absolute_mentions,
+                    model_count
+                )
+
+                # Get benchmark first_seen from benchmarks table
+                cursor.execute(
+                    "SELECT first_seen, last_seen FROM benchmarks WHERE id = ?",
+                    (benchmark_id,)
+                )
+                bench_row = cursor.fetchone()
+                if not bench_row:
+                    continue
+
+                first_seen = bench_row['first_seen']
+                # Use the latest mention from this window as last_seen
+                last_seen = mention['latest_mention']
+
+                # Calculate benchmark status (T026)
+                status = self.calculate_benchmark_status(
+                    first_seen=first_seen,
+                    last_seen=last_seen,
+                    current_date=window_end
+                )
+
+                # Add benchmark mention record
+                self.add_benchmark_mention(
+                    snapshot_id=snapshot_id,
+                    benchmark_id=benchmark_id,
+                    absolute_mentions=absolute_mentions,
+                    relative_frequency=relative_frequency,
+                    first_seen=first_seen,
+                    last_seen=last_seen,
+                    status=status
+                )
+
+            conn.commit()
+
+        return snapshot_id
+
+    def calculate_benchmark_status(
+        self,
+        first_seen: str,
+        last_seen: str,
+        current_date: Optional[str] = None
+    ) -> str:
+        """
+        Calculate benchmark status using determine_benchmark_status logic.
+
+        Wrapper around determine_benchmark_status for use in temporal snapshots.
+
+        Args:
+            first_seen: When benchmark was first discovered (ISO 8601)
+            last_seen: Most recent model using this benchmark (ISO 8601)
+            current_date: Reference date for calculation (ISO 8601, defaults to now)
+
+        Returns:
+            Status string: "emerging", "active", or "almost_extinct"
+
+        T026: Benchmark Status Calculation
+        """
+        return self.determine_benchmark_status(first_seen, last_seen, current_date)
+
+    def calculate_relative_frequency(
+        self,
+        absolute_mentions: int,
+        total_models: int
+    ) -> float:
+        """
+        Calculate relative frequency of benchmark mentions.
+
+        Formula: relative_frequency = absolute_mentions / total_models
+
+        Args:
+            absolute_mentions: Number of models using this benchmark
+            total_models: Total number of models in the window
+
+        Returns:
+            Relative frequency as decimal (0.0 to 1.0)
+
+        T027: Relative Frequency Calculation
+        """
+        if total_models == 0:
+            return 0.0
+        return absolute_mentions / total_models
 
