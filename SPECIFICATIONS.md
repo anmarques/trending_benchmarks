@@ -492,14 +492,31 @@ CREATE TABLE documents (
     UNIQUE(model_id, doc_type, url)
 );
 
--- Temporal snapshots
+-- Temporal snapshots (created after each run)
 CREATE TABLE snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp TEXT NOT NULL,
-    model_count INTEGER NOT NULL,
-    benchmark_count INTEGER NOT NULL,
+    timestamp TEXT NOT NULL,           -- Snapshot creation timestamp
+    window_start TEXT NOT NULL,        -- Start of 12-month window
+    window_end TEXT NOT NULL,          -- End of 12-month window (usually current date)
+    model_count INTEGER NOT NULL,      -- Total models in this window
+    benchmark_count INTEGER NOT NULL,  -- Total unique benchmarks in this window
     taxonomy_version TEXT,             -- Link to archived taxonomy
-    summary TEXT                       -- JSON stats
+    summary TEXT                       -- JSON: {benchmark_id: {absolute: N, relative: X%}, ...}
+);
+
+-- Benchmark mention history (denormalized for fast temporal queries)
+CREATE TABLE benchmark_mentions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_id INTEGER NOT NULL,
+    benchmark_id INTEGER NOT NULL,
+    absolute_mentions INTEGER NOT NULL,  -- Count of models using this benchmark
+    relative_frequency REAL NOT NULL,    -- mentions / total models in window
+    first_seen TEXT NOT NULL,            -- When this benchmark was first discovered
+    last_seen TEXT NOT NULL,             -- Most recent model using this benchmark
+    status TEXT NOT NULL,                -- 'emerging', 'active', 'almost_extinct'
+    FOREIGN KEY (snapshot_id) REFERENCES snapshots(id),
+    FOREIGN KEY (benchmark_id) REFERENCES benchmarks(id),
+    UNIQUE(snapshot_id, benchmark_id)
 );
 
 -- Indexes for performance
@@ -513,9 +530,49 @@ CREATE INDEX idx_model_benchmarks_benchmark ON model_benchmarks(benchmark_id);
 CREATE INDEX idx_model_benchmarks_extraction ON model_benchmarks(extraction_method);
 CREATE INDEX idx_documents_model ON documents(model_id);
 CREATE INDEX idx_documents_hash ON documents(content_hash);
+CREATE INDEX idx_snapshots_timestamp ON snapshots(timestamp);
+CREATE INDEX idx_benchmark_mentions_snapshot ON benchmark_mentions(snapshot_id);
+CREATE INDEX idx_benchmark_mentions_benchmark ON benchmark_mentions(benchmark_id);
+CREATE INDEX idx_benchmark_mentions_status ON benchmark_mentions(status);
 ```
 
-### 6.2 Incremental Update Logic
+### 6.2 Snapshot Creation
+
+**When**: After every successful run (after processing all models)
+
+**Process**:
+1. **Define time window**:
+   - `window_end` = current date
+   - `window_start` = current date - 12 months
+2. **Filter models**: Only include models with `release_date` in [window_start, window_end]
+3. **For each benchmark**:
+   - Count how many models (in window) use this benchmark
+   - Calculate relative frequency: `mentions / total_models_in_window * 100`
+   - Determine status:
+     - **Emerging**: `first_seen >= current_date - 3 months`
+     - **Almost Extinct**: `last_seen <= current_date - 9 months`
+     - **Active**: All others
+   - Store in `benchmark_mentions` table
+4. **Create snapshot record**: Store window boundaries, counts, taxonomy reference
+5. **Retention**: Keep all snapshots (no automatic deletion)
+
+**Temporal Comparison**:
+- Reports query multiple snapshots to show trends
+- Each snapshot is independent (recalculated from scratch)
+- Enables comparison across different time periods
+
+**Example**:
+```
+Run on 2026-04-03:
+  window_start: 2025-04-03
+  window_end: 2026-04-03
+  models in window: 150
+  MMLU mentions: 45
+  MMLU relative: 30%
+  MMLU status: Active (first_seen: 2024-01-15, last_seen: 2026-04-01)
+```
+
+### 6.3 Incremental Update Logic
 
 **On each run:**
 1. Update model metadata (downloads, likes) for ALL models from HuggingFace API
@@ -546,18 +603,63 @@ CREATE INDEX idx_documents_hash ON documents(content_hash);
 
 ## 7. Reporting Requirements
 
-### 7.1 Report Sections (7 Required)
+### 7.1 Temporal Tracking Methodology
+
+**Time Window**: Rolling 12-month window from current date
+
+**Benchmark Inclusion**:
+- Report all benchmarks mentioned in models released in the last 12 months
+- Historical snapshots track benchmark usage over time
+
+**Benchmark Metrics**:
+- **Absolute mentions**: Count of models using this benchmark
+- **Relative frequency**: `mentions / total_models_in_window` (as percentage)
+  - Example: If 45 out of 150 models use MMLU → 30% relative frequency
+
+**Benchmark Status Classification**:
+- **Emerging**: First mention ≤3 months before current date
+  - New benchmarks recently introduced to the ecosystem
+  - Flag in report as "🆕 Emerging"
+- **Almost Extinct**: Last mention ≥9 months before current date
+  - Benchmarks not seen in recent models
+  - Flag in report as "⚠️ Almost Extinct"
+- **Active**: All others (first seen >3 months ago, last seen <9 months ago)
+
+**Temporal Tracking**:
+- If benchmark exists in previous snapshots, show historical mention counts
+- Compare current snapshot with previous snapshots (if available)
+- Do NOT calculate "trending up" or "trending down" explicitly
+- Simply show raw counts/percentages over time for user interpretation
+
+**Example Timeline**:
+```
+MMLU:
+  2025-04: 45 models (30%)
+  2025-03: 42 models (28%)
+  2025-02: 40 models (27%)
+  First seen: 2024-01
+  Status: Active
+```
+
+### 7.2 Report Sections (7 Required)
 
 #### 1. Executive Summary
-- Total models tracked
+- Total models tracked (in 12-month window)
 - Total unique benchmarks discovered
 - Number of active labs
-- Time period covered (12 months)
+- Time period covered (window_start to window_end)
 - Number of source documents processed
 - Extraction statistics:
   - Benchmarks from text vs tables vs figures
   - Most common variant patterns (e.g., "X% use CoT", "Y% use 5-shot")
+- Benchmark status distribution:
+  - Count and percentage of emerging benchmarks
+  - Count and percentage of almost extinct benchmarks
+  - Count and percentage of active benchmarks
 - Key highlights
+- Snapshot comparison (if previous snapshots exist):
+  - Model count change vs last snapshot
+  - Benchmark count change vs last snapshot
 
 #### 2. Trending Models (Last 12 Months)
 - **Show ALL models** that meet quality criteria
@@ -566,16 +668,29 @@ CREATE INDEX idx_documents_hash ON documents(content_hash);
 - No arbitrary limits (e.g., "top 20") - show everything
 
 #### 3. Most Common Benchmarks
-- Benchmarks sorted by usage (how many models report them)
-- Show: All-time top benchmarks + This period's top benchmarks
-- Include: Name, Model count, Categories, First seen
+- Benchmarks sorted by relative frequency (mentions / total models)
+- Columns:
+  - Name
+  - Absolute mentions (count)
+  - Relative frequency (percentage)
+  - Categories
+  - First seen date
+  - Last seen date
+  - Status (Emerging 🆕, Almost Extinct ⚠️, or Active)
+- Include historical counts if previous snapshots exist
 - No minimum threshold - include all discovered benchmarks
 
 #### 4. Emerging Benchmarks
-- New benchmarks discovered in last 90 days
+- Benchmarks with first mention ≤3 months before current date
 - Sorted by first seen (newest first)
+- Columns:
+  - Name
+  - First seen date
+  - Absolute mentions
+  - Relative frequency
+  - Categories
+  - Source models (which models introduced this benchmark)
 - Highlight potential new evaluation trends
-- Note if any benchmarks are explicitly deprecated
 
 #### 5. Category Distribution
 - Pie chart / bar chart data (JSON format)
@@ -590,17 +705,17 @@ CREATE INDEX idx_documents_hash ON documents(content_hash);
 - Benchmark diversity score (unique benchmarks used)
 
 #### 7. Temporal Trends
-- Benchmark popularity over time
-- New vs. deprecated benchmarks
-- Snapshot comparison data
-- Note on benchmarks trending down (potential deprecation)
-
-### 7.2 Deprecated Benchmarks
-
-- **Natural trend**: Benchmarks will naturally trend down in usage
-- **Explicit deprecation**: If a source explicitly says "benchmark X is deprecated", note this in the report
-- **Detection**: Track `last_seen` date in database
-- **Reporting**: In "Temporal Trends" section, list benchmarks not seen in last 6 months as "Potentially Deprecated"
+- Historical mention counts for top benchmarks (if previous snapshots exist)
+- Table showing absolute and relative mentions over time:
+  ```
+  Benchmark | 2026-04 | 2026-03 | 2026-02 | 2026-01 | Status
+  MMLU      | 45(30%) | 42(28%) | 40(27%) | 38(25%) | Active
+  NewBench  | 5(3%)   | 2(1%)   | -       | -       | 🆕 Emerging
+  OldBench  | -       | -       | 1(1%)   | 3(2%)   | ⚠️ Almost Extinct
+  ```
+- List of emerging benchmarks (first mention ≤3 months)
+- List of almost extinct benchmarks (last mention ≥9 months)
+- No explicit "trending up/down" calculations - users interpret raw data
 
 ### 7.3 Report Format
 
@@ -774,8 +889,15 @@ reporting:
    └── Store canonical benchmarks
 
 4. Snapshot Phase
-   ├── Create temporal snapshot
-   ├── Store current taxonomy version
+   ├── Calculate 12-month window (current_date - 12 months to current_date)
+   ├── Query all models in window (by release_date)
+   ├── For each benchmark:
+   │   ├── Count absolute mentions (models using this benchmark)
+   │   ├── Calculate relative frequency (mentions / total_models_in_window)
+   │   ├── Determine status (emerging / active / almost_extinct)
+   │   └── Store in benchmark_mentions table
+   ├── Create snapshot record with window boundaries
+   ├── Store current taxonomy version reference
    └── Archive old taxonomy if updated
 
 5. Reporting Phase
@@ -1161,6 +1283,10 @@ python tests/generate_test_reports.py
 - ✅ Incremental updates work (skip unchanged documents)
 - ✅ Taxonomy updated when new benchmark types discovered
 - ✅ Historical taxonomy versions archived
+- ✅ Snapshots created after each run with correct time windows
+- ✅ Benchmark status correctly classified (emerging / active / almost extinct)
+- ✅ Temporal trends show historical data when multiple snapshots exist
+- ✅ Relative frequency calculated correctly (mentions / total models in window)
 - ✅ Configuration files at root level (labs.yaml, categories.yaml, benchmark_taxonomy.md)
 - ✅ Root README links to latest report
 - ✅ Documentation complete (README, SPEC, inline comments)
