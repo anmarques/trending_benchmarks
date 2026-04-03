@@ -212,11 +212,11 @@ Enabled with `--quiet`:
 
 ## Environment Variables
 
-### Required
+### Required (Standalone Execution)
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `ANTHROPIC_API_KEY` | Claude API key for extraction/classification | `sk-ant-...` |
+| `ANTHROPIC_API_KEY` | Claude API key for extraction/classification (not required on Ambient/Claude Code/Cursor) | `sk-ant-...` |
 
 ### Optional
 
@@ -270,8 +270,11 @@ Exit code: 1
 ```
 ❌ Error: ANTHROPIC_API_KEY environment variable not set
 
-Please set your Claude API key:
+Please set your Claude API key (standalone execution only):
   export ANTHROPIC_API_KEY="sk-ant-..."
+
+Note: If running on Ambient, Claude Code, or Cursor, check native
+      Claude integration configuration.
 
 Exit code: 1
 ```
@@ -340,7 +343,8 @@ OPTIONS:
     -q, --quiet     Suppress progress output (errors only)
 
 ENVIRONMENT VARIABLES:
-    ANTHROPIC_API_KEY    Required: Claude API key for extraction
+    ANTHROPIC_API_KEY    Required for standalone execution (not needed on
+                         Ambient/Claude Code/Cursor with native Claude integration)
     GITHUB_TOKEN         Optional: Higher GitHub API rate limits
     HUGGINGFACE_TOKEN    Optional: Access private models
     LOG_LEVEL            Optional: DEBUG|INFO|WARNING|ERROR (default: INFO)

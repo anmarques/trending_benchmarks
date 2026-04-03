@@ -21,9 +21,10 @@ The Benchmark Intelligence System automatically tracks benchmark evaluation tren
 
 ### API Access
 
-**Required**:
+**Required** (when running standalone):
 - **Anthropic API Key**: For AI-powered extraction and classification
-  - Sign up at: https://console.anthropic.com/
+  - **Note**: Not required when running on Ambient, Claude Code, or Cursor (uses native Claude integration)
+  - For standalone execution: Sign up at https://console.anthropic.com/
   - Set environment variable: `export ANTHROPIC_API_KEY="sk-ant-..."`
 
 **Optional**:
@@ -59,7 +60,11 @@ pip install -r requirements.txt
 - `pyyaml` - YAML configuration
 - `huggingface-hub` - HuggingFace API client
 
-### 3. Set API Key
+### 3. Set API Key (Standalone Only)
+
+**Skip this step if running on Ambient, Claude Code, or Cursor** (uses native Claude integration).
+
+For standalone execution:
 
 ```bash
 export ANTHROPIC_API_KEY="your-api-key-here"
@@ -361,10 +366,12 @@ schedule:
 ❌ Error: ANTHROPIC_API_KEY environment variable not set
 ```
 
-**Solution**:
+**Solution** (for standalone execution):
 ```bash
 export ANTHROPIC_API_KEY="your-api-key-here"
 ```
+
+**Note**: If running on Ambient, Claude Code, or Cursor, this error indicates a configuration issue with the native Claude integration. Check your environment settings.
 
 ### Error: No Snapshots Found
 
@@ -577,7 +584,7 @@ pip install -r requirements.txt
 # 2. Configure labs
 # Edit labs.yaml: 10 labs, 10 models per lab
 
-# 3. Set API key
+# 3. Set API key (skip if using Ambient/Claude Code/Cursor)
 echo 'export ANTHROPIC_API_KEY="sk-ant-..."' >> ~/.bashrc
 source ~/.bashrc
 

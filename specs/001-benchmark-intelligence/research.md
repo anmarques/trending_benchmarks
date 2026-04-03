@@ -314,7 +314,7 @@ huggingface-hub>=0.20.0  # HuggingFace API
 ### API Key Management
 
 **Environment Variables**:
-- `ANTHROPIC_API_KEY`: Required for AI operations
+- `ANTHROPIC_API_KEY`: Required for standalone AI operations (not needed on Ambient/Claude Code/Cursor)
 - `GITHUB_TOKEN`: Optional for authenticated GitHub requests (higher rate limits)
 - `HUGGINGFACE_TOKEN`: Optional for private models (if needed)
 
