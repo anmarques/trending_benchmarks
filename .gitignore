@@ -2,6 +2,7 @@
 cache/
 *.db
 *.sqlite
+temp_images/
 
 # Authentication
 **/auth.yaml
