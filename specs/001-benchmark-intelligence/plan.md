@@ -18,7 +18,7 @@ Automatically track, extract, and analyze benchmark evaluation trends across Lar
 - pdfplumber (PDF parsing)
 - requests (HTTP downloads)
 - PyYAML (configuration)
-- Anthropic SDK (AI extraction & classification)
+- Anthropic SDK (AI extraction & classification) - standalone only; managed environments use native Claude integration
 
 **Storage**: SQLite database (schema: models, benchmarks, model_benchmarks, documents, snapshots, benchmark_mentions)
 **Testing**: pytest with modular test phases (source discovery, extraction, taxonomy, report generation)

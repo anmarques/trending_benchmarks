@@ -53,12 +53,13 @@ pip install -r requirements.txt
 ```
 
 **Dependencies installed**:
-- `anthropic` - Claude API client
 - `pdfplumber` - PDF parsing
 - `PyPDF2` - Fallback PDF parser
 - `requests` - HTTP client
 - `pyyaml` - YAML configuration
 - `huggingface-hub` - HuggingFace API client
+
+**Note**: The `anthropic` package (Claude API client) is commented out in `requirements.txt` as it's only needed for standalone execution. Managed environments (Ambient/Claude Code/Cursor) use native Claude integration.
 
 ### 3. Set API Key (Standalone Only)
 

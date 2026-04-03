@@ -19,7 +19,7 @@ This document captures technology research and decisions for the Benchmark Intel
 - Excellent ecosystem for data processing, AI integration, and web scraping
 - Native SQLite support without external dependencies
 - Strong library support for PDF parsing (pdfplumber), HTTP requests, YAML configuration
-- Compatible with Anthropic SDK for Claude AI integration
+- Compatible with Anthropic SDK for Claude AI integration (standalone execution) or native Claude integration (managed environments)
 
 **Alternatives Considered**:
 - **Node.js/TypeScript**: Good for async I/O but weaker PDF parsing ecosystem, would require codebase rewrite

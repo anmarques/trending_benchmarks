@@ -4,8 +4,9 @@
 # Hugging Face integration
 huggingface_hub>=0.20.0
 
-# AI/LLM API client
-anthropic>=0.21.0
+# AI/LLM API client (only required for standalone execution)
+# Not needed when running on Ambient, Claude Code, or Cursor (uses native Claude integration)
+# anthropic>=0.21.0
 
 # Configuration and data handling
 pyyaml>=6.0
