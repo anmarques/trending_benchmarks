@@ -409,7 +409,7 @@ models:
   - url: https://qwenlm.github.io/blog/qwen2.5-llm/
     type: blog_post
     status: extracted
-    notes: Primary source with comprehensive benchmark tables
+    notes: Primary source with comprehensive benchmark tables including multilingual benchmarks
     benchmarks:
     - name: MMLU
       variant: 5-shot, base
@@ -429,7 +429,7 @@ models:
     - name: TruthfulQA
       variant: 0-shot, base
       category: Truthfulness
-    - name: WindoGrande
+    - name: Winogrande
       variant: 5-shot, base
       category: Reasoning
     - name: HellaSwag
@@ -510,6 +510,9 @@ models:
     - name: IFeval
       variant: strict-prompt, instruct
       category: Instruction Following
+    - name: IFeval
+      variant: multilingual, instruct
+      category: Instruction Following
     - name: Arena-Hard
       variant: instruct
       category: Chat
@@ -519,6 +522,30 @@ models:
     - name: MTbench
       variant: instruct
       category: Chat
+    - name: AMMLU
+      variant: Arabic, instruct
+      category: Multilingual
+    - name: JMMLU
+      variant: Japanese, instruct
+      category: Multilingual
+    - name: KMMLU
+      variant: Korean, instruct
+      category: Multilingual
+    - name: IndoMMLU
+      variant: Indonesian, instruct
+      category: Multilingual
+    - name: TurkishMMLU
+      variant: Turkish, instruct
+      category: Multilingual
+    - name: okapi MMLU
+      variant: translated, instruct
+      category: Multilingual
+    - name: MGSM8K
+      variant: extended, multilingual, instruct
+      category: Multilingual
+    - name: BLEnD
+      variant: cultural nuances, instruct
+      category: Multilingual
   - url: https://arxiv.org/abs/2412.15115
     type: arxiv_paper
     status: extracted
