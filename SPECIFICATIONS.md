@@ -295,8 +295,14 @@ A **benchmark** is a standardized evaluation dataset or task with a clear name m
 - C-Eval, CMMLU (language-specific)
 
 **What to extract**:
-- ✅ Benchmark name
-- ✅ Presence (yes/no - model was evaluated on it)
+- ✅ Benchmark name (e.g., "MMLU", "GSM8K")
+- ✅ Variant details:
+  - Shot count (0-shot, 5-shot, few-shot, etc.)
+  - Prompting method (CoT, PoT, TIR, etc.)
+  - Model type tested (base, instruct, chat, etc.)
+  - Other contextual information (language, subset, etc.)
+- ✅ Extraction method (text, table, figure, chart)
+- ✅ Source information (model_card, blog, paper, etc.)
 - ❌ **Do NOT extract scores** (too variable, context-dependent)
 
 ### 4.2 Extraction Method
@@ -324,19 +330,49 @@ A **benchmark** is a standardized evaluation dataset or task with a clear name m
   "benchmarks": [
     {
       "name": "MMLU",
-      "source": "model_card"
+      "variant_details": {
+        "shots": "5-shot",
+        "method": null,
+        "model_type": "base"
+      },
+      "source_type": "model_card",
+      "extraction_method": "table"
     },
     {
       "name": "GSM8K",
-      "source": "technical_report"
+      "variant_details": {
+        "shots": "8-shot",
+        "method": "CoT",
+        "model_type": "instruct"
+      },
+      "source_type": "technical_report",
+      "extraction_method": "text"
     },
     {
       "name": "HumanEval",
-      "source": "blog_chart"
+      "variant_details": {
+        "shots": "0-shot",
+        "method": null,
+        "model_type": "instruct"
+      },
+      "source_type": "blog",
+      "extraction_method": "chart"
     }
   ]
 }
 ```
+
+**Variant Details Structure**:
+- `shots`: Number of examples (e.g., "0-shot", "5-shot", "few-shot", null if not specified)
+- `method`: Prompting method (e.g., "CoT", "PoT", "TIR", null if standard)
+- `model_type`: Model variant tested (e.g., "base", "instruct", "chat", null if not specified)
+- Additional fields can be added as needed (e.g., "language": "multilingual")
+
+**Extraction Method Values**:
+- `"text"`: Extracted from prose or markdown text
+- `"table"`: Extracted from markdown or HTML tables
+- `"figure"`: Extracted from images/charts in blogs or PDFs
+- `"chart"`: Extracted from bar charts, comparison graphs
 
 ### 4.3 Consolidation Rules
 
@@ -420,22 +456,23 @@ CREATE TABLE benchmarks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     canonical_name TEXT UNIQUE NOT NULL,
     categories TEXT,                   -- JSON array
-    attributes TEXT,                   -- JSON object
     first_seen TEXT NOT NULL,
     last_seen TEXT                     -- Track when last mentioned
 );
 
--- Model-Benchmark associations (no scores)
+-- Model-Benchmark associations (no scores, but tracks variants)
 CREATE TABLE model_benchmarks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     model_id TEXT NOT NULL,
     benchmark_id INTEGER NOT NULL,
+    variant_details TEXT,              -- JSON: {"shots": "5-shot", "method": "CoT", "model_type": "instruct"}
     source_type TEXT,                  -- model_card, blog, paper, etc.
     source_url TEXT,
+    extraction_method TEXT,            -- "text", "table", "figure", "chart"
     recorded_at TEXT NOT NULL,
     FOREIGN KEY (model_id) REFERENCES models(id),
     FOREIGN KEY (benchmark_id) REFERENCES benchmarks(id),
-    UNIQUE(model_id, benchmark_id)
+    UNIQUE(model_id, benchmark_id, variant_details)  -- Allow same benchmark with different variants
 );
 
 -- Documents cache (metadata only, no content storage)
@@ -469,6 +506,7 @@ CREATE INDEX idx_benchmarks_name ON benchmarks(canonical_name);
 CREATE INDEX idx_benchmarks_last_seen ON benchmarks(last_seen);
 CREATE INDEX idx_model_benchmarks_model ON model_benchmarks(model_id);
 CREATE INDEX idx_model_benchmarks_benchmark ON model_benchmarks(benchmark_id);
+CREATE INDEX idx_model_benchmarks_extraction ON model_benchmarks(extraction_method);
 CREATE INDEX idx_documents_model ON documents(model_id);
 CREATE INDEX idx_documents_hash ON documents(content_hash);
 ```
@@ -512,6 +550,9 @@ CREATE INDEX idx_documents_hash ON documents(content_hash);
 - Number of active labs
 - Time period covered (12 months)
 - Number of source documents processed
+- Extraction statistics:
+  - Benchmarks from text vs tables vs figures
+  - Most common variant patterns (e.g., "X% use CoT", "Y% use 5-shot")
 - Key highlights
 
 #### 2. Trending Models (Last 12 Months)
@@ -902,9 +943,11 @@ models:
           - name: MMLU
             variant: 5-shot, base
             category: General Knowledge
+            extraction_method: table
           - name: GSM-8K
             variant: CoT, 8-shot, instruct
             category: Math Reasoning
+            extraction_method: text
       - url: https://ai.meta.com/blog/meta-llama-3-1/
         type: blog_post
         status: extracted
@@ -912,7 +955,10 @@ models:
           - name: HumanEval
             variant: 0-shot, instruct
             category: Code Generation
+            extraction_method: chart
 ```
+
+**Note**: Ground truth uses simplified `variant` string for readability. The system will parse this into structured `variant_details` JSON during extraction.
 
 **Contents**:
 - 2 test models (one from each of two different labs)
@@ -967,6 +1013,8 @@ models:
 **Success Criteria**:
 - ✅ Extraction recall ≥ 90% (finds at least 90% of ground truth benchmarks)
 - ✅ Extraction precision ≥ 85% (max 15% false positives)
+- ✅ Variant details extracted correctly (shots, method, model_type)
+- ✅ Extraction method tracked accurately (text vs table vs figure vs chart)
 - ✅ Figure/chart benchmarks are detected (when present in ground truth)
 - ✅ Both text-based and visual benchmark mentions are captured
 
