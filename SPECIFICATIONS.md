@@ -9,7 +9,7 @@
 ## 1. Project Overview
 
 ### 1.1 Purpose
-Automatically track, extract, and analyze benchmark evaluation trends across Large Language Models (LLMs), Vision-Language Models (VLMs), and Audio-Language Models from major AI research labs.
+Automatically track, extract, and analyze benchmark evaluation trends across Large Language Models (LLMs), Vision-Language Models (VLMs), and Audio-to-Text Models (speech recognition, audio understanding) from major AI research labs.
 
 ### 1.2 Goals
 - **Comprehensive Coverage**: Track benchmarks from all major AI labs and organizations
@@ -239,12 +239,16 @@ discovery:
     - "text-generation"
     - "image-text-to-text"
     - "text2text-generation"
+    - "automatic-speech-recognition"  # Audio-to-text models (e.g., Whisper)
   exclude_tags:
     - "time-series-forecasting"
     - "fill-mask"
     - "token-classification"
     - "table-question-answering"
     - "zero-shot-classification"
+    - "text-to-speech"              # Exclude TTS (text-to-audio)
+    - "text-to-audio"                # Exclude text-to-audio generation
+    - "audio-to-audio"               # Exclude audio-to-audio models
   min_downloads: 10000
   date_filter_months: 12  # Rolling window from current date
 ```
@@ -252,12 +256,12 @@ discovery:
 ### 3.2 Discovery Filters
 
 **Include models that**:
-- ✅ Have task tags: `text-generation`, `image-text-to-text`, `text2text-generation`
+- ✅ Have task tags: `text-generation`, `image-text-to-text`, `text2text-generation`, `automatic-speech-recognition`
 - ✅ Released in last 12 months
 - ✅ Have ≥10,000 downloads (popularity threshold)
 
 **Exclude models that**:
-- ❌ Have tags: `time-series-forecasting`, `fill-mask`, `token-classification`, `table-question-answering`, `zero-shot-classification`
+- ❌ Have tags: `time-series-forecasting`, `fill-mask`, `token-classification`, `table-question-answering`, `zero-shot-classification`, `text-to-speech`, `text-to-audio`, `audio-to-audio`
 
 ### 3.3 Model Metadata to Capture
 
@@ -681,8 +685,8 @@ labs:
 discovery:
   models_per_lab: 15
   sort_by: "downloads"
-  filter_tags: ["text-generation", "image-text-to-text"]
-  exclude_tags: ["time-series-forecasting", "fill-mask"]
+  filter_tags: ["text-generation", "image-text-to-text", "text2text-generation", "automatic-speech-recognition"]
+  exclude_tags: ["time-series-forecasting", "fill-mask", "token-classification", "text-to-speech", "text-to-audio", "audio-to-audio"]
   min_downloads: 10000
   date_filter_months: 12
 
@@ -1150,6 +1154,8 @@ python tests/generate_test_reports.py
 - ✅ Benchmark names are consolidated (variants grouped)
 - ✅ Benchmarks are classified using adaptive taxonomy
 - ✅ Zero irrelevant models in output (proper filtering applied)
+- ✅ Audio-to-text models discovered (e.g., Whisper-style ASR models)
+- ✅ Text-to-audio and audio-to-audio models excluded
 - ✅ Reports show ALL discovered models (no arbitrary limits)
 - ✅ Progress is reported to user during execution
 - ✅ Incremental updates work (skip unchanged documents)
