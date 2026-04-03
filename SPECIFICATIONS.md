@@ -990,28 +990,31 @@ models:
 
 **Steps**:
 1. Load all extracted benchmarks from Phase 2
-2. Run classification logic on ground truth benchmarks
-3. Generate taxonomy with:
-   - Discovered categories
+2. Run classification logic on all discovered benchmarks
+3. Generate taxonomy proposal with:
+   - Discovered categories and their definitions
    - Benchmark assignments to categories
-   - Confidence scores (if applicable)
+   - Examples of benchmarks in each category
+   - Rationale for category structure
 4. Output taxonomy for manual review: `tests/taxonomy/test_taxonomy_proposal.md`
 
 **Manual Review Required**:
-- User reviews proposed categories
-- User validates benchmark→category assignments
+- User reviews proposed category structure
+- User validates benchmark→category assignments make logical sense
+- User checks for missing or overly broad categories
 - User approves or requests changes
 
 **Success Criteria**:
-- ✅ Taxonomy includes all expected categories from ground truth
-- ✅ Benchmark classifications match ground truth categories (≥85% agreement)
-- ✅ New categories are proposed with clear rationale
-- ✅ Multi-label assignments are correctly handled
+- ✅ All extracted benchmarks are assigned to at least one category
+- ✅ Category definitions are clear and non-overlapping
+- ✅ Multi-label assignments have clear justification
+- ✅ Category structure is comprehensive (no "Other" category with >20% of benchmarks)
+- ✅ Examples provided for each category demonstrate category coherence
 
 **Output Artifacts**:
-- `tests/taxonomy/test_taxonomy_proposal.md`: Proposed taxonomy with examples
-- `tests/taxonomy/classification_comparison.json`: Ground truth vs system classifications
-- Console: Category distribution and misclassification summary
+- `tests/taxonomy/test_taxonomy_proposal.md`: Proposed taxonomy with examples and rationale
+- `tests/taxonomy/benchmark_categories.json`: Full benchmark→category mapping
+- Console: Category distribution statistics
 
 ---
 
@@ -1080,19 +1083,12 @@ pytest tests/ -v
 python tests/generate_test_reports.py
 ```
 
-### 13.5 Continuous Validation
+### 13.5 Test Coverage Goals
 
-**After each ground truth update**:
-1. Re-run all test phases
-2. Validate extraction accuracy maintained
-3. Review any new failure modes
-4. Update system if regressions detected
-
-**Test Coverage Goals**:
 - Source discovery: 100% of ground truth sources found
 - Benchmark extraction: ≥90% recall, ≥85% precision
 - Figure extraction: ≥80% recall for visual benchmarks
-- Classification: ≥85% agreement with ground truth categories
+- Taxonomy coherence: <20% of benchmarks in catch-all categories
 
 ---
 
