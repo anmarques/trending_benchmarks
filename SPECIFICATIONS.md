@@ -305,7 +305,6 @@ A **benchmark** is a standardized evaluation dataset or task with a clear name m
   - Prompting method (CoT, PoT, TIR, etc.)
   - Model type tested (base, instruct, chat, etc.)
   - Other contextual information (language, subset, etc.)
-- ✅ Extraction method (text, table, figure, chart)
 - ✅ Source information (model_card, blog, paper, etc.)
 - ❌ **Do NOT extract scores** (too variable, context-dependent)
 
@@ -340,7 +339,7 @@ A **benchmark** is a standardized evaluation dataset or task with a clear name m
         "model_type": "base"
       },
       "source_type": "model_card",
-      "extraction_method": "table"
+      "source_url": "https://huggingface.co/meta-llama/Llama-3.1-8B"
     },
     {
       "name": "GSM8K",
@@ -349,8 +348,8 @@ A **benchmark** is a standardized evaluation dataset or task with a clear name m
         "method": "CoT",
         "model_type": "instruct"
       },
-      "source_type": "technical_report",
-      "extraction_method": "text"
+      "source_type": "arxiv_paper",
+      "source_url": "https://arxiv.org/abs/2407.21783"
     },
     {
       "name": "HumanEval",
@@ -360,7 +359,7 @@ A **benchmark** is a standardized evaluation dataset or task with a clear name m
         "model_type": "instruct"
       },
       "source_type": "blog",
-      "extraction_method": "chart"
+      "source_url": "https://ai.meta.com/blog/meta-llama-3-1/"
     }
   ]
 }
@@ -371,12 +370,6 @@ A **benchmark** is a standardized evaluation dataset or task with a clear name m
 - `method`: Prompting method (e.g., "CoT", "PoT", "TIR", null if standard)
 - `model_type`: Model variant tested (e.g., "base", "instruct", "chat", null if not specified)
 - Additional fields can be added as needed (e.g., "language": "multilingual")
-
-**Extraction Method Values**:
-- `"text"`: Extracted from prose or markdown text
-- `"table"`: Extracted from markdown or HTML tables
-- `"figure"`: Extracted from images/charts in blogs or PDFs
-- `"chart"`: Extracted from bar charts, comparison graphs
 
 ### 4.3 Consolidation Rules
 
@@ -472,7 +465,6 @@ CREATE TABLE model_benchmarks (
     variant_details TEXT,              -- JSON: {"shots": "5-shot", "method": "CoT", "model_type": "instruct"}
     source_type TEXT,                  -- model_card, blog, paper, etc.
     source_url TEXT,
-    extraction_method TEXT,            -- "text", "table", "figure", "chart"
     recorded_at TEXT NOT NULL,
     FOREIGN KEY (model_id) REFERENCES models(id),
     FOREIGN KEY (benchmark_id) REFERENCES benchmarks(id),
@@ -527,7 +519,6 @@ CREATE INDEX idx_benchmarks_name ON benchmarks(canonical_name);
 CREATE INDEX idx_benchmarks_last_seen ON benchmarks(last_seen);
 CREATE INDEX idx_model_benchmarks_model ON model_benchmarks(model_id);
 CREATE INDEX idx_model_benchmarks_benchmark ON model_benchmarks(benchmark_id);
-CREATE INDEX idx_model_benchmarks_extraction ON model_benchmarks(extraction_method);
 CREATE INDEX idx_documents_model ON documents(model_id);
 CREATE INDEX idx_documents_hash ON documents(content_hash);
 CREATE INDEX idx_snapshots_timestamp ON snapshots(timestamp);
@@ -648,9 +639,8 @@ MMLU:
 - Total unique benchmarks discovered
 - Number of active labs
 - Time period covered (window_start to window_end)
-- Number of source documents processed
-- Extraction statistics:
-  - Benchmarks from text vs tables vs figures
+- Number of source documents processed (by type: model_card, blog, paper, etc.)
+- Variant statistics:
   - Most common variant patterns (e.g., "X% use CoT", "Y% use 5-shot")
 - Benchmark status distribution:
   - Count and percentage of emerging benchmarks
@@ -1069,11 +1059,9 @@ models:
           - name: MMLU
             variant: 5-shot, base
             category: General Knowledge
-            extraction_method: table
           - name: GSM-8K
             variant: CoT, 8-shot, instruct
             category: Math Reasoning
-            extraction_method: text
       - url: https://ai.meta.com/blog/meta-llama-3-1/
         type: blog_post
         status: extracted
@@ -1081,7 +1069,6 @@ models:
           - name: HumanEval
             variant: 0-shot, instruct
             category: Code Generation
-            extraction_method: chart
 ```
 
 **Note**: Ground truth uses simplified `variant` string for readability. The system will parse this into structured `variant_details` JSON during extraction.
@@ -1140,19 +1127,13 @@ models:
 - ✅ Extraction recall ≥ 90% (finds at least 90% of ground truth benchmarks)
 - ✅ Extraction precision ≥ 85% (max 15% false positives)
 - ✅ Variant details extracted correctly (shots, method, model_type)
-- ✅ Extraction method tracked accurately (text vs table vs figure vs chart)
 - ✅ Figure/chart benchmarks are detected (when present in ground truth)
-- ✅ Both text-based and visual benchmark mentions are captured
+- ✅ Both text-based and visual benchmark mentions are captured from source
 
 **Output Artifacts**:
 - `tests/reports/extraction_validation.md`: Per-source extraction metrics
 - `tests/reports/extraction_errors.json`: List of false positives and false negatives
 - Console: Summary table with precision/recall per source type
-
-**Figure Extraction Validation**:
-- Ground truth must include benchmarks extracted from charts/figures
-- Test must validate that vision-based extraction captures these benchmarks
-- Report must distinguish between text-extracted vs figure-extracted benchmarks
 
 ---
 
@@ -1260,8 +1241,7 @@ python tests/generate_test_reports.py
 ### 13.5 Test Coverage Goals
 
 - Source discovery: 100% of ground truth sources found
-- Benchmark extraction: ≥90% recall, ≥85% precision
-- Figure extraction: ≥80% recall for visual benchmarks
+- Benchmark extraction: ≥90% recall, ≥85% precision (including from figures/charts)
 - Taxonomy coherence: <20% of benchmarks in catch-all categories
 
 ---
