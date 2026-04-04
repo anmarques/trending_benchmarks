@@ -214,3 +214,59 @@ This taxonomy is designed to evolve as new benchmark types emerge:
 - Total Categories: 14
 - Coverage: 75+ unique benchmarks
 - Last Review: April 3, 2026
+
+
+### Vision & Multimodal Understanding
+
+Benchmarks for vision & multimodal understanding
+
+| Benchmark | Description | Typical Metrics |
+|-----------|-------------|-----------------|
+
+
+### Safety & Robustness
+
+Benchmarks for safety & robustness
+
+| Benchmark | Description | Typical Metrics |
+|-----------|-------------|-----------------|
+
+
+### Domain-Specific Expertise
+
+Benchmarks for domain-specific expertise
+
+| Benchmark | Description | Typical Metrics |
+|-----------|-------------|-----------------|
+
+
+### Factuality & Hallucination Detection
+
+Benchmarks for factuality & hallucination detection
+
+| Benchmark | Description | Typical Metrics |
+|-----------|-------------|-----------------|
+
+
+### Speech & Audio
+
+Benchmarks for speech & audio
+
+| Benchmark | Description | Typical Metrics |
+|-----------|-------------|-----------------|
+
+
+### Hallucination & Factuality
+
+Benchmarks for hallucination & factuality
+
+| Benchmark | Description | Typical Metrics |
+|-----------|-------------|-----------------|
+
+
+### Web & Browser Interaction
+
+Benchmarks for web & browser interaction
+
+| Benchmark | Description | Typical Metrics |
+|-----------|-------------|-----------------|

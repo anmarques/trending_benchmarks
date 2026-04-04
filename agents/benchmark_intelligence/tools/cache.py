@@ -905,6 +905,11 @@ class CacheManager:
 
         # Parse dates
         current_dt = datetime.fromisoformat(current_date.replace('Z', '+00:00'))
+
+        # Handle empty date strings
+        if not first_seen or not last_seen:
+            return "active"  # Default to active if dates are missing
+
         first_seen_dt = datetime.fromisoformat(first_seen.replace('Z', '+00:00'))
         last_seen_dt = datetime.fromisoformat(last_seen.replace('Z', '+00:00'))
 
