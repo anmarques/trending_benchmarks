@@ -3,7 +3,6 @@
 labs:
   - Qwen
   - MinimaxAI
-  - 01-ai  # Yi models
   - meta-llama
   - mistralai
   - google
@@ -12,11 +11,9 @@ labs:
   - alibaba-pai
   - tencent
   - deepseek-ai
-  - OpenGVLab
-  - THUDM  # ChatGLM
-  - baichuan-inc
-  - internlm
-  # Note: "huggingface" removed - gets irrelevant time-series/BERT models
+  - nvidia
+  - openai
+  - arcee-ai
 
 # Discovery settings
 discovery:
@@ -28,7 +25,7 @@ discovery:
   filter_tags: []
 
   # Additional filters
-  min_downloads: 10000       # Skip low-usage models
+  min_downloads: 1000        # Skip low-usage models
   date_filter_months: 12     # Only models from last 12 months
 
   # Skip models with these tags (noise reduction)
@@ -39,12 +36,6 @@ discovery:
     - "token-classification"
     - "table-question-answering"
     - "zero-shot-classification"
-
-# Cadence settings
-schedule:
-  frequency: "monthly"  # monthly, weekly, daily
-  day_of_month: 1
-  hour: 9
 
 # PDF parsing constraints
 pdf_constraints:
@@ -68,23 +59,3 @@ parallelization:
   max_concurrent_document_fetches: 5
   enabled: true
   timeout_per_document_seconds: 60
-
-# Lab to GitHub organization mapping
-# Maps lab names (from HuggingFace) to their GitHub organization names
-# for reliable README/PDF fetching
-lab_github_mappings:
-  Qwen: QwenLM
-  meta-llama: meta-llama
-  mistralai: mistralai
-  google: google
-  microsoft: microsoft
-  anthropic: anthropics
-  alibaba-pai: alibaba
-  tencent: Tencent
-  deepseek-ai: deepseek-ai
-  OpenGVLab: OpenGVLab
-  THUDM: THUDM
-  baichuan-inc: baichuan-inc
-  internlm: InternLM
-  01-ai: 01-ai
-  MinimaxAI: MiniMaxAI
