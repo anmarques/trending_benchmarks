@@ -536,7 +536,7 @@ cp benchmark_intelligence/config/auth.yaml.example benchmark_intelligence/config
 # Full execution (all 6 stages)
 python -m benchmark_intelligence.generate
 
-# Individual stages
+# Individual stages (standard Python)
 python -m benchmark_intelligence.filter_models
 python -m benchmark_intelligence.find_docs
 python -m benchmark_intelligence.parse_docs --concurrency 30
@@ -544,8 +544,82 @@ python -m benchmark_intelligence.consolidate_benchmarks --from-db
 python -m benchmark_intelligence.categorize_benchmarks
 python -m benchmark_intelligence.report
 
+# Individual stages (Ambient workflow paths)
+/benchmark_intelligence.filter_models
+/benchmark_intelligence.find_docs
+/benchmark_intelligence.parse_docs --concurrency 30
+/benchmark_intelligence.consolidate_benchmarks --from-db
+/benchmark_intelligence.categorize_benchmarks
+/benchmark_intelligence.report
+/benchmark_intelligence.generate
+
 # JSON outputs stored in: benchmark_intelligence/outputs/stage_<name>_<timestamp>.json
 ```
+
+### Ambient Integration
+
+Each stage module must be exposed as an Ambient workflow command by registering in `.ambient/ambient.json`:
+
+```json
+{
+  "workflows": {
+    "benchmark_intelligence.filter_models": {
+      "command": "python -m benchmark_intelligence.filter_models",
+      "description": "Stage 1: Filter and discover AI models from configured labs",
+      "outputs": ["outputs/stage_01_filter_models_*.json"]
+    },
+    "benchmark_intelligence.find_docs": {
+      "command": "python -m benchmark_intelligence.find_docs",
+      "description": "Stage 2: Find documentation sources for filtered models",
+      "inputs": ["outputs/stage_01_filter_models_*.json"],
+      "outputs": ["outputs/stage_02_find_documents_*.json"]
+    },
+    "benchmark_intelligence.parse_docs": {
+      "command": "python -m benchmark_intelligence.parse_docs",
+      "description": "Stage 3: Parse documents and extract benchmarks (concurrent)",
+      "inputs": ["outputs/stage_02_find_documents_*.json"],
+      "outputs": ["outputs/stage_03_parse_documents_*.json"],
+      "arguments": {
+        "--concurrency": {"type": "int", "default": 20}
+      }
+    },
+    "benchmark_intelligence.consolidate_benchmarks": {
+      "command": "python -m benchmark_intelligence.consolidate_benchmarks",
+      "description": "Stage 4: Consolidate benchmark names and resolve variants",
+      "inputs": ["outputs/stage_03_parse_documents_*.json"],
+      "outputs": ["outputs/stage_04_consolidate_names_*.json"],
+      "arguments": {
+        "--from-db": {"type": "flag", "description": "Query from database instead of JSON"}
+      }
+    },
+    "benchmark_intelligence.categorize_benchmarks": {
+      "command": "python -m benchmark_intelligence.categorize_benchmarks",
+      "description": "Stage 5: Categorize benchmarks into taxonomy",
+      "inputs": ["outputs/stage_04_consolidate_names_*.json"],
+      "outputs": ["outputs/stage_05_categorize_benchmarks_*.json"]
+    },
+    "benchmark_intelligence.report": {
+      "command": "python -m benchmark_intelligence.report",
+      "description": "Stage 6: Generate benchmark intelligence report",
+      "outputs": ["reports/report_*.md"]
+    },
+    "benchmark_intelligence.generate": {
+      "command": "python -m benchmark_intelligence.generate",
+      "description": "Full pipeline: Execute all 6 stages sequentially",
+      "outputs": [
+        "outputs/stage_*.json",
+        "reports/report_*.md"
+      ]
+    }
+  }
+}
+```
+
+This enables:
+- Ambient UI to discover and display available workflows
+- Slash command execution: `/benchmark_intelligence.filter_models`
+- Workflow composition and scheduling within Ambient
+- Input/output tracking for each stage
 
 ---
 
@@ -704,11 +778,23 @@ python -m benchmark_intelligence.report
 - [ ] Update ground truth validation to use new schema
 - [ ] **Test**: All tests pass with >80% coverage
 
-#### T12: Documentation Updates (Priority: P3)
+#### T12: Ambient Workflow Registration (Priority: P2)
+**Effort**: 1-2 hours  
+**Files**: `.ambient/ambient.json`
+
+- [ ] Add workflow definitions for all 7 entry points (6 stages + generate)
+- [ ] Define input/output paths for each stage
+- [ ] Define command-line arguments for stages that support them
+- [ ] Add descriptions for each workflow
+- [ ] **Test**: Verify `/benchmark_intelligence.filter_models` works in Ambient
+- [ ] **Test**: Verify argument passing: `/benchmark_intelligence.parse_docs --concurrency 30`
+
+#### T13: Documentation Updates (Priority: P3)
 **Effort**: 2-3 hours  
-**Files**: `README.md`, `agents/benchmark_intelligence/README.md`
+**Files**: `README.md`, `benchmark_intelligence/README.md`
 
 - [ ] Update README with new execution modes (6 stages)
+- [ ] Document both Python and Ambient execution paths
 - [ ] Document concurrency settings (default 20)
 - [ ] Document JSON output locations and schemas
 - [ ] Add troubleshooting for common concurrency issues
