@@ -21,7 +21,7 @@
 
 1. **Given** the system has discovered 50 models from 5 labs in the last 12 months, **When** I request a trending benchmarks report, **Then** I see a ranked list showing benchmark names, number of models using each benchmark, and percentage of models (relative frequency)
 
-2. **Given** multiple models use the same benchmark with different variants (e.g., MMLU 0-shot vs 5-shot), **When** viewing trending benchmarks, **Then** I see each variant tracked separately with clear labels
+2. **Given** multiple models use the same benchmark with different variants (e.g., MMLU 0-shot vs 5-shot), **When** the system consolidates benchmark names, **Then** variants of the same benchmark are identified as a single benchmark unless they use different evaluation sets (e.g., MMLU vs MMLU-Pro), with variants tracked in the model-benchmark association metadata
 
 3. **Given** benchmark data has been collected over multiple months, **When** viewing a benchmark's details, **Then** I see historical usage counts showing how popularity has changed over time
 
@@ -67,43 +67,7 @@
 
 ---
 
-### User Story 4 - Lab-Specific Benchmark Preferences (Priority: P2)
-
-**As a** AI researcher or product manager,  
-**I want to** see which benchmarks specific labs prefer,  
-**So that** I can understand evaluation strategies of leading organizations and align my evaluation approach with industry leaders.
-
-**Why this priority**: Provides strategic insights but builds on the foundation of P1 stories. Useful but not essential for core value.
-
-**Independent Test**: Can be tested by running the system on models from at least 3 different labs and verifying it produces lab-specific benchmark preference reports. Delivers value by answering "What does Meta focus on vs OpenAI?"
-
-**Acceptance Scenarios**:
-
-1. **Given** the system has tracked models from Meta, OpenAI, and Anthropic, **When** I view lab-specific insights, **Then** I see a breakdown of which benchmarks each lab uses most frequently
-
-2. **Given** a lab consistently uses certain benchmark variants (e.g., always 5-shot), **When** viewing lab preferences, **Then** I see variant preferences clearly shown
-
----
-
-### User Story 5 - Automated Scheduled Updates (Priority: P2)
-
-**As a** system administrator,  
-**I want to** schedule the system to run automatically on a recurring basis,  
-**So that** benchmark intelligence stays current without manual intervention.
-
-**Why this priority**: Automation is valuable for ongoing use but not required for initial value delivery. Can be added after manual execution works.
-
-**Independent Test**: Can be tested by configuring a schedule and verifying the system runs at specified times, creates snapshots, and generates reports. Delivers ongoing value by keeping data fresh.
-
-**Acceptance Scenarios**:
-
-1. **Given** I configure the system to run weekly, **When** the scheduled time arrives, **Then** the system discovers new models, extracts benchmarks, creates a snapshot, and generates an updated report
-
-2. **Given** a scheduled run completes, **When** I view the system logs, **Then** I see a summary of what was processed (models discovered, benchmarks extracted, new vs cached sources)
-
----
-
-### User Story 6 - Taxonomy Evolution and Categorization (Priority: P3)
+### User Story 4 - Taxonomy Evolution and Categorization (Priority: P2)
 
 **As a** researcher using the system,  
 **I want to** see benchmarks categorized by type (e.g., reasoning, math, code, knowledge),  
@@ -128,7 +92,7 @@
 - **What happens when a model card is updated with new benchmarks?** System should detect content changes via hash comparison and re-extract only from changed sources
 - **How does the system handle models with no benchmark data?** System should log these models but not block processing; report should show "N models with no benchmarks found"
 - **What if a source is temporarily unavailable (404, timeout)?** System should retry with exponential backoff, cache last successful fetch, and continue processing other sources
-- **How are benchmark name variants handled (e.g., "MMLU" vs "MMLU-Pro" vs "MMLU 5-shot")?** System should use fuzzy matching to consolidate similar names but preserve meaningful variants
+- **How are benchmark name variants handled (e.g., "MMLU" vs "MMLU-Pro" vs "MMLU 5-shot")?** System should use fuzzy matching to consolidate similar names but preserve meaningful variants (benchmarks using different evaluation sets). When in doubt about whether variants represent the same benchmark, the system should search the web for clarification
 - **What happens with the 12-month rolling window when the system is first initialized?** System should work with whatever data is available, clearly indicating the actual time window in reports
 - **How does the system handle benchmarks mentioned in figures/charts vs text?** Both should be extracted and tagged with extraction method; figure-extracted benchmarks should be validated against text mentions where possible
 
@@ -146,14 +110,13 @@
 - **FR-008**: System MUST classify benchmarks as "Emerging" (first seen ≤3 months), "Almost Extinct" (last seen ≥9 months), or "Active" (all others)
 - **FR-009**: System MUST calculate both absolute mentions (count of models) and relative frequency (percentage) for each benchmark
 - **FR-010**: System MUST create temporal snapshots after each execution run, storing window boundaries and benchmark statistics
-- **FR-011**: System MUST cache source documents using content hashes to avoid re-processing unchanged content
-- **FR-012**: System MUST support three execution modes: snapshot (pipeline + snapshot), report (report only from latest snapshot), and full (pipeline + snapshot + report)
-- **FR-013**: System MUST generate comprehensive reports showing trending benchmarks, emerging benchmarks, almost-extinct benchmarks, category distribution, and lab-specific preferences
+- **FR-011**: System MUST cache content hashes of source documents to detect changes and avoid re-processing unchanged content
+- **FR-012**: System MUST support execution of individual pipeline stages: (1) model filtering, (2) document finding, (3) document parsing (benchmark extraction), (4) name consolidation, (5) categorization (taxonomy), (6) reporting. Each stage can be called individually or in sequence. Intermediate results MUST be output in JSON format for verification. Default execution is end-to-end processing of all stages
+- **FR-013**: System MUST generate comprehensive reports showing trending benchmarks, emerging benchmarks, almost-extinct benchmarks, and category distribution
 - **FR-014**: System MUST allow manual configuration of labs to track via configuration file
 - **FR-015**: System MUST persist all data in SQLite database with tables for models, benchmarks, model-benchmark associations, documents, snapshots, and benchmark mentions
-- **FR-016**: System MUST support both automatic-speech-recognition (ASR) models and text/vision models, excluding text-to-speech and audio generation models
-- **FR-017**: System MUST preserve historical taxonomy versions when taxonomy evolves
-- **FR-018**: Users MUST be able to manually override AI-generated taxonomy categories via configuration file
+- **FR-016**: System MUST preserve historical taxonomy versions when taxonomy evolves
+- **FR-017**: Users MUST be able to manually override AI-generated taxonomy categories via configuration file
 
 ### Key Entities
 
@@ -186,17 +149,11 @@
 ### Measurable Outcomes
 
 - **SC-001**: System successfully discovers and processes 100% of models from configured labs within the specified date range and filter criteria
-- **SC-002**: System extracts benchmarks from all available source types (model cards, papers, blogs, GitHub) with 95%+ accuracy compared to manual verification
-- **SC-003**: Benchmark reports are generated within 30 minutes for up to 100 models across 10 labs
-- **SC-004**: Emerging benchmark detection correctly identifies benchmarks first seen within 3 months with 100% accuracy
-- **SC-005**: Almost-extinct benchmark detection correctly identifies benchmarks not seen in 9+ months with 100% accuracy
-- **SC-006**: Fuzzy matching consolidates 90%+ of obvious duplicates (case differences, separator variations) while preserving distinct variants
-- **SC-007**: Vision AI successfully extracts benchmarks from charts/figures with 85%+ accuracy when validated against available ground truth
-- **SC-008**: Cache effectiveness: 80%+ of unchanged source documents are skipped on subsequent runs
-- **SC-009**: Reports include lab-specific insights showing benchmark preferences for each configured lab with at least 5 models
-- **SC-010**: System completes full execution (discovery + extraction + consolidation + classification + snapshot + report) without manual intervention
-- **SC-011**: Taxonomy evolution captures new benchmark categories within one execution cycle of first discovery
-- **SC-012**: Generated reports are readable by non-technical stakeholders and answer key questions: "What benchmarks are trending?", "What's new?", "What's dying?"
+- **SC-002**: System extracts benchmarks from all available source types (model cards, papers, blogs, GitHub) with 95%+ accuracy when validated against ground truth test data
+- **SC-003**: System generates benchmark reports for all discovered models regardless of dataset size
+- **SC-004**: System completes full execution (discovery + extraction + consolidation + classification + snapshot + report) without manual intervention
+- **SC-005**: Taxonomy evolution captures new benchmark categories within one execution cycle of first discovery
+- **SC-006**: Generated reports are readable by non-technical stakeholders and answer key questions: "What benchmarks are trending?", "What's new?", "What's dying?"
 
 ### Assumptions
 
@@ -231,8 +188,11 @@
 - Real-time benchmark tracking (system runs on-demand or scheduled, not continuously)
 - Benchmark score tracking or leaderboard functionality (only tracks which benchmarks are used, not scores)
 - Comparison of model performance across benchmarks
+- Lab-specific benchmark preferences and insights
+- Automated scheduling or recurring execution (initial version is manually triggered)
 - Automated email notifications or alerts
 - User authentication or multi-user access control
 - Web-based user interface (reports are generated as markdown files)
 - Integration with external analytics or BI platforms
 - Support for non-HuggingFace model repositories in initial version
+- Support for specific model types (ASR, TTS, etc.) - system processes all text-generation and multimodal models from configured labs
