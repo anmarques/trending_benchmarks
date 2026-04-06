@@ -121,35 +121,35 @@ parallel ::: \
 
 ### Database Schema Updates
 
-- [ ] T005 Add window_start, window_end, taxonomy_version columns to snapshots table in agents/benchmark_intelligence/tools/cache.py
-- [ ] T006 Create benchmark_mentions table with schema from plan.md in agents/benchmark_intelligence/tools/cache.py
-- [ ] T007 Add migration logic to CacheManager.__init__ to handle existing databases in agents/benchmark_intelligence/tools/cache.py
-- [ ] T008 Update CacheManager.create_snapshot() to populate new snapshot fields in agents/benchmark_intelligence/tools/cache.py
+- [X] T005 Add window_start, window_end, taxonomy_version columns to snapshots table in agents/benchmark_intelligence/tools/cache.py
+- [X] T006 Create benchmark_mentions table with schema from plan.md in agents/benchmark_intelligence/tools/cache.py
+- [X] T007 Add migration logic to CacheManager.__init__ to handle existing databases in agents/benchmark_intelligence/tools/cache.py
+- [X] T008 Update CacheManager.create_snapshot() to populate new snapshot fields in agents/benchmark_intelligence/tools/cache.py
 
 ### Connection Pooling
 
-- [ ] T009 Create ConnectionPool class with configurable pool size in agents/benchmark_intelligence/connection_pool.py
-- [ ] T010 Implement context manager __enter__ and __exit__ methods in agents/benchmark_intelligence/connection_pool.py
-- [ ] T011 Add automatic retry on SQLITE_BUSY with exponential backoff (max 3 attempts) in agents/benchmark_intelligence/connection_pool.py
-- [ ] T012 Replace direct sqlite3.connect() calls in cache.py with ConnectionPool usage in agents/benchmark_intelligence/tools/cache.py
+- [X] T009 Create ConnectionPool class with configurable pool size in agents/benchmark_intelligence/connection_pool.py
+- [X] T010 Implement context manager __enter__ and __exit__ methods in agents/benchmark_intelligence/connection_pool.py
+- [X] T011 Add automatic retry on SQLITE_BUSY with exponential backoff (max 3 attempts) in agents/benchmark_intelligence/connection_pool.py
+- [X] T012 Replace direct sqlite3.connect() calls in cache.py with ConnectionPool usage in agents/benchmark_intelligence/tools/cache.py
 
 ### Concurrent Processing Framework
 
-- [ ] T013 Create ConcurrentModelProcessor class using asyncio in agents/benchmark_intelligence/concurrent_processor.py
-- [ ] T014 Implement work queue with ThreadPoolExecutor for 20+ concurrent workers in agents/benchmark_intelligence/concurrent_processor.py
+- [X] T013 Create ConcurrentModelProcessor class using asyncio in agents/benchmark_intelligence/concurrent_processor.py
+- [X] T014 Implement work queue with ThreadPoolExecutor for 20+ concurrent workers in agents/benchmark_intelligence/concurrent_processor.py
 
 ### 6-Stage Pipeline Infrastructure
 
-- [ ] T015 Create stage_utils.py with find_latest_stage_output(stage_name) function in agents/benchmark_intelligence/stage_utils.py
-- [ ] T016 Create load_stage_json(filepath) with schema validation in agents/benchmark_intelligence/stage_utils.py
-- [ ] T017 Create save_stage_json(data, stage_name) with standardized schema in agents/benchmark_intelligence/stage_utils.py
-- [ ] T018 Define JSON schema constants for all 6 stages in agents/benchmark_intelligence/stage_utils.py
+- [X] T015 Create stage_utils.py with find_latest_stage_output(stage_name) function in agents/benchmark_intelligence/stage_utils.py
+- [X] T016 Create load_stage_json(filepath) with schema validation in agents/benchmark_intelligence/stage_utils.py
+- [X] T017 Create save_stage_json(data, stage_name) with standardized schema in agents/benchmark_intelligence/stage_utils.py
+- [X] T018 Define JSON schema constants for all 6 stages in agents/benchmark_intelligence/stage_utils.py
 
-**Completion Criteria**:
-- Database schema includes all new tables/columns
-- Connection pool handles 20+ concurrent writers without SQLITE_BUSY errors
-- ConcurrentModelProcessor can process work items in parallel
-- Stage utilities can save/load JSON with validation
+**Completion Criteria**: ✓ ALL COMPLETE
+- Database schema includes all new tables/columns ✓
+- Connection pool handles 20+ concurrent writers without SQLITE_BUSY errors ✓
+- ConcurrentModelProcessor can process work items in parallel ✓
+- Stage utilities can save/load JSON with validation ✓
 
 **Independent Test**: Create 20 threads that write to database concurrently using ConnectionPool; verify no data loss or corruption
 

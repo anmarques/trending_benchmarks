@@ -13,29 +13,62 @@ from typing import Dict, List, Optional, Any, Tuple
 from pathlib import Path
 from contextlib import contextmanager
 
+from ..connection_pool import ConnectionPool
+
 
 class CacheManager:
     """SQLite-backed cache manager for benchmark intelligence data."""
 
-    def __init__(self, db_path: str = "benchmark_cache.db"):
+    def __init__(
+        self,
+        db_path: str = "benchmark_cache.db",
+        pool_size: int = 5,
+        use_pool: bool = True
+    ):
         """
         Initialize the cache manager.
 
         Args:
             db_path: Path to SQLite database file
+            pool_size: Size of connection pool for concurrent access
+            use_pool: Whether to use connection pooling (default: True)
         """
         self.db_path = db_path
+        self.use_pool = use_pool
+
+        # Initialize connection pool for concurrent access (T012)
+        if self.use_pool:
+            self._pool = ConnectionPool(
+                db_path=db_path,
+                pool_size=pool_size,
+                timeout=30.0,
+                max_retries=3
+            )
+        else:
+            self._pool = None
+
         self._init_db()
 
     @contextmanager
     def _get_connection(self):
-        """Context manager for database connections."""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        try:
-            yield conn
-        finally:
-            conn.close()
+        """
+        Context manager for database connections with automatic retry.
+
+        Uses ConnectionPool for concurrent access with SQLITE_BUSY retry logic.
+        Falls back to direct connection if pooling is disabled.
+        """
+        if self.use_pool and self._pool:
+            # Use connection pool with automatic retry (T012)
+            with self._pool.connection() as conn:
+                yield conn
+        else:
+            # Direct connection (legacy mode)
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            try:
+                yield conn
+            finally:
+                conn.close()
 
     def _init_db(self):
         """Initialize database schema with all tables and indexes."""
@@ -109,9 +142,29 @@ class CacheManager:
                 CREATE TABLE IF NOT EXISTS snapshots (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     timestamp TEXT NOT NULL,
+                    window_start TEXT NOT NULL,
+                    window_end TEXT NOT NULL,
                     model_count INTEGER NOT NULL,
                     benchmark_count INTEGER NOT NULL,
+                    taxonomy_version TEXT,
                     summary TEXT  -- JSON object with additional stats
+                )
+            """)
+
+            # Benchmark mentions table (denormalized temporal tracking per snapshot)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS benchmark_mentions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    snapshot_id INTEGER NOT NULL,
+                    benchmark_id INTEGER NOT NULL,
+                    absolute_mentions INTEGER NOT NULL,
+                    relative_frequency REAL NOT NULL,
+                    first_seen TEXT NOT NULL,
+                    last_seen TEXT NOT NULL,
+                    status TEXT NOT NULL,  -- emerging, active, almost_extinct
+                    FOREIGN KEY (snapshot_id) REFERENCES snapshots(id) ON DELETE CASCADE,
+                    FOREIGN KEY (benchmark_id) REFERENCES benchmarks(id) ON DELETE CASCADE,
+                    UNIQUE(snapshot_id, benchmark_id)
                 )
             """)
 
@@ -188,7 +241,48 @@ class CacheManager:
                 ON snapshots(timestamp)
             """)
 
+            # Benchmark mentions indexes
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_benchmark_mentions_snapshot
+                ON benchmark_mentions(snapshot_id)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_benchmark_mentions_benchmark
+                ON benchmark_mentions(benchmark_id)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_benchmark_mentions_status
+                ON benchmark_mentions(status)
+            """)
+
+            # Run migration for existing databases
+            self._migrate_schema(cursor)
+
             conn.commit()
+
+    def _migrate_schema(self, cursor):
+        """
+        Migrate existing databases to new schema.
+
+        Adds missing columns to existing tables to support new features.
+        This is called during _init_db() to ensure backward compatibility.
+        """
+        # Check if snapshots table needs migration
+        cursor.execute("PRAGMA table_info(snapshots)")
+        columns = {row[1] for row in cursor.fetchall()}
+
+        # Add missing columns to snapshots table (T005)
+        if 'window_start' not in columns:
+            cursor.execute("ALTER TABLE snapshots ADD COLUMN window_start TEXT DEFAULT ''")
+        if 'window_end' not in columns:
+            cursor.execute("ALTER TABLE snapshots ADD COLUMN window_end TEXT DEFAULT ''")
+        if 'taxonomy_version' not in columns:
+            cursor.execute("ALTER TABLE snapshots ADD COLUMN taxonomy_version TEXT")
+
+        # Note: benchmark_mentions table is created via CREATE TABLE IF NOT EXISTS
+        # so no migration needed for new table
 
     @staticmethod
     def _compute_hash(content: str) -> str:
@@ -649,17 +743,29 @@ class CacheManager:
             return content_hash == new_content_hash
 
 
-    def create_snapshot(self, summary: Optional[Dict[str, Any]] = None) -> int:
+    def create_snapshot(
+        self,
+        summary: Optional[Dict[str, Any]] = None,
+        window_months: int = 12,
+        taxonomy_version: Optional[str] = None
+    ) -> int:
         """
-        Create a snapshot of the current cache state.
+        Create a snapshot of the current cache state with rolling window.
 
         Args:
             summary: Additional summary information as dictionary
+            window_months: Number of months for rolling window (default: 12)
+            taxonomy_version: Version string of taxonomy used
 
         Returns:
             Snapshot ID
         """
         now = self._now()
+        now_dt = datetime.utcnow()
+
+        # Calculate rolling window boundaries (T008)
+        window_end = now_dt.isoformat()
+        window_start = (now_dt - timedelta(days=window_months * 30)).isoformat()
 
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -671,13 +777,13 @@ class CacheManager:
             cursor.execute("SELECT COUNT(*) as count FROM benchmarks")
             benchmark_count = cursor.fetchone()['count']
 
-            # Create snapshot
+            # Create snapshot with new fields (T008)
             summary_json = json.dumps(summary or {})
             cursor.execute("""
                 INSERT INTO snapshots
-                (timestamp, model_count, benchmark_count, summary)
-                VALUES (?, ?, ?, ?)
-            """, (now, model_count, benchmark_count, summary_json))
+                (timestamp, window_start, window_end, model_count, benchmark_count, taxonomy_version, summary)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (now, window_start, window_end, model_count, benchmark_count, taxonomy_version, summary_json))
 
             snapshot_id = cursor.lastrowid
             conn.commit()
