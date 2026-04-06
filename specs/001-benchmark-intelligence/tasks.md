@@ -179,12 +179,12 @@ parallel ::: \
 
 ### Stage 3: Document Parsing
 
-- [ ] T027 [P] [US1] Create parse_docs.py with async run(docs_json, concurrency) function in agents/benchmark_intelligence/parse_docs.py
-- [ ] T028 [P] [US1] Integrate ConcurrentModelProcessor for parallel extraction in parse_docs.run()
-- [ ] T029 [P] [US1] Wrap extract_benchmarks() from tools/extract_benchmarks.py for each document in agents/benchmark_intelligence/parse_docs.py
-- [ ] T030 [P] [US1] Add __main__ block with argparse for --input and --concurrency in agents/benchmark_intelligence/parse_docs.py
-- [ ] T031 [P] [US1] Write extracted benchmarks to database via cache.py in agents/benchmark_intelligence/parse_docs.py
-- [ ] T032 [P] [US1] Output JSON with benchmark extractions to outputs/parse_documents_<timestamp>.json in agents/benchmark_intelligence/parse_docs.py
+- [X] T027 [P] [US1] Create parse_docs.py with async run(docs_json, concurrency) function in agents/benchmark_intelligence/parse_docs.py
+- [X] T028 [P] [US1] Integrate ConcurrentModelProcessor for parallel extraction in parse_docs.run()
+- [X] T029 [P] [US1] Wrap extract_benchmarks() from tools/extract_benchmarks.py for each document in agents/benchmark_intelligence/parse_docs.py
+- [X] T030 [P] [US1] Add __main__ block with argparse for --input and --concurrency in agents/benchmark_intelligence/parse_docs.py
+- [X] T031 [P] [US1] Write extracted benchmarks to database via cache.py in agents/benchmark_intelligence/parse_docs.py
+- [X] T032 [P] [US1] Output JSON with benchmark extractions to outputs/parse_documents_<timestamp>.json in agents/benchmark_intelligence/parse_docs.py
 
 ### Stage 4: Name Consolidation
 
