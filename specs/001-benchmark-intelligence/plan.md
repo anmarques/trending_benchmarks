@@ -800,6 +800,33 @@ This enables:
 - [ ] Add troubleshooting for common concurrency issues
 - [ ] **Deliverable**: Updated documentation
 
+#### Task Numbering Note
+
+The 13 high-level tasks (T1-T13) outlined in this plan represent **gap closure themes** from the existing implementation. These have been expanded into **125 detailed implementation tasks (T001-T120 plus 5 added during analysis)** in `tasks.md`, organized by user story for incremental delivery:
+
+- **T1** (Database Schema) → T005-T008
+- **T2** (Connection Pooling) → T009-T012
+- **T3** (Concurrent Processing) → T013-T014
+- **T4** (6-Stage Pipeline) → T015-T050
+- **T5** (Error Aggregation) → T063-T068
+- **T6** (Progress Tracking) → T069-T073
+- **T7** (Web Search Disambiguation) → T080-T084
+- **T8** (90% Fuzzy Threshold) → T077-T079
+- **T9** (12-Month Window) → T051-T055, T062A
+- **T10** (Rate Limiting) → T089-T093
+- **T11** (Testing) → T094-T103, T103A-C
+- **T12** (Ambient Registration) → T104-T112
+- **T13** (Documentation) → T113-T120
+
+Additional tasks added during specification analysis:
+- **T076A**: Edge case handling for models with no benchmarks
+- **T062A**: Edge case handling for <12-month data windows
+- **T103A**: Pipeline resumability validation
+- **T103B**: Ground truth accuracy validation (≥95%)
+- **T103C**: Code coverage measurement (≥80%)
+
+See `tasks.md` for the complete task breakdown with dependencies, phases, and acceptance criteria.
+
 ---
 
 ## Risk Assessment

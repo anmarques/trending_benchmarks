@@ -13,9 +13,9 @@
 
 This document breaks down the implementation into executable tasks organized by user story. The existing codebase (~7500 LOC) provides substantial functionality; these tasks focus on targeted enhancements to align with specification requirements.
 
-**Total Tasks**: 64  
+**Total Tasks**: 120  
 **Total Phases**: 7  
-**Estimated Effort**: 45-60 hours
+**Estimated Effort**: 56-72 hours
 
 ---
 
@@ -25,12 +25,13 @@ This document breaks down the implementation into executable tasks organized by 
 **User Story 1 only** - Delivers core value: trending benchmarks report with basic consolidation
 
 ### Delivery Order
-1. **Phase 2**: Foundational infrastructure (blocking all user stories)
-2. **Phase 3**: User Story 1 - Trending benchmarks (MVP - ~50% of value)
-3. **Phase 4**: User Story 2 - Temporal tracking (emerging/extinct classification)
-4. **Phase 5**: User Story 3 - Extraction quality & observability
-5. **Phase 6**: User Story 4 - Taxonomy evolution
-6. **Phase 7**: Polish & cross-cutting concerns
+1. **Phase 1**: Setup & Project Initialization
+2. **Phase 2**: Foundational infrastructure (blocking all user stories)
+3. **Phase 3**: User Story 1 - Trending benchmarks (MVP - ~50% of value)
+4. **Phase 4**: User Story 2 - Temporal tracking (emerging/extinct classification)
+5. **Phase 5**: User Story 3 - Extraction quality & observability
+6. **Phase 6**: User Story 4 - Taxonomy evolution
+7. **Phase 7**: Polish & cross-cutting concerns
 
 ### Independent Testing Criteria
 Each user story phase includes clear acceptance criteria that can be validated without implementing subsequent stories.
@@ -58,10 +59,10 @@ Phase 7 (Polish)
 
 - **No dependencies**: T001-T004 (setup can run in parallel)
 - **Blocks US1-US4**: T005-T014 (foundational infrastructure)
-- **Blocks US2**: T015-T020 (pipeline stages for US1)
-- **Blocks US4**: T028-T033 (temporal tracking for US2)
-- **Independent**: T034-T042, T043-T050 (US3 & US4 can run in parallel)
-- **Final**: T051-T064 (polish depends on all user stories)
+- **Blocks all stories**: T015-T018 (pipeline stage utilities - foundational)
+- **US1 completes before US2**: T019-T050 (pipeline implementation needed for temporal tracking)
+- **Independent**: T051-T088 (US2, US3, US4 can run in parallel after US1)
+- **Final**: T089-T120 (polish depends on all user stories)
 
 ---
 
@@ -103,10 +104,10 @@ parallel ::: \
 
 ### Tasks
 
-- [ ] T001 [P] Verify Python project structure in agents/benchmark_intelligence/
-- [ ] T002 [P] Verify config.yaml exists at project root with labs configuration
+- [ ] T001 [P] Check agents/benchmark_intelligence/ directory exists with __init__.py, tools/, and clients/ subdirectories
+- [ ] T002 [P] Check config.yaml exists at project root and contains 'labs' key with at least one lab configured
 - [ ] T003 [P] Create outputs/ directory for JSON stage outputs
-- [ ] T004 [P] Verify existing tools/ and clients/ modules are importable
+- [ ] T004 [P] Run import tests: verify 'from agents.benchmark_intelligence.tools import cache' and 'from agents.benchmark_intelligence.clients import factory' succeed
 
 **Completion Criteria**: All tasks pass; project structure validated
 
@@ -259,19 +260,22 @@ parallel ::: \
 - [ ] T060 [US2] Add generate_almost_extinct_section() to ReportGenerator in agents/benchmark_intelligence/tools/reporting.py
 - [ ] T061 [US2] Query benchmark_mentions for status-based filtering in agents/benchmark_intelligence/tools/reporting.py
 - [ ] T062 [US2] Update report.py to include emerging and almost-extinct sections in agents/benchmark_intelligence/report.py
+- [ ] T062A [US2] Verify report clearly indicates actual time window when <12 months data available in agents/benchmark_intelligence/report.py
 
 **Completion Criteria**:
 - Snapshots include 12-month rolling window boundaries
 - Benchmark status correctly classified based on first_seen/last_seen
 - Report includes emerging and almost-extinct sections with visual indicators
+- Report clearly shows actual window (e.g., "6-month window") when <12 months data available
 
 **Independent Test**:
 1. Create test data with models spanning 15 months
 2. Include benchmarks with known first/last seen dates
 3. Run pipeline and verify snapshot has correct window_start/window_end
-4. Verify benchmarks first seen ≤3 months ago are marked "Emerging"
-5. Verify benchmarks last seen ≥9 months ago are marked "Almost Extinct"
-6. Verify report displays both sections correctly
+4. Test first initialization: clear database, run with only 6 months of data, verify report states "6-month window (2025-10-06 to 2026-04-06)" not "12-month window"
+5. Verify benchmarks first seen ≤3 months ago are marked "Emerging"
+6. Verify benchmarks last seen ≥9 months ago are marked "Almost Extinct"
+7. Verify report displays both sections correctly
 
 ---
 
@@ -302,14 +306,16 @@ parallel ::: \
 
 ### Multi-Source Verification
 
-- [ ] T074 [US3] Verify fetch_docs.py attempts all source types (model_card, arxiv, blog, github) in agents/benchmark_intelligence/tools/fetch_docs.py
-- [ ] T075 [US3] Verify vision AI integration for chart extraction in agents/benchmark_intelligence/tools/extract_benchmarks.py
+- [ ] T074 [US3] Review fetch_docs.py code and confirm all 4 source types (model_card, arxiv, blog, github) are attempted; add missing sources if needed in agents/benchmark_intelligence/tools/fetch_docs.py
+- [ ] T075 [US3] Review extract_benchmarks.py for vision AI calls (Claude with images); test with sample chart image and verify benchmark extraction works in agents/benchmark_intelligence/tools/extract_benchmarks.py
 - [ ] T076 [US3] Add source_type tagging to extracted benchmarks in agents/benchmark_intelligence/tools/extract_benchmarks.py
+- [ ] T076A [US3] Handle models with no benchmarks found - log count in report without blocking pipeline in agents/benchmark_intelligence/report.py
 
 **Completion Criteria**:
 - Errors aggregated by type with counts displayed at completion
 - Real-time progress shows models processed, benchmarks extracted, errors encountered
 - Multi-source extraction verified for all document types
+- Models with no benchmarks logged in report with count (e.g., "N models with no benchmarks found")
 
 **Independent Test**:
 1. Run pipeline with a mix of models (some with missing sources)
@@ -332,7 +338,7 @@ parallel ::: \
 ### Fuzzy Matching Threshold
 
 - [ ] T077 [P] [US4] Add FUZZY_MATCH_THRESHOLD = 0.90 constant in agents/benchmark_intelligence/tools/consolidate.py
-- [ ] T078 [P] [US4] Verify fuzzy matching logic uses threshold in consolidate_benchmarks() in agents/benchmark_intelligence/tools/consolidate.py
+- [ ] T078 [P] [US4] Review consolidate_benchmarks() code to confirm FUZZY_MATCH_THRESHOLD constant is used in similarity comparisons; update if hardcoded in agents/benchmark_intelligence/tools/consolidate.py
 - [ ] T079 [P] [US4] Add configuration option for threshold in config.yaml
 
 ### Web Search Disambiguation
@@ -345,7 +351,7 @@ parallel ::: \
 
 ### Taxonomy Evolution
 
-- [ ] T085 [US4] Verify taxonomy_manager.py supports automatic category creation in agents/benchmark_intelligence/tools/taxonomy_manager.py
+- [ ] T085 [US4] Review taxonomy_manager.py code to confirm new categories can be added dynamically; test by introducing novel benchmark type in agents/benchmark_intelligence/tools/taxonomy_manager.py
 - [ ] T086 [US4] Add taxonomy_version tracking to snapshots in agents/benchmark_intelligence/tools/cache.py
 - [ ] T087 [US4] Implement taxonomy_changes section in categorization JSON output in agents/benchmark_intelligence/categorize_benchmarks.py
 - [ ] T088 [US4] Support manual category overrides via config.yaml in agents/benchmark_intelligence/tools/taxonomy_manager.py
@@ -395,6 +401,9 @@ parallel ::: \
 - [ ] T101 [P] Add test for 12-month window calculation in tests/test_temporal_tracking.py
 - [ ] T102 [P] Add test for status classification (emerging/extinct) in tests/test_temporal_tracking.py
 - [ ] T103 Update existing ground truth validation tests in tests/
+- [ ] T103A [P] Add test for pipeline resumability after interruption in tests/test_resumability.py
+- [ ] T103B [P] Run ground truth validation and verify ≥95% extraction accuracy meets SC-002 in tests/test_ground_truth.py
+- [ ] T103C [P] Run pytest-cov and verify ≥80% coverage for new modules (connection_pool, error_aggregator, progress_tracker, rate_limiter, concurrent_processor) in tests/
 
 ### Ambient Workflow Registration
 
@@ -421,7 +430,9 @@ parallel ::: \
 
 **Completion Criteria**:
 - API rate limiting prevents 429 errors with automatic backoff
-- Test coverage >80% for new code
+- Test coverage ≥80% for new code (verified via pytest-cov)
+- Ground truth validation confirms ≥95% extraction accuracy (SC-002)
+- Pipeline resumability validated (hash cache prevents re-processing)
 - All 7 Ambient workflows registered and functional
 - Documentation covers all execution modes with examples
 
@@ -429,10 +440,12 @@ parallel ::: \
 1. Simulate high API usage to trigger rate limiting
 2. Verify requests queued and retried with backoff (no 429 errors)
 3. Run all unit tests: `pytest tests/ -v`
-4. Verify >80% coverage on new modules
-5. Run full pipeline via Ambient: `/benchmark_intelligence.generate`
-6. Run individual stage via Ambient with args: `/benchmark_intelligence.parse_docs --concurrency 30`
-7. Review documentation and verify all examples work as documented
+4. Run coverage analysis: `pytest tests/ --cov=agents.benchmark_intelligence --cov-report=term-missing` and verify ≥80% coverage on new modules
+5. Run ground truth validation and confirm ≥95% extraction accuracy
+6. Test resumability: interrupt pipeline mid-execution, restart, verify hash cache prevents re-processing unchanged documents
+7. Run full pipeline via Ambient: `/benchmark_intelligence.generate`
+8. Run individual stage via Ambient with args: `/benchmark_intelligence.parse_docs --concurrency 30`
+9. Review documentation and verify all examples work as documented
 
 ---
 
@@ -445,20 +458,20 @@ parallel ::: \
 | Phase 1: Setup | T001-T004 | 4 | 1 |
 | Phase 2: Foundation | T005-T018 | 14 | 12-15 |
 | Phase 3: US1 (MVP) | T019-T050 | 32 | 15-20 |
-| Phase 4: US2 | T051-T062 | 12 | 6-8 |
-| Phase 5: US3 | T063-T076 | 14 | 7-9 |
+| Phase 4: US2 | T051-T062A | 13 | 6-9 |
+| Phase 5: US3 | T063-T076A | 15 | 7-10 |
 | Phase 6: US4 | T077-T088 | 12 | 5-7 |
-| Phase 7: Polish | T089-T120 | 32 | 10-12 |
-| **Total** | **T001-T120** | **120** | **56-72** |
+| Phase 7: Polish | T089-T120, T103A-C | 35 | 11-14 |
+| **Total** | **T001-T120 + 5 new** | **125** | **57-76** |
 
 ### By Priority
 
 | Priority | Description | Task Count |
 |----------|-------------|------------|
 | P0 | Foundational (blocks all stories) | 14 |
-| P1 | User Stories 1-3 | 58 |
+| P1 | User Stories 1-3 | 60 |
 | P2 | User Story 4 | 12 |
-| P3 | Polish & Documentation | 36 |
+| P3 | Polish & Documentation | 39 |
 
 ### Parallelization Opportunities
 
