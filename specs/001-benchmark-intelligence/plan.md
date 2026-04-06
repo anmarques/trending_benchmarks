@@ -103,7 +103,7 @@ Each stage is a **standalone Python script** with its own `__main__` block:
 def run(config_path: str = "config.yaml") -> str:
     """Query HuggingFace, filter models, write JSON, return output path"""
     # Reads: config.yaml
-    # Writes: outputs/stage_01_filter_models_<timestamp>.json
+    # Writes: outputs/filter_models_<timestamp>.json
     # DB: None (read-only discovery)
     
 if __name__ == "__main__":
@@ -118,7 +118,7 @@ if __name__ == "__main__":
 def run(models_json: str = None) -> str:
     """Find docs for models, write JSON, return output path"""
     # Reads: outputs/stage_01_*.json (auto-find if not specified)
-    # Writes: outputs/stage_02_find_documents_<timestamp>.json
+    # Writes: outputs/find_documents_<timestamp>.json
     # DB: Check documents table for cached hashes
     
 if __name__ == "__main__":
@@ -133,7 +133,7 @@ if __name__ == "__main__":
 def run(docs_json: str = None, concurrency: int = 20) -> str:
     """Extract benchmarks from docs, write JSON, return output path"""
     # Reads: outputs/stage_02_*.json (auto-find if not specified)
-    # Writes: outputs/stage_03_parse_documents_<timestamp>.json
+    # Writes: outputs/parse_documents_<timestamp>.json
     # DB: Insert into model_benchmarks table
     
 if __name__ == "__main__":
@@ -173,17 +173,17 @@ if __name__ == "__main__":
    - **Database**: Persistent state (models, benchmarks, associations, snapshots)
    - Stages read from previous JSON file OR query database (depending on stage)
    - When running individual stage without input file, automatically find latest from previous stage
-   - Option to specify input file: `--input outputs/stage_02_find_documents_20260406.json`
+   - Option to specify input file: `--input outputs/find_documents_20260406.json`
 
 4. **JSON File Naming Convention**:
    ```
    outputs/
-   ├── stage_01_filter_models_20260406_120000.json
-   ├── stage_02_find_documents_20260406_120500.json
-   ├── stage_03_parse_documents_20260406_121500.json
-   ├── stage_04_consolidate_names_20260406_122500.json
-   ├── stage_05_categorize_benchmarks_20260406_123000.json
-   └── stage_06_report_metadata_20260406_123500.json
+   ├── filter_models_20260406_120000.json
+   ├── find_documents_20260406_120500.json
+   ├── parse_documents_20260406_121500.json
+   ├── consolidate_names_20260406_122500.json
+   ├── categorize_benchmarks_20260406_123000.json
+   └── report_metadata_20260406_123500.json
    ```
 
 5. **Stage Dependencies & Data Flow**:
@@ -566,19 +566,19 @@ Each stage module must be exposed as an Ambient workflow command by registering 
     "benchmark_intelligence.filter_models": {
       "command": "python -m benchmark_intelligence.filter_models",
       "description": "Stage 1: Filter and discover AI models from configured labs",
-      "outputs": ["outputs/stage_01_filter_models_*.json"]
+      "outputs": ["outputs/filter_models_*.json"]
     },
     "benchmark_intelligence.find_docs": {
       "command": "python -m benchmark_intelligence.find_docs",
       "description": "Stage 2: Find documentation sources for filtered models",
-      "inputs": ["outputs/stage_01_filter_models_*.json"],
-      "outputs": ["outputs/stage_02_find_documents_*.json"]
+      "inputs": ["outputs/filter_models_*.json"],
+      "outputs": ["outputs/find_documents_*.json"]
     },
     "benchmark_intelligence.parse_docs": {
       "command": "python -m benchmark_intelligence.parse_docs",
       "description": "Stage 3: Parse documents and extract benchmarks (concurrent)",
-      "inputs": ["outputs/stage_02_find_documents_*.json"],
-      "outputs": ["outputs/stage_03_parse_documents_*.json"],
+      "inputs": ["outputs/find_documents_*.json"],
+      "outputs": ["outputs/parse_documents_*.json"],
       "arguments": {
         "--concurrency": {"type": "int", "default": 20}
       }
@@ -586,8 +586,8 @@ Each stage module must be exposed as an Ambient workflow command by registering 
     "benchmark_intelligence.consolidate_benchmarks": {
       "command": "python -m benchmark_intelligence.consolidate_benchmarks",
       "description": "Stage 4: Consolidate benchmark names and resolve variants",
-      "inputs": ["outputs/stage_03_parse_documents_*.json"],
-      "outputs": ["outputs/stage_04_consolidate_names_*.json"],
+      "inputs": ["outputs/parse_documents_*.json"],
+      "outputs": ["outputs/consolidate_names_*.json"],
       "arguments": {
         "--from-db": {"type": "flag", "description": "Query from database instead of JSON"}
       }
@@ -595,8 +595,8 @@ Each stage module must be exposed as an Ambient workflow command by registering 
     "benchmark_intelligence.categorize_benchmarks": {
       "command": "python -m benchmark_intelligence.categorize_benchmarks",
       "description": "Stage 5: Categorize benchmarks into taxonomy",
-      "inputs": ["outputs/stage_04_consolidate_names_*.json"],
-      "outputs": ["outputs/stage_05_categorize_benchmarks_*.json"]
+      "inputs": ["outputs/consolidate_names_*.json"],
+      "outputs": ["outputs/categorize_benchmarks_*.json"]
     },
     "benchmark_intelligence.report": {
       "command": "python -m benchmark_intelligence.report",
@@ -696,7 +696,7 @@ This enables:
   - [ ] `__main__` block for full pipeline execution
 - [ ] Implement JSON standardized schema in `save_stage_json()`:
   - [ ] Schema: `{stage, timestamp, input_count, output_count, data, errors}`
-  - [ ] Filename: `stage_<num>_<name>_<timestamp>.json`
+  - [ ] Filename: `<name>_<timestamp>.json`
   - [ ] Create `outputs/` directory on first write
 - [ ] **Test**: 
   - [ ] Run each stage script individually: `python -m benchmark_intelligence.filter_models`
