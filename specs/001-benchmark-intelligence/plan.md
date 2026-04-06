@@ -77,6 +77,81 @@ Stage 5: Categorization/Taxonomy (JSON output)
 Stage 6: Reporting (Markdown output)
 ```
 
+### Individual Stage Execution Design
+
+**Key Requirements** (from FR-012):
+- Each stage callable individually via CLI
+- Intermediate results stored as JSON for verification
+- Stages can run in sequence (default) or individually
+- State management between stages via JSON files
+
+**Implementation Approach**:
+
+1. **Stage Interface Pattern**:
+   ```python
+   class PipelineStage(ABC):
+       @abstractmethod
+       def run(self, input_data: dict) -> dict:
+           """Execute stage and return standardized JSON output"""
+           pass
+       
+       def load_input(self, stage_name: str) -> dict:
+           """Load JSON output from previous stage"""
+           pass
+       
+       def save_output(self, output: dict, stage_name: str):
+           """Save JSON output for next stage or verification"""
+           pass
+   ```
+
+2. **CLI Command Structure**:
+   ```bash
+   # Individual stages
+   python main.py --stage filter           # Stage 1 only
+   python main.py --stage find-docs        # Stage 2 only (requires Stage 1 output)
+   python main.py --stage parse            # Stage 3 only (requires Stage 2 output)
+   python main.py --stage consolidate      # Stage 4 only (requires Stage 3 output)
+   python main.py --stage categorize       # Stage 5 only (requires Stage 4 output)
+   python main.py --stage report           # Stage 6 only (requires Stage 5 output)
+   
+   # Sequential execution (default)
+   python main.py                          # All stages 1-6
+   python main.py --stages 1-3             # Stages 1 through 3
+   python main.py --stages 3-6             # Stages 3 through 6
+   ```
+
+3. **State Management**:
+   - Each stage writes JSON to `outputs/stage_<name>_<timestamp>.json`
+   - When running individual stage, load latest output from previous stage
+   - Option to specify input file: `--input outputs/stage_filter_20260406.json`
+   - Database persists long-term state; JSON files are intermediate artifacts
+
+4. **JSON File Naming Convention**:
+   ```
+   outputs/
+   ├── stage_01_filter_models_20260406_120000.json
+   ├── stage_02_find_documents_20260406_120500.json
+   ├── stage_03_parse_documents_20260406_121500.json
+   ├── stage_04_consolidate_names_20260406_122500.json
+   ├── stage_05_categorize_benchmarks_20260406_123000.json
+   └── stage_06_report_metadata_20260406_123500.json
+   ```
+
+5. **Stage Dependencies**:
+   ```
+   Stage 1 (Filter)      → No dependencies
+   Stage 2 (Find Docs)   → Requires Stage 1 output (model list)
+   Stage 3 (Parse)       → Requires Stage 2 output (document URLs)
+   Stage 4 (Consolidate) → Requires Stage 3 output (extracted benchmarks)
+   Stage 5 (Categorize)  → Requires Stage 4 output (canonical names)
+   Stage 6 (Report)      → Requires Stage 5 output (categorized benchmarks) + snapshot in DB
+   ```
+
+6. **Error Handling for Individual Stages**:
+   - If input file missing → clear error message indicating which previous stage needs to run
+   - If input JSON schema invalid → validation error with specific field issues
+   - If stage fails → partial output saved with error details for debugging
+
 ### Database Schema
 
 **Current Tables**:
@@ -436,14 +511,39 @@ python -m agents.benchmark_intelligence.main --stage generate_report
 
 #### T4: 6-Stage Pipeline with JSON Outputs (Priority: P1)
 **Effort**: 8-10 hours  
-**Files**: `agents/benchmark_intelligence/main.py`, `pipeline.py`
+**Files**: `agents/benchmark_intelligence/main.py`, `pipeline.py`, `stages/*.py`
 
-- [ ] Extract each stage into standalone function matching API contracts
-- [ ] Implement JSON output writer with standardized schema
-- [ ] Add CLI argument parsing for `--stage <name>`
-- [ ] Create stage orchestrator supporting individual or sequential execution
-- [ ] Store JSON outputs in `outputs/` directory
-- [ ] **Test**: Run each stage individually, verify JSON schema compliance
+**Subtasks**:
+- [ ] Create `PipelineStage` abstract base class with `run()`, `load_input()`, `save_output()` methods
+- [ ] Implement 6 concrete stage classes:
+  - [ ] `FilterModelsStage` - Wraps existing `discover_trending_models()`
+  - [ ] `FindDocumentsStage` - Wraps existing `fetch_documentation()`
+  - [ ] `ParseDocumentsStage` - Wraps existing `extract_benchmarks_from_multiple_sources()` with concurrency
+  - [ ] `ConsolidateNamesStage` - Wraps existing `consolidate_benchmarks()`
+  - [ ] `CategorizeBenchmarksStage` - Wraps existing `classify_benchmarks_batch()`
+  - [ ] `GenerateReportStage` - Wraps existing `ReportGenerator`
+- [ ] Create `PipelineOrchestrator` class:
+  - [ ] Method: `run_stage(stage_name, input_file=None)` - Execute single stage
+  - [ ] Method: `run_sequential(start_stage=1, end_stage=6)` - Execute stage range
+  - [ ] Method: `run_all()` - Execute all stages (default behavior)
+- [ ] Add CLI argument parsing:
+  - [ ] `--stage <name>` for individual stage execution
+  - [ ] `--stages <start>-<end>` for range execution
+  - [ ] `--input <file>` to specify input JSON file
+- [ ] Implement JSON output writer:
+  - [ ] Standardized schema: `{stage, timestamp, input_count, output_count, data, errors}`
+  - [ ] Filename convention: `stage_<num>_<name>_<timestamp>.json`
+  - [ ] Create `outputs/` directory on first run
+- [ ] Add input validation:
+  - [ ] Check previous stage output exists when running non-first stage
+  - [ ] Validate JSON schema of loaded input
+  - [ ] Clear error messages for missing dependencies
+- [ ] **Test**: 
+  - [ ] Run full pipeline (all 6 stages) - verify end-to-end flow
+  - [ ] Run each stage individually with saved inputs - verify independence
+  - [ ] Run stage range (e.g., 3-5) - verify partial execution
+  - [ ] Verify JSON schema compliance for all stage outputs
+  - [ ] Test error handling when input file missing or invalid
 
 #### T5: Error Aggregation by Type (Priority: P1)
 **Effort**: 2-3 hours  
