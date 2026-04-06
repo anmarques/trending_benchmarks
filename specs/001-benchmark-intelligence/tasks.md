@@ -188,33 +188,33 @@ parallel ::: \
 
 ### Stage 4: Name Consolidation
 
-- [ ] T033 [P] [US1] Create consolidate_benchmarks.py with run(source) function in agents/benchmark_intelligence/consolidate_benchmarks.py
-- [ ] T034 [P] [US1] Wrap consolidate_benchmarks() from tools/consolidate.py with DB or JSON input in consolidate_benchmarks.run()
-- [ ] T035 [P] [US1] Add __main__ block with argparse for --input or --from-db in agents/benchmark_intelligence/consolidate_benchmarks.py
-- [ ] T036 [P] [US1] Output JSON with canonical benchmark names to outputs/consolidate_names_<timestamp>.json in agents/benchmark_intelligence/consolidate_benchmarks.py
+- [X] T033 [P] [US1] Create consolidate_benchmarks.py with run(source) function in agents/benchmark_intelligence/consolidate_benchmarks.py
+- [X] T034 [P] [US1] Wrap consolidate_benchmarks() from tools/consolidate.py with DB or JSON input in consolidate_benchmarks.run()
+- [X] T035 [P] [US1] Add __main__ block with argparse for --input or --from-db in agents/benchmark_intelligence/consolidate_benchmarks.py
+- [X] T036 [P] [US1] Output JSON with canonical benchmark names to outputs/consolidate_names_<timestamp>.json in agents/benchmark_intelligence/consolidate_benchmarks.py
 
 ### Stage 5: Categorization (Basic)
 
-- [ ] T037 [P] [US1] Create categorize_benchmarks.py with run(source) function in agents/benchmark_intelligence/categorize_benchmarks.py
-- [ ] T038 [P] [US1] Wrap classify_benchmarks_batch() from tools/classify.py in categorize_benchmarks.run()
-- [ ] T039 [P] [US1] Add __main__ block with argparse for --input or --from-db in agents/benchmark_intelligence/categorize_benchmarks.py
-- [ ] T040 [P] [US1] Output JSON with categorized benchmarks to outputs/categorize_benchmarks_<timestamp>.json in agents/benchmark_intelligence/categorize_benchmarks.py
+- [X] T037 [P] [US1] Create categorize_benchmarks.py with run(source) function in agents/benchmark_intelligence/categorize_benchmarks.py
+- [X] T038 [P] [US1] Wrap classify_benchmarks_batch() from tools/classify.py in categorize_benchmarks.run()
+- [X] T039 [P] [US1] Add __main__ block with argparse for --input or --from-db in agents/benchmark_intelligence/categorize_benchmarks.py
+- [X] T040 [P] [US1] Output JSON with categorized benchmarks to outputs/categorize_benchmarks_<timestamp>.json in agents/benchmark_intelligence/categorize_benchmarks.py
 
 ### Stage 6: Reporting (Basic)
 
-- [ ] T041 [P] [US1] Create report.py with run(snapshot_id) function in agents/benchmark_intelligence/report.py
-- [ ] T042 [P] [US1] Generate trending benchmarks section using ReportGenerator from tools/reporting.py
-- [ ] T043 [P] [US1] Add __main__ block with argparse for --snapshot-id (auto-find latest if not provided) in agents/benchmark_intelligence/report.py
-- [ ] T044 [P] [US1] Write Markdown report to reports/report_<timestamp>.md in agents/benchmark_intelligence/report.py
-- [ ] T045 [P] [US1] Output JSON metadata with report path to outputs/report_metadata_<timestamp>.json in agents/benchmark_intelligence/report.py
+- [X] T041 [P] [US1] Create report.py with run(snapshot_id) function in agents/benchmark_intelligence/report.py
+- [X] T042 [P] [US1] Generate trending benchmarks section using ReportGenerator from tools/reporting.py
+- [X] T043 [P] [US1] Add __main__ block with argparse for --snapshot-id (auto-find latest if not provided) in agents/benchmark_intelligence/report.py
+- [X] T044 [P] [US1] Write Markdown report to reports/report_<timestamp>.md in agents/benchmark_intelligence/report.py
+- [X] T045 [P] [US1] Output JSON metadata with report path to outputs/report_metadata_<timestamp>.json in agents/benchmark_intelligence/report.py
 
 ### Pipeline Orchestrator
 
-- [ ] T046 [US1] Create generate.py to orchestrate all 6 stages sequentially in agents/benchmark_intelligence/generate.py
-- [ ] T047 [US1] Import and call all 6 stage run() functions in sequence in agents/benchmark_intelligence/generate.py
-- [ ] T048 [US1] Pass output from each stage as input to next stage in agents/benchmark_intelligence/generate.py
-- [ ] T049 [US1] Add __main__ block for full pipeline execution in agents/benchmark_intelligence/generate.py
-- [ ] T050 [US1] Handle errors gracefully and report which stage failed in agents/benchmark_intelligence/generate.py
+- [X] T046 [US1] Create generate.py to orchestrate all 6 stages sequentially in agents/benchmark_intelligence/generate.py
+- [X] T047 [US1] Import and call all 6 stage run() functions in sequence in agents/benchmark_intelligence/generate.py
+- [X] T048 [US1] Pass output from each stage as input to next stage in agents/benchmark_intelligence/generate.py
+- [X] T049 [US1] Add __main__ block for full pipeline execution in agents/benchmark_intelligence/generate.py
+- [X] T050 [US1] Handle errors gracefully and report which stage failed in agents/benchmark_intelligence/generate.py
 
 **Completion Criteria**:
 - All 6 stage scripts are executable individually via `python -m benchmark_intelligence.<stage>`
