@@ -99,7 +99,7 @@ Each stage is a **standalone function** that:
 Each stage is a **standalone Python script** with its own `__main__` block:
 
 ```python
-# agents/benchmark_intelligence/stage_01_filter.py
+# benchmark_intelligence/filter_models.py
 def run(config_path: str = "config.yaml") -> str:
     """Query HuggingFace, filter models, write JSON, return output path"""
     # Reads: config.yaml
@@ -114,7 +114,7 @@ if __name__ == "__main__":
     output_path = run(args.config)
     print(f"Output: {output_path}")
 
-# agents/benchmark_intelligence/stage_02_find_docs.py
+# benchmark_intelligence/find_docs.py
 def run(models_json: str = None) -> str:
     """Find docs for models, write JSON, return output path"""
     # Reads: outputs/stage_01_*.json (auto-find if not specified)
@@ -124,12 +124,12 @@ def run(models_json: str = None) -> str:
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", help="Path to stage 1 JSON output")
+    parser.add_argument("--input", help="Path to filter_models JSON output")
     args = parser.parse_args()
     output_path = run(args.input)
     print(f"Output: {output_path}")
 
-# agents/benchmark_intelligence/stage_03_parse.py
+# benchmark_intelligence/parse_docs.py
 def run(docs_json: str = None, concurrency: int = 20) -> str:
     """Extract benchmarks from docs, write JSON, return output path"""
     # Reads: outputs/stage_02_*.json (auto-find if not specified)
@@ -139,30 +139,33 @@ def run(docs_json: str = None, concurrency: int = 20) -> str:
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", help="Path to stage 2 JSON output")
+    parser.add_argument("--input", help="Path to find_docs JSON output")
     parser.add_argument("--concurrency", type=int, default=20)
     args = parser.parse_args()
     output_path = run(args.input, args.concurrency)
     print(f"Output: {output_path}")
 
-# Similar pattern for stage_04_consolidate.py, stage_05_categorize.py, stage_06_report.py
+# Similar pattern for:
+# - consolidate_benchmarks.py
+# - categorize_benchmarks.py
+# - report.py
 ```
 
 **CLI Command Structure** (Separate Entry Points):
    ```bash
    # Individual stages - each has its own entry point
-   python -m agents.benchmark_intelligence.stage_01_filter
-   python -m agents.benchmark_intelligence.stage_02_find_docs
-   python -m agents.benchmark_intelligence.stage_03_parse
-   python -m agents.benchmark_intelligence.stage_04_consolidate
-   python -m agents.benchmark_intelligence.stage_05_categorize
-   python -m agents.benchmark_intelligence.stage_06_report
+   python -m benchmark_intelligence.filter_models
+   python -m benchmark_intelligence.find_docs
+   python -m benchmark_intelligence.parse_docs --concurrency 30
+   python -m benchmark_intelligence.consolidate_benchmarks --from-db
+   python -m benchmark_intelligence.categorize_benchmarks
+   python -m benchmark_intelligence.report
    
    # Full pipeline (all stages sequentially)
-   python -m agents.benchmark_intelligence.main
+   python -m benchmark_intelligence.generate
    
-   # Each stage script supports:
-   python -m agents.benchmark_intelligence.stage_03_parse --input outputs/stage_02_*.json --concurrency 30
+   # Each stage script supports options:
+   python -m benchmark_intelligence.parse_docs --input outputs/stage_02_*.json --concurrency 30
    ```
 
 3. **State Management**:
@@ -527,21 +530,21 @@ def generate_report(snapshot_id: int) -> dict:
 pip install -r requirements.txt
 
 # Configuration
-cp agents/benchmark_intelligence/config/auth.yaml.example agents/benchmark_intelligence/config/auth.yaml
+cp benchmark_intelligence/config/auth.yaml.example benchmark_intelligence/config/auth.yaml
 # Edit auth.yaml with API keys
 
 # Full execution (all 6 stages)
-python -m agents.benchmark_intelligence.main
+python -m benchmark_intelligence.generate
 
 # Individual stages
-python -m agents.benchmark_intelligence.main --stage filter_models
-python -m agents.benchmark_intelligence.main --stage find_documents
-python -m agents.benchmark_intelligence.main --stage parse_documents
-python -m agents.benchmark_intelligence.main --stage consolidate_names
-python -m agents.benchmark_intelligence.main --stage categorize_benchmarks  
-python -m agents.benchmark_intelligence.main --stage generate_report
+python -m benchmark_intelligence.filter_models
+python -m benchmark_intelligence.find_docs
+python -m benchmark_intelligence.parse_docs --concurrency 30
+python -m benchmark_intelligence.consolidate_benchmarks --from-db
+python -m benchmark_intelligence.categorize_benchmarks
+python -m benchmark_intelligence.report
 
-# JSON outputs stored in: agents/benchmark_intelligence/outputs/stage_<name>_<timestamp>.json
+# JSON outputs stored in: benchmark_intelligence/outputs/stage_<name>_<timestamp>.json
 ```
 
 ---
@@ -586,7 +589,7 @@ python -m agents.benchmark_intelligence.main --stage generate_report
 
 #### T4: 6-Stage Pipeline with JSON Outputs (Priority: P1)
 **Effort**: 6-8 hours  
-**Files**: `stage_01_filter.py`, `stage_02_find_docs.py`, `stage_03_parse.py`, `stage_04_consolidate.py`, `stage_05_categorize.py`, `stage_06_report.py`, `stage_utils.py`, `main.py`
+**Files**: `filter_models.py`, `find_docs.py`, `parse_docs.py`, `consolidate_benchmarks.py`, `categorize_benchmarks.py`, `report.py`, `stage_utils.py`, `generate.py`
 
 **Subtasks**:
 - [ ] Create `stage_utils.py` with shared helper functions:
@@ -594,37 +597,37 @@ python -m agents.benchmark_intelligence.main --stage generate_report
   - [ ] `load_stage_json(filepath)` → loads and validates JSON
   - [ ] `save_stage_json(data, stage_num, stage_name)` → saves with standard schema
 - [ ] Create 6 separate stage scripts (each with `run()` function + `__main__` block):
-  - [ ] `stage_01_filter.py`:
+  - [ ] `filter_models.py`:
     - [ ] `run(config_path)` → wraps `discover_trending_models()`, returns JSON path
     - [ ] `__main__` block with argparse for `--config`
-  - [ ] `stage_02_find_docs.py`:
+  - [ ] `find_docs.py`:
     - [ ] `run(models_json)` → wraps `fetch_documentation()`, returns JSON path
     - [ ] `__main__` block with argparse for `--input` (auto-finds if not provided)
-  - [ ] `stage_03_parse.py`:
+  - [ ] `parse_docs.py`:
     - [ ] `run(docs_json, concurrency)` → wraps extraction with concurrency, returns JSON path
     - [ ] `__main__` block with argparse for `--input` and `--concurrency`
-  - [ ] `stage_04_consolidate.py`:
+  - [ ] `consolidate_benchmarks.py`:
     - [ ] `run(source)` → wraps `consolidate_benchmarks()`, source can be JSON file or queries DB, returns JSON path
     - [ ] `__main__` block with argparse for `--input` or `--from-db`
-  - [ ] `stage_05_categorize.py`:
+  - [ ] `categorize_benchmarks.py`:
     - [ ] `run(source)` → wraps `classify_benchmarks_batch()`, returns JSON path
     - [ ] `__main__` block with argparse for `--input` or `--from-db`
-  - [ ] `stage_06_report.py`:
+  - [ ] `report.py`:
     - [ ] `run(snapshot_id)` → wraps `ReportGenerator`, returns report path
     - [ ] `__main__` block with argparse for `--snapshot-id` (auto-finds latest if not provided)
-- [ ] Update `main.py` to orchestrate all stages:
-  - [ ] Import all 6 stage scripts
-  - [ ] Call each `stage_XX.run()` sequentially
+- [ ] Create `generate.py` to orchestrate all stages:
+  - [ ] Import all 6 stage modules
+  - [ ] Call each `module.run()` sequentially
   - [ ] Pass output from one stage as input to next
-  - [ ] Keep existing CLI for full pipeline execution
+  - [ ] `__main__` block for full pipeline execution
 - [ ] Implement JSON standardized schema in `save_stage_json()`:
   - [ ] Schema: `{stage, timestamp, input_count, output_count, data, errors}`
   - [ ] Filename: `stage_<num>_<name>_<timestamp>.json`
   - [ ] Create `outputs/` directory on first write
 - [ ] **Test**: 
-  - [ ] Run each stage script individually: `python -m agents.benchmark_intelligence.stage_01_filter`
-  - [ ] Run stage 3 with explicit input: `python -m agents.benchmark_intelligence.stage_03_parse --input outputs/stage_02_*.json`
-  - [ ] Run full pipeline via main.py - verify all 6 JSON files + report created
+  - [ ] Run each stage script individually: `python -m benchmark_intelligence.filter_models`
+  - [ ] Run parse_docs with explicit input: `python -m benchmark_intelligence.parse_docs --input outputs/stage_02_*.json --concurrency 30`
+  - [ ] Run full pipeline: `python -m benchmark_intelligence.generate` - verify all 6 JSON files + report created
   - [ ] Verify all JSON files match standardized schema
   - [ ] Test auto-finding previous stage output
   - [ ] Test error when running stage without required previous output
@@ -742,14 +745,14 @@ python -m agents.benchmark_intelligence.main --stage generate_report
 ## Appendix: File Structure
 
 ```
-agents/benchmark_intelligence/
-├── main.py                          [MODIFY: T4, T6, T9 - orchestrates all stages]
-├── stage_01_filter.py               [NEW: T4 - standalone entry point]
-├── stage_02_find_docs.py            [NEW: T4 - standalone entry point]
-├── stage_03_parse.py                [NEW: T4 - standalone entry point]
-├── stage_04_consolidate.py          [NEW: T4 - standalone entry point]
-├── stage_05_categorize.py           [NEW: T4 - standalone entry point]
-├── stage_06_report.py               [NEW: T4 - standalone entry point]
+benchmark_intelligence/
+├── generate.py                      [NEW: T4 - orchestrates all stages]
+├── filter_models.py                 [NEW: T4 - stage 1 entry point]
+├── find_docs.py                     [NEW: T4 - stage 2 entry point]
+├── parse_docs.py                    [NEW: T4 - stage 3 entry point]
+├── consolidate_benchmarks.py        [NEW: T4 - stage 4 entry point]
+├── categorize_benchmarks.py         [NEW: T4 - stage 5 entry point]
+├── report.py                        [NEW: T4 - stage 6 entry point]
 ├── stage_utils.py                   [NEW: T4 - shared JSON helpers]
 ├── concurrent_processor.py          [NEW: T3]
 ├── connection_pool.py               [NEW: T2]
