@@ -104,12 +104,12 @@ parallel ::: \
 
 ### Tasks
 
-- [ ] T001 [P] Check agents/benchmark_intelligence/ directory exists with __init__.py, tools/, and clients/ subdirectories
-- [ ] T002 [P] Check config.yaml exists at project root and contains 'labs' key with at least one lab configured
-- [ ] T003 [P] Create outputs/ directory for JSON stage outputs
-- [ ] T004 [P] Run import tests: verify 'from agents.benchmark_intelligence.tools import cache' and 'from agents.benchmark_intelligence.clients import factory' succeed
+- [X] T001 [P] Check agents/benchmark_intelligence/ directory exists with __init__.py, tools/, and clients/ subdirectories
+- [X] T002 [P] Check config.yaml exists at project root and contains 'labs' key with at least one lab configured
+- [X] T003 [P] Create outputs/ directory for JSON stage outputs
+- [X] T004 [P] Run import tests: verify 'from agents.benchmark_intelligence.tools import cache' and 'from agents.benchmark_intelligence.clients import factory' succeed
 
-**Completion Criteria**: All tasks pass; project structure validated
+**Completion Criteria**: All tasks pass; project structure validated ✓ COMPLETE
 
 ---
 
