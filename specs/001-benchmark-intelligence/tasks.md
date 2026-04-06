@@ -165,17 +165,17 @@ parallel ::: \
 
 ### Stage 1: Model Filtering
 
-- [ ] T019 [P] [US1] Create filter_models.py with run(config_path) function in agents/benchmark_intelligence/filter_models.py
-- [ ] T020 [P] [US1] Wrap discover_trending_models() from tools/discover_models.py in filter_models.run()
-- [ ] T021 [P] [US1] Add __main__ block with argparse for --config argument in agents/benchmark_intelligence/filter_models.py
-- [ ] T022 [P] [US1] Output JSON with stage schema to outputs/filter_models_<timestamp>.json in agents/benchmark_intelligence/filter_models.py
+- [X] T019 [P] [US1] Create filter_models.py with run(config_path) function in agents/benchmark_intelligence/filter_models.py
+- [X] T020 [P] [US1] Wrap discover_trending_models() from tools/discover_models.py in filter_models.run()
+- [X] T021 [P] [US1] Add __main__ block with argparse for --config argument in agents/benchmark_intelligence/filter_models.py
+- [X] T022 [P] [US1] Output JSON with stage schema to outputs/filter_models_<timestamp>.json in agents/benchmark_intelligence/filter_models.py
 
 ### Stage 2: Document Finding
 
-- [ ] T023 [P] [US1] Create find_docs.py with run(models_json) function in agents/benchmark_intelligence/find_docs.py
-- [ ] T024 [P] [US1] Wrap fetch_documentation() from tools/fetch_docs.py with hash checking in find_docs.run()
-- [ ] T025 [P] [US1] Add __main__ block with argparse for --input (auto-find if not provided) in agents/benchmark_intelligence/find_docs.py
-- [ ] T026 [P] [US1] Output JSON with document URLs per model to outputs/find_documents_<timestamp>.json in agents/benchmark_intelligence/find_docs.py
+- [X] T023 [P] [US1] Create find_docs.py with run(models_json) function in agents/benchmark_intelligence/find_docs.py
+- [X] T024 [P] [US1] Wrap fetch_documentation() from tools/fetch_docs.py with hash checking in find_docs.run()
+- [X] T025 [P] [US1] Add __main__ block with argparse for --input (auto-find if not provided) in agents/benchmark_intelligence/find_docs.py
+- [X] T026 [P] [US1] Output JSON with document URLs per model to outputs/find_documents_<timestamp>.json in agents/benchmark_intelligence/find_docs.py
 
 ### Stage 3: Document Parsing
 
