@@ -59,7 +59,7 @@ agents/benchmark_intelligence/
 
 ## Configuration
 
-### 1. Labs Configuration (`labs.yaml` at root)
+### 1. Labs Configuration (`config.yaml` at root)
 
 Define which organizations to track:
 

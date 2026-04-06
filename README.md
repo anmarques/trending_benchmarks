@@ -72,7 +72,7 @@ python -m agents.benchmark_intelligence.main
 |------|---------|----------|
 | **[benchmark_taxonomy.md](benchmark_taxonomy.md)** | Complete reference of 30+ benchmarks | Root |
 | **[categories.yaml](categories.yaml)** | 13 benchmark categories & definitions | Root |
-| **[labs.yaml](agents/benchmark_intelligence/config/labs.yaml)** | Target labs/organizations to track | Config |
+| **[config.yaml](config.yaml)** | Target labs/organizations to track | Config |
 
 ### Reports & Data
 
@@ -231,7 +231,7 @@ Generate Markdown Report
 - **baichuan-inc** • **internlm**
 - **MinimaxAI**
 
-Configure in [`agents/benchmark_intelligence/config/labs.yaml`](agents/benchmark_intelligence/config/labs.yaml)
+Configure in [`config.yaml`](config.yaml)
 
 ---
 
@@ -239,7 +239,7 @@ Configure in [`agents/benchmark_intelligence/config/labs.yaml`](agents/benchmark
 
 ### Discovery Settings
 
-Edit [`labs.yaml`](agents/benchmark_intelligence/config/labs.yaml):
+Edit [`config.yaml`](config.yaml):
 
 ```yaml
 discovery:
@@ -295,7 +295,7 @@ python -m agents.benchmark_intelligence.main
 ### Custom Date Range
 
 ```bash
-# Edit labs.yaml:
+# Edit config.yaml:
 discovery:
   date_filter_months: 24  # Last 2 years
 ```
@@ -345,10 +345,10 @@ Only needed outside Ambient. Get key: https://console.anthropic.com
 On Ambient: Uses native Vertex AI Claude support (no key needed)
 
 ### Getting irrelevant models?
-Edit `labs.yaml` → remove labs that produce noise (e.g., "huggingface" org gets time-series models)
+Edit `config.yaml` → remove labs that produce noise (e.g., "huggingface" org gets time-series models)
 
 ### Models from wrong time period?
-Edit `labs.yaml` → `date_filter_months: 12` (or higher)
+Edit `config.yaml` → `date_filter_months: 12` (or higher)
 
 ### Cache corruption
 ```bash

@@ -92,7 +92,7 @@ For each model, the system must discover all documentation sources using a multi
    - If multiple papers found, select paper with authors from the lab that released the model
    - Process max 1 arXiv paper per model
 3. **GitHub Technical Reports**:
-   - Use lab→GitHub org mapping from `labs.yaml` (e.g., Qwen → QwenLM)
+   - Use lab→GitHub org mapping from `config.yaml` (e.g., Qwen → QwenLM)
    - Try known URL patterns: `https://github.com/{org}/{model}/README.md`
    - Check releases folder: `https://github.com/{org}/{model}/releases/`
    - If not found → fallback to direct URL fetch if available
@@ -145,7 +145,7 @@ The system uses **different fetching methods** depending on content type:
 - All other URLs → Use MCP webfetch
 
 **Lab→GitHub Organization Mapping:**
-Configuration in `labs.yaml`:
+Configuration in `config.yaml`:
 ```yaml
 lab_github_mappings:
   Qwen: QwenLM
@@ -221,7 +221,7 @@ Google search scraping is implemented but often blocked. Use as last resort:
 
 ### 3.1 Discovery Configuration
 
-**Labs to track** are configured in: **`labs.yaml`** (at project root)
+**Labs to track** are configured in: **`config.yaml`** (at project root)
 
 Example structure:
 ```yaml
@@ -800,7 +800,7 @@ The agent MUST report short progress summaries as it executes:
 
 All configuration files should be at project root for easy access:
 
-**`labs.yaml`** (project root):
+**`config.yaml`** (project root):
 ```yaml
 labs:
   - Qwen
@@ -968,7 +968,7 @@ python agents/benchmark_intelligence/main.py report
 **`snapshot` mode flow:**
 ```
 1. Discovery Phase
-   ├── Load configuration from labs.yaml
+   ├── Load configuration from config.yaml
    ├── Query HuggingFace API (configured labs)
    ├── Apply filters (date, tags, downloads)
    ├── Report: "Found X models"
@@ -1410,7 +1410,7 @@ python tests/generate_test_reports.py
 - ✅ Benchmark status correctly classified (emerging / active / almost extinct)
 - ✅ Temporal trends show historical data when multiple snapshots exist
 - ✅ Relative frequency calculated correctly (mentions / total models in window)
-- ✅ Configuration files at root level (labs.yaml, categories.yaml, benchmark_taxonomy.md)
+- ✅ Configuration files at root level (config.yaml, categories.yaml, benchmark_taxonomy.md)
 - ✅ Root README links to latest report
 - ✅ Documentation complete (README, SPEC, inline comments)
 - ✅ PDF parsing works for technical reports

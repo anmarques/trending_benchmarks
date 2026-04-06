@@ -30,9 +30,9 @@ def discover_trending_models(
 
     Args:
         labs: List of organization names to search (e.g., ["Qwen", "meta-llama"]).
-              If None, loads from labs.yaml (project root)
+              If None, loads from config.yaml (project root)
         config: Configuration dictionary with discovery settings.
-                If None, loads from labs.yaml (project root)
+                If None, loads from config.yaml (project root)
         hf_client: HuggingFace client instance. If None, creates one using factory.
 
     Returns:
@@ -62,7 +62,7 @@ def discover_trending_models(
     try:
         # Load config from file if not provided
         if config is None or labs is None:
-            config_path = Path(__file__).parent.parent.parent.parent / "labs.yaml"
+            config_path = Path(__file__).parent.parent.parent.parent / "config.yaml"
             with open(config_path, "r") as f:
                 yaml_config = yaml.safe_load(f)
 
