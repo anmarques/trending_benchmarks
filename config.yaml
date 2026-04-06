@@ -8,13 +8,17 @@ labs:
   - google
   - microsoft
   - anthropic
-  - alibaba-pai
   - tencent
   - deepseek-ai
   - nvidia
   - openai
   - arcee-ai
   - moonshotai
+  - LiquidAI
+  - nvidia
+  - zai-org
+  - ibm-granite
+  - sarvam-ai
 
 # Discovery settings
 discovery:
