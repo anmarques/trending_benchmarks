@@ -5,6 +5,21 @@
 **Status**: Draft  
 **Input**: User description: "Benchmark Intelligence System - An automated system that discovers trending AI models from major labs (Meta, OpenAI, Anthropic, Qwen, etc.) and extracts benchmark evaluation data from all available sources (model cards, research papers, blogs, GitHub). The system tracks which benchmarks are most commonly used, identifies emerging benchmarks (newly popular), detects almost-extinct benchmarks (rarely used anymore), and provides insights into benchmark usage trends over a 12-month rolling window. It handles multi-source extraction (including vision AI for charts/figures), variant tracking (0-shot vs 5-shot, CoT vs base), taxonomy evolution, and generates comprehensive reports for researchers and practitioners tracking AI evaluation trends."
 
+## Clarifications
+
+### Session 2026-04-06
+
+- Q: What minimum similarity threshold should determine when two benchmark names are considered the same during fuzzy matching consolidation? → A: High confidence (90%+ similarity) - merge clearly similar names, use web search for ambiguous cases below threshold
+- Q: What is the maximum number of retry attempts before marking a source as failed and continuing? → A: 3 retries
+- Q: How long should historical snapshots be retained before cleanup? → A: Indefinitely - never delete snapshots
+- Q: Should the system process multiple models concurrently or sequentially? → A: Parallel (20+ concurrent models) - high concurrency
+- Q: How many search results should be analyzed to determine if two benchmark names represent the same or different evaluation sets? → A: Top 3 results
+- Q: How should the system handle API rate limits with 20+ concurrent models processing simultaneously? → A: Respect rate limits with backoff queue - queue requests when rate limited, retry after backoff
+- Q: What level of progress visibility should the system provide during pipeline execution? → A: Real-time progress with statistics - show running counts (models processed, benchmarks extracted, errors)
+- Q: How should errors be collected and reported from parallel execution of 20+ models? → A: Aggregate errors by type with summary - continue processing, collect errors, report summary at end with counts by error type
+- Q: How should database transactions be managed to prevent write conflicts with 20+ models writing to SQLite concurrently? → A: Connection pooling with automatic retry - use connection pool, retry on write conflicts
+- Q: How should the system handle partial execution state after interruption (crash, cancellation, restart)? → A: Restart from beginning, but leverage hash-based caching to skip processing of unchanged source documents
+
 ## User Scenarios & Testing
 
 ### User Story 1 - Discover Trending Benchmarks (Priority: P1)
@@ -91,8 +106,8 @@
 
 - **What happens when a model card is updated with new benchmarks?** System should detect content changes via hash comparison and re-extract only from changed sources
 - **How does the system handle models with no benchmark data?** System should log these models but not block processing; report should show "N models with no benchmarks found"
-- **What if a source is temporarily unavailable (404, timeout)?** System should retry with exponential backoff, cache last successful fetch, and continue processing other sources
-- **How are benchmark name variants handled (e.g., "MMLU" vs "MMLU-Pro" vs "MMLU 5-shot")?** System should use fuzzy matching to consolidate similar names but preserve meaningful variants (benchmarks using different evaluation sets). When in doubt about whether variants represent the same benchmark, the system should search the web for clarification
+- **What if a source is temporarily unavailable (404, timeout)?** System should retry up to 3 times with exponential backoff, cache last successful fetch, and continue processing other sources
+- **How are benchmark name variants handled (e.g., "MMLU" vs "MMLU-Pro" vs "MMLU 5-shot")?** System should use fuzzy matching to consolidate similar names but preserve meaningful variants (benchmarks using different evaluation sets). When in doubt about whether variants represent the same benchmark, the system should search the web (analyze top 3 results) for clarification
 - **What happens with the 12-month rolling window when the system is first initialized?** System should work with whatever data is available, clearly indicating the actual time window in reports
 - **How does the system handle benchmarks mentioned in figures/charts vs text?** Both should be extracted and tagged with extraction method; figure-extracted benchmarks should be validated against text mentions where possible
 
@@ -104,19 +119,21 @@
 - **FR-002**: System MUST extract benchmark names from model cards, arXiv papers, official blogs, and GitHub documentation
 - **FR-003**: System MUST extract benchmark variants including number of shots (0-shot, 5-shot, etc.), methods (CoT, PoT, TIR), and model types (base, instruct, chat)
 - **FR-004**: System MUST use vision-capable AI to extract benchmarks from charts, figures, and images embedded in blog posts and PDFs
-- **FR-005**: System MUST consolidate duplicate benchmark names using fuzzy matching while preserving meaningful variants
+- **FR-005**: System MUST consolidate duplicate benchmark names using fuzzy matching (90%+ similarity threshold) while preserving meaningful variants. Names below threshold should trigger web search (analyze top 3 results) for clarification
 - **FR-006**: System MUST categorize benchmarks into taxonomy categories (e.g., General Knowledge, Reasoning, Math, Code)
 - **FR-007**: System MUST track benchmark usage over a 12-month rolling window from current date
 - **FR-008**: System MUST classify benchmarks as "Emerging" (first seen ≤3 months), "Almost Extinct" (last seen ≥9 months), or "Active" (all others)
 - **FR-009**: System MUST calculate both absolute mentions (count of models) and relative frequency (percentage) for each benchmark
-- **FR-010**: System MUST create temporal snapshots after each execution run, storing window boundaries and benchmark statistics
-- **FR-011**: System MUST cache content hashes of source documents to detect changes and avoid re-processing unchanged content
-- **FR-012**: System MUST support execution of individual pipeline stages: (1) model filtering, (2) document finding, (3) document parsing (benchmark extraction), (4) name consolidation, (5) categorization (taxonomy), (6) reporting. Each stage can be called individually or in sequence. Intermediate results MUST be output in JSON format for verification. Default execution is end-to-end processing of all stages
+- **FR-010**: System MUST create temporal snapshots after each execution run, storing window boundaries and benchmark statistics. Snapshots are retained indefinitely for historical analysis
+- **FR-011**: System MUST cache content hashes of source documents to detect changes and avoid re-processing unchanged content. On re-execution after interruption, system restarts from beginning but skips extraction for documents with matching cached hashes
+- **FR-012**: System MUST support execution of individual pipeline stages: (1) model filtering, (2) document finding, (3) document parsing (benchmark extraction), (4) name consolidation, (5) categorization (taxonomy), (6) reporting. Each stage can be called individually or in sequence. Intermediate results MUST be output in JSON format for verification. Default execution is end-to-end processing of all stages. System MUST process models in parallel with high concurrency (20+ concurrent models) to maximize throughput
 - **FR-013**: System MUST generate comprehensive reports showing trending benchmarks, emerging benchmarks, almost-extinct benchmarks, and category distribution
 - **FR-014**: System MUST allow manual configuration of labs to track via configuration file
-- **FR-015**: System MUST persist all data in SQLite database with tables for models, benchmarks, model-benchmark associations, documents, snapshots, and benchmark mentions
+- **FR-015**: System MUST persist all data in SQLite database with tables for models, benchmarks, model-benchmark associations, documents, snapshots, and benchmark mentions. Database writes MUST use connection pooling with automatic retry on write conflicts to support concurrent model processing
 - **FR-016**: System MUST preserve historical taxonomy versions when taxonomy evolves
 - **FR-017**: Users MUST be able to manually override AI-generated taxonomy categories via configuration file
+- **FR-018**: System MUST provide real-time progress visibility during execution, showing running counts of models processed, benchmarks extracted, and errors encountered
+- **FR-019**: System MUST aggregate errors by type during parallel execution and report summary statistics at completion (e.g., "15 arXiv fetch failures, 3 extraction timeouts"). Individual model failures MUST NOT halt processing of other models
 
 ### Key Entities
 
@@ -180,7 +197,7 @@
 - Temporal tracking limited to 12-month rolling window
 - Only tracks models from configured labs (not all HuggingFace models)
 - Content extraction accuracy depends on source document quality and formatting
-- API rate limits may affect processing speed for large numbers of models
+- API rate limits are handled via request queuing with exponential backoff - parallel execution automatically throttles when rate limits are encountered
 - Vision AI accuracy for figure extraction depends on image quality and chart complexity
 
 ## Out of Scope
