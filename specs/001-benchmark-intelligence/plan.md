@@ -94,65 +94,75 @@ Each stage is a **standalone function** that:
 
 **No class hierarchy needed** - just simple functions with consistent I/O patterns.
 
-**Stage Function Signatures**:
+**Stage Scripts** (Separate Entry Points):
+
+Each stage is a **standalone Python script** with its own `__main__` block:
+
 ```python
-# Stage 1: Model Filtering
-def stage_filter_models(config: dict) -> str:
+# agents/benchmark_intelligence/stage_01_filter.py
+def run(config_path: str = "config.yaml") -> str:
     """Query HuggingFace, filter models, write JSON, return output path"""
     # Reads: config.yaml
     # Writes: outputs/stage_01_filter_models_<timestamp>.json
     # DB: None (read-only discovery)
     
-# Stage 2: Document Finding  
-def stage_find_documents(models_json: str) -> str:
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default="config.yaml")
+    args = parser.parse_args()
+    output_path = run(args.config)
+    print(f"Output: {output_path}")
+
+# agents/benchmark_intelligence/stage_02_find_docs.py
+def run(models_json: str = None) -> str:
     """Find docs for models, write JSON, return output path"""
-    # Reads: outputs/stage_01_*.json
+    # Reads: outputs/stage_01_*.json (auto-find if not specified)
     # Writes: outputs/stage_02_find_documents_<timestamp>.json
     # DB: Check documents table for cached hashes
     
-# Stage 3: Document Parsing
-def stage_parse_documents(docs_json: str, concurrency: int = 20) -> str:
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", help="Path to stage 1 JSON output")
+    args = parser.parse_args()
+    output_path = run(args.input)
+    print(f"Output: {output_path}")
+
+# agents/benchmark_intelligence/stage_03_parse.py
+def run(docs_json: str = None, concurrency: int = 20) -> str:
     """Extract benchmarks from docs, write JSON, return output path"""
-    # Reads: outputs/stage_02_*.json
+    # Reads: outputs/stage_02_*.json (auto-find if not specified)
     # Writes: outputs/stage_03_parse_documents_<timestamp>.json
     # DB: Insert into model_benchmarks table
     
-# Stage 4: Name Consolidation
-def stage_consolidate_names(extractions_json: str) -> str:
-    """Consolidate benchmark names, write JSON, return output path"""
-    # Reads: outputs/stage_03_*.json OR queries model_benchmarks table
-    # Writes: outputs/stage_04_consolidate_names_<timestamp>.json
-    # DB: Update benchmarks table with canonical names
-    
-# Stage 5: Categorization
-def stage_categorize_benchmarks(benchmarks_json: str) -> str:
-    """Classify benchmarks into taxonomy, write JSON, return output path"""
-    # Reads: outputs/stage_04_*.json OR queries benchmarks table
-    # Writes: outputs/stage_05_categorize_benchmarks_<timestamp>.json
-    # DB: Update benchmarks.categories, taxonomy files
-    
-# Stage 6: Reporting
-def stage_generate_report(snapshot_id: int = None) -> str:
-    """Generate markdown report, return report path"""
-    # Reads: Database (queries snapshots, benchmark_mentions)
-    # Writes: reports/report_<timestamp>.md
-    # DB: Read-only
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", help="Path to stage 2 JSON output")
+    parser.add_argument("--concurrency", type=int, default=20)
+    args = parser.parse_args()
+    output_path = run(args.input, args.concurrency)
+    print(f"Output: {output_path}")
+
+# Similar pattern for stage_04_consolidate.py, stage_05_categorize.py, stage_06_report.py
 ```
 
-**CLI Command Structure**:
+**CLI Command Structure** (Separate Entry Points):
    ```bash
-   # Individual stages
-   python main.py --stage filter           # Stage 1 only
-   python main.py --stage find-docs        # Stage 2 only (requires Stage 1 output)
-   python main.py --stage parse            # Stage 3 only (requires Stage 2 output)
-   python main.py --stage consolidate      # Stage 4 only (requires Stage 3 output)
-   python main.py --stage categorize       # Stage 5 only (requires Stage 4 output)
-   python main.py --stage report           # Stage 6 only (requires Stage 5 output)
+   # Individual stages - each has its own entry point
+   python -m agents.benchmark_intelligence.stage_01_filter
+   python -m agents.benchmark_intelligence.stage_02_find_docs
+   python -m agents.benchmark_intelligence.stage_03_parse
+   python -m agents.benchmark_intelligence.stage_04_consolidate
+   python -m agents.benchmark_intelligence.stage_05_categorize
+   python -m agents.benchmark_intelligence.stage_06_report
    
-   # Sequential execution (default)
-   python main.py                          # All stages 1-6
-   python main.py --stages 1-3             # Stages 1 through 3
-   python main.py --stages 3-6             # Stages 3 through 6
+   # Full pipeline (all stages sequentially)
+   python -m agents.benchmark_intelligence.main
+   
+   # Each stage script supports:
+   python -m agents.benchmark_intelligence.stage_03_parse --input outputs/stage_02_*.json --concurrency 30
    ```
 
 3. **State Management**:
@@ -576,40 +586,48 @@ python -m agents.benchmark_intelligence.main --stage generate_report
 
 #### T4: 6-Stage Pipeline with JSON Outputs (Priority: P1)
 **Effort**: 6-8 hours  
-**Files**: `agents/benchmark_intelligence/main.py`, `agents/benchmark_intelligence/stages.py`
+**Files**: `stage_01_filter.py`, `stage_02_find_docs.py`, `stage_03_parse.py`, `stage_04_consolidate.py`, `stage_05_categorize.py`, `stage_06_report.py`, `stage_utils.py`, `main.py`
 
 **Subtasks**:
-- [ ] Create `stages.py` module with 6 standalone functions:
-  - [ ] `stage_filter_models(config)` → wraps `discover_trending_models()`, returns JSON path
-  - [ ] `stage_find_documents(models_json)` → wraps `fetch_documentation()`, returns JSON path
-  - [ ] `stage_parse_documents(docs_json, concurrency=20)` → wraps extraction with concurrency, returns JSON path
-  - [ ] `stage_consolidate_names(source)` → wraps `consolidate_benchmarks()`, source can be JSON file or "db", returns JSON path
-  - [ ] `stage_categorize_benchmarks(source)` → wraps `classify_benchmarks_batch()`, source can be JSON file or "db", returns JSON path
-  - [ ] `stage_generate_report(snapshot_id=None)` → wraps `ReportGenerator`, returns report path
-- [ ] Create helper functions in `stages.py`:
+- [ ] Create `stage_utils.py` with shared helper functions:
   - [ ] `find_latest_stage_output(stage_num)` → finds most recent JSON from stage
   - [ ] `load_stage_json(filepath)` → loads and validates JSON
   - [ ] `save_stage_json(data, stage_num, stage_name)` → saves with standard schema
-- [ ] Update `main.py` CLI argument parsing:
-  - [ ] Add `--stage <name>` argument (filter, find-docs, parse, consolidate, categorize, report)
-  - [ ] Add `--input <file>` argument to specify input JSON file
-  - [ ] Add logic to call appropriate stage function based on --stage
-  - [ ] Default behavior (no --stage) runs all 6 stages sequentially
-- [ ] Implement JSON standardized schema writer:
+- [ ] Create 6 separate stage scripts (each with `run()` function + `__main__` block):
+  - [ ] `stage_01_filter.py`:
+    - [ ] `run(config_path)` → wraps `discover_trending_models()`, returns JSON path
+    - [ ] `__main__` block with argparse for `--config`
+  - [ ] `stage_02_find_docs.py`:
+    - [ ] `run(models_json)` → wraps `fetch_documentation()`, returns JSON path
+    - [ ] `__main__` block with argparse for `--input` (auto-finds if not provided)
+  - [ ] `stage_03_parse.py`:
+    - [ ] `run(docs_json, concurrency)` → wraps extraction with concurrency, returns JSON path
+    - [ ] `__main__` block with argparse for `--input` and `--concurrency`
+  - [ ] `stage_04_consolidate.py`:
+    - [ ] `run(source)` → wraps `consolidate_benchmarks()`, source can be JSON file or queries DB, returns JSON path
+    - [ ] `__main__` block with argparse for `--input` or `--from-db`
+  - [ ] `stage_05_categorize.py`:
+    - [ ] `run(source)` → wraps `classify_benchmarks_batch()`, returns JSON path
+    - [ ] `__main__` block with argparse for `--input` or `--from-db`
+  - [ ] `stage_06_report.py`:
+    - [ ] `run(snapshot_id)` → wraps `ReportGenerator`, returns report path
+    - [ ] `__main__` block with argparse for `--snapshot-id` (auto-finds latest if not provided)
+- [ ] Update `main.py` to orchestrate all stages:
+  - [ ] Import all 6 stage scripts
+  - [ ] Call each `stage_XX.run()` sequentially
+  - [ ] Pass output from one stage as input to next
+  - [ ] Keep existing CLI for full pipeline execution
+- [ ] Implement JSON standardized schema in `save_stage_json()`:
   - [ ] Schema: `{stage, timestamp, input_count, output_count, data, errors}`
   - [ ] Filename: `stage_<num>_<name>_<timestamp>.json`
   - [ ] Create `outputs/` directory on first write
-- [ ] Add input resolution logic:
-  - [ ] If --input provided, use that file
-  - [ ] If --input not provided, call `find_latest_stage_output()` for previous stage
-  - [ ] If no previous output found, show error with instructions
 - [ ] **Test**: 
-  - [ ] Run full pipeline - verify all 6 JSON files + report created
-  - [ ] Run Stage 1 only - verify JSON output
-  - [ ] Run Stage 3 only with Stage 2 output - verify it uses JSON input correctly
-  - [ ] Run Stage 4 with --input db - verify it queries database instead of JSON
+  - [ ] Run each stage script individually: `python -m agents.benchmark_intelligence.stage_01_filter`
+  - [ ] Run stage 3 with explicit input: `python -m agents.benchmark_intelligence.stage_03_parse --input outputs/stage_02_*.json`
+  - [ ] Run full pipeline via main.py - verify all 6 JSON files + report created
   - [ ] Verify all JSON files match standardized schema
-  - [ ] Test error when running Stage 3 without Stage 2 output available
+  - [ ] Test auto-finding previous stage output
+  - [ ] Test error when running stage without required previous output
 
 #### T5: Error Aggregation by Type (Priority: P1)
 **Effort**: 2-3 hours  
@@ -725,8 +743,14 @@ python -m agents.benchmark_intelligence.main --stage generate_report
 
 ```
 agents/benchmark_intelligence/
-├── main.py                          [MODIFY: T3, T4, T6, T9]
-├── pipeline.py                      [NEW: T4]
+├── main.py                          [MODIFY: T4, T6, T9 - orchestrates all stages]
+├── stage_01_filter.py               [NEW: T4 - standalone entry point]
+├── stage_02_find_docs.py            [NEW: T4 - standalone entry point]
+├── stage_03_parse.py                [NEW: T4 - standalone entry point]
+├── stage_04_consolidate.py          [NEW: T4 - standalone entry point]
+├── stage_05_categorize.py           [NEW: T4 - standalone entry point]
+├── stage_06_report.py               [NEW: T4 - standalone entry point]
+├── stage_utils.py                   [NEW: T4 - shared JSON helpers]
 ├── concurrent_processor.py          [NEW: T3]
 ├── connection_pool.py               [NEW: T2]
 ├── error_aggregator.py              [NEW: T5]
