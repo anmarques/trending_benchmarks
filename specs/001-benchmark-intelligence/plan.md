@@ -335,6 +335,37 @@ If a constitution exists in future iterations, verify:
    - **Phase 3 Scope**: Implement HTML/Markdown table parsing
    - **Phase 5 Scope**: Add vision AI for PDF chart extraction
 
+10. **arXiv Document Fetching Strategy**
+   - **Decision**: Fetch full HTML-converted papers instead of abstracts only
+     - Use **ar5iv.labs.arxiv.org** HTML conversion service: `https://ar5iv.labs.arxiv.org/html/{arxiv_id}`
+     - Fallback to abstract if HTML conversion unavailable (404)
+   - **Rationale**:
+     - **Content completeness**: Abstracts are 1-2KB and mention benchmark names without scores; full papers are 500KB-1MB with 10+ HTML tables containing all benchmark data
+     - **Ground truth impact**: Llama-3.1-8B paper (arXiv:2407.21783) contains 45 benchmarks across Tables 8-16; abstract extraction yielded 0 benchmarks
+     - **ar5iv reliability**: HTML conversion preserves LaTeX table structure as proper `<table>` tags, enabling deterministic parsing
+     - **Performance**: HTML tables can be parsed deterministically (instant) vs PDF processing (requires OCR/vision AI in Phase 5)
+   - **Implementation**:
+     - Update `parallel_fetcher.py` arXiv fetching logic:
+       ```python
+       # Try HTML conversion first
+       html_url = f"https://ar5iv.labs.arxiv.org/html/{arxiv_id}"
+       response = requests.get(html_url, timeout=30)
+       if response.status_code == 200:
+           return response.text, "text/html"
+       
+       # Fallback to abstract if HTML unavailable
+       abstract_url = f"https://export.arxiv.org/abs/{arxiv_id}"
+       # ... extract abstract as before
+       ```
+     - HTML papers with tables → routed to deterministic table parser
+     - HTML papers without tables (rare) → routed to AI prose extraction
+   - **Alternatives considered**:
+     - Keep abstract-only fetching (current): Misses 90% of benchmark data
+     - PDF fetching + OCR: Complex, slow, error-prone; deferred to Phase 5
+     - arXiv API bulk download: Adds infrastructure complexity; HTML conversion is simpler
+   - **Impact**: Expected to increase extraction rate from 64% to >90% on ground truth validation
+   - **Phase 3 Scope**: Implement HTML fetching with abstract fallback
+
 ### Research Artifacts
 
 **Output**: research.md (included above as inline decisions)
