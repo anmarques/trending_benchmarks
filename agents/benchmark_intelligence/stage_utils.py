@@ -192,7 +192,8 @@ def save_stage_json(
     data: List[Dict[str, Any]],
     stage_name: str,
     input_count: int = 0,
-    errors: Optional[List[Dict[str, Any]]] = None
+    errors: Optional[List[Dict[str, Any]]] = None,
+    metadata: Optional[Dict[str, Any]] = None
 ) -> str:
     """
     Save stage output with standardized schema and naming.
@@ -204,7 +205,8 @@ def save_stage_json(
       "input_count": 100,
       "output_count": 150,
       "data": [...],
-      "errors": [...]
+      "errors": [...],
+      "metadata": {...}  (optional)
     }
 
     Filename format: {stage_name}_{timestamp}.json
@@ -214,6 +216,7 @@ def save_stage_json(
         stage_name: Name of the stage
         input_count: Number of input items processed
         errors: List of error dictionaries (optional)
+        metadata: Additional metadata (optional, e.g., error_summary)
 
     Returns:
         Path to saved JSON file
@@ -239,6 +242,10 @@ def save_stage_json(
         "data": data,
         "errors": errors or []
     }
+
+    # Add metadata if provided
+    if metadata:
+        output["metadata"] = metadata
 
     # Generate filename
     filename = f"{stage_name}_{filename_timestamp}.json"

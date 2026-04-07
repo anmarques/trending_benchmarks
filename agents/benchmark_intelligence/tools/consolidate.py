@@ -9,22 +9,35 @@ import logging
 from typing import Dict, Any, List, Optional, Set
 from pathlib import Path
 from datetime import datetime
+import json
 
 from ._claude_client import call_claude_json, is_anthropic_available
+from .google_search import scrape_google_search
 
 logger = logging.getLogger(__name__)
+
+# T077: Fuzzy matching threshold for benchmark consolidation
+FUZZY_MATCH_THRESHOLD = 0.90
+
+# Disambiguation cache to avoid repeated web searches (T083)
+_disambiguation_cache: Dict[str, str] = {}
 
 
 def consolidate_benchmarks(
     benchmark_names: List[str],
     claude_fn: Optional[callable] = None,
     cooccurrences: Optional[List[Dict[str, Any]]] = None,
+    config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Consolidate benchmark name variations into canonical forms.
 
     Uses Claude to analyze benchmark names and create mappings from variations
     to canonical names, while identifying truly distinct benchmarks.
+
+    T078: Uses FUZZY_MATCH_THRESHOLD for similarity comparisons (configurable via config)
+    T080-T082: Triggers web search disambiguation for ambiguous pairs (<90% similarity)
+    T084: Adds web_search_used flag to consolidation JSON output
 
     Args:
         benchmark_names: List of benchmark names to consolidate
@@ -33,6 +46,8 @@ def consolidate_benchmarks(
         cooccurrences: Optional list of benchmark pairs that appear side-by-side
                       in the same document sections. These pairs will NOT be merged
                       during consolidation (e.g., "MMLU" and "MMLU-Pro" in same table).
+        config: Optional configuration dict with consolidation settings
+                (fuzzy_match_threshold, enable_web_search, etc.)
 
     Returns:
         Dictionary containing consolidation results:
@@ -40,6 +55,7 @@ def consolidate_benchmarks(
             - distinct_benchmarks: List of benchmarks that are truly distinct
             - uncertain_mappings: List of ambiguous cases requiring review
             - metadata: Consolidation metadata
+            - web_search_used: Boolean flag indicating if web search was used (T084)
 
         See prompts/consolidate.md for full schema.
 
@@ -59,6 +75,16 @@ def consolidate_benchmarks(
 
         if len(benchmark_names) == 0:
             raise ValueError("benchmark_names list is empty")
+
+        # Load configuration (T078, T079)
+        threshold = FUZZY_MATCH_THRESHOLD
+        enable_web_search = True
+        if config:
+            consolidation_config = config.get("consolidation", {})
+            threshold = consolidation_config.get("fuzzy_match_threshold", FUZZY_MATCH_THRESHOLD)
+            enable_web_search = consolidation_config.get("enable_web_search", True)
+
+        logger.info(f"Using fuzzy match threshold: {threshold:.2%}, web search: {enable_web_search}")
 
         # Remove duplicates while preserving order
         unique_names = list(dict.fromkeys(benchmark_names))
@@ -91,6 +117,13 @@ def consolidate_benchmarks(
         if "uncertain_mappings" not in result:
             result["uncertain_mappings"] = []
 
+        # T080-T082: Apply web search disambiguation for uncertain pairs
+        web_search_used = False
+        if enable_web_search and result.get("uncertain_mappings"):
+            web_search_used = _apply_web_search_disambiguation(
+                result, threshold
+            )
+
         # Apply side-by-side disambiguation
         if cooccurrences:
             result = _apply_cooccurrence_disambiguation(result, cooccurrences)
@@ -104,10 +137,15 @@ def consolidate_benchmarks(
         result["metadata"]["total_canonical_names"] = len(result["consolidations"])
         result["metadata"]["consolidation_date"] = datetime.utcnow().isoformat()
         result["metadata"]["cooccurrence_constraints"] = len(cooccurrences) if cooccurrences else 0
+        result["metadata"]["fuzzy_match_threshold"] = threshold
+
+        # T084: Add web_search_used flag
+        result["web_search_used"] = web_search_used
 
         logger.info(
             f"Consolidated {len(unique_names)} names into "
-            f"{len(result['consolidations'])} canonical names"
+            f"{len(result['consolidations'])} canonical names "
+            f"(web search: {web_search_used})"
         )
 
         return result
@@ -524,3 +562,292 @@ def _tie_break_canonical_name(variants: List[str], count: int) -> str:
         selected = mixed_case[0] if mixed_case else variants[0]
         logger.debug(f"Tie-break: Selected mixed-case variant '{selected}'")
         return selected
+
+
+def trigger_web_search(benchmark1: str, benchmark2: str, similarity: float) -> Dict[str, Any]:
+    """
+    Trigger web search disambiguation when similarity is below threshold.
+
+    T080: Implements web search for ambiguous benchmark pairs (<90% similarity).
+    T081: Fetches top 3 Google search results for "{benchmark1} vs {benchmark2}".
+    T082: Uses Claude to analyze search results and determine if same/different.
+    T083: Caches disambiguation decisions to avoid repeated searches.
+
+    Args:
+        benchmark1: First benchmark name
+        benchmark2: Second benchmark name
+        similarity: Fuzzy match similarity score (0.0 to 1.0)
+
+    Returns:
+        Dictionary containing:
+            - are_same: Boolean indicating if benchmarks are the same
+            - confidence: Float (0.0 to 1.0) indicating confidence level
+            - evidence: String describing the evidence found
+            - search_results_used: Number of search results analyzed
+            - cached: Boolean indicating if result was from cache
+
+    Example:
+        >>> result = trigger_web_search("MMLU", "MMLU-Pro", 0.85)
+        >>> print(result["are_same"])  # False
+        >>> print(result["evidence"])  # "MMLU-Pro is an enhanced version..."
+    """
+    # T083: Check cache first
+    cache_key = f"{benchmark1.lower()}|{benchmark2.lower()}"
+    reverse_cache_key = f"{benchmark2.lower()}|{benchmark1.lower()}"
+
+    if cache_key in _disambiguation_cache:
+        cached_result = json.loads(_disambiguation_cache[cache_key])
+        cached_result["cached"] = True
+        logger.info(f"Using cached disambiguation for '{benchmark1}' vs '{benchmark2}'")
+        return cached_result
+
+    if reverse_cache_key in _disambiguation_cache:
+        cached_result = json.loads(_disambiguation_cache[reverse_cache_key])
+        cached_result["cached"] = True
+        logger.info(f"Using cached disambiguation for '{benchmark1}' vs '{benchmark2}' (reversed)")
+        return cached_result
+
+    logger.info(
+        f"Triggering web search disambiguation for '{benchmark1}' vs '{benchmark2}' "
+        f"(similarity: {similarity:.2%})"
+    )
+
+    # T081: Search Google for top 3 results
+    query = f'"{benchmark1}" vs "{benchmark2}"'
+    try:
+        search_results = scrape_google_search(query, max_results=3, delay=1.0)
+    except Exception as e:
+        logger.warning(f"Web search failed for '{benchmark1}' vs '{benchmark2}': {e}")
+        search_results = []
+
+    # If search failed or returned no results, fall back to heuristic
+    if not search_results:
+        logger.warning(f"No search results found for '{benchmark1}' vs '{benchmark2}', using heuristic")
+        result = _heuristic_disambiguation(benchmark1, benchmark2, similarity)
+        # Cache heuristic result too (T083)
+        _disambiguation_cache[cache_key] = json.dumps(result)
+        result["cached"] = False
+        return result
+
+    # T082: Use Claude to analyze search results
+    result = _analyze_search_results_with_claude(
+        benchmark1, benchmark2, search_results, similarity
+    )
+
+    # T083: Cache the result
+    _disambiguation_cache[cache_key] = json.dumps(result)
+    result["cached"] = False
+
+    return result
+
+
+def _analyze_search_results_with_claude(
+    benchmark1: str,
+    benchmark2: str,
+    search_results: List[Dict[str, str]],
+    similarity: float
+) -> Dict[str, Any]:
+    """
+    Use Claude to analyze web search results and determine if benchmarks are same/different.
+
+    Args:
+        benchmark1: First benchmark name
+        benchmark2: Second benchmark name
+        search_results: List of search result dicts with url, title, snippet
+        similarity: Fuzzy match similarity score
+
+    Returns:
+        Disambiguation result dictionary
+    """
+    # Build prompt for Claude
+    search_summary = []
+    for i, result in enumerate(search_results[:3], 1):
+        search_summary.append({
+            "position": i,
+            "title": result.get("title", ""),
+            "snippet": result.get("snippet", ""),
+            "url": result.get("url", "")
+        })
+
+    prompt = f"""Analyze these web search results to determine if "{benchmark1}" and "{benchmark2}" are the same benchmark or different benchmarks.
+
+BENCHMARK NAMES:
+- Benchmark A: {benchmark1}
+- Benchmark B: {benchmark2}
+- Name similarity score: {similarity:.2%}
+
+WEB SEARCH RESULTS for "{benchmark1} vs {benchmark2}":
+{json.dumps(search_summary, indent=2)}
+
+Based on the search results, determine:
+1. Are these the SAME benchmark (just different naming variants)?
+2. Or are they DIFFERENT benchmarks (e.g., different versions, subsets, or entirely distinct)?
+
+Return JSON with this structure:
+{{
+  "are_same": true/false,
+  "confidence": 0.0-1.0,
+  "evidence": "Brief explanation based on search results",
+  "search_results_used": {len(search_summary)}
+}}
+
+Guidelines:
+- If search results explicitly state they are different versions/variants (e.g., "MMLU-Pro is an enhanced version of MMLU"), return are_same=false
+- If results use the names interchangeably or don't distinguish them, return are_same=true
+- If results are inconclusive, use confidence to reflect uncertainty
+"""
+
+    try:
+        if not is_anthropic_available():
+            logger.warning("Anthropic API not available, using heuristic")
+            return _heuristic_disambiguation(benchmark1, benchmark2, similarity)
+
+        result = call_claude_json(prompt=prompt)
+
+        # Validate result structure
+        if not isinstance(result, dict):
+            raise ValueError("Invalid response format from Claude")
+
+        # Ensure required fields
+        result.setdefault("are_same", similarity >= FUZZY_MATCH_THRESHOLD)
+        result.setdefault("confidence", 0.5)
+        result.setdefault("evidence", "Analysis completed")
+        result.setdefault("search_results_used", len(search_summary))
+
+        logger.info(
+            f"Web search analysis: '{benchmark1}' vs '{benchmark2}' -> "
+            f"{'SAME' if result['are_same'] else 'DIFFERENT'} "
+            f"(confidence: {result['confidence']:.2%})"
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Claude analysis failed for web search results: {e}")
+        return _heuristic_disambiguation(benchmark1, benchmark2, similarity)
+
+
+def _heuristic_disambiguation(
+    benchmark1: str,
+    benchmark2: str,
+    similarity: float
+) -> Dict[str, Any]:
+    """
+    Fallback heuristic when web search or Claude analysis fails.
+
+    Uses simple rules:
+    - If similarity >= threshold, treat as same
+    - If one name is substring of other or contains version number, treat as different
+    - Otherwise use similarity score
+
+    Args:
+        benchmark1: First benchmark name
+        benchmark2: Second benchmark name
+        similarity: Fuzzy match similarity score
+
+    Returns:
+        Disambiguation result dictionary
+    """
+    b1_lower = benchmark1.lower()
+    b2_lower = benchmark2.lower()
+
+    # Check if one is a substring of the other
+    is_substring = b1_lower in b2_lower or b2_lower in b1_lower
+
+    # Check for version patterns (e.g., "MMLU" vs "MMLU-Pro", "GSM8K" vs "GSM8K-v2")
+    import re
+    version_pattern = r'(-pro|-plus|-v\d+|-\d+\.\d+|_v\d+)'
+    has_version = bool(re.search(version_pattern, b1_lower)) or bool(re.search(version_pattern, b2_lower))
+
+    if is_substring and has_version:
+        # Likely different versions of same benchmark
+        are_same = False
+        confidence = 0.8
+        evidence = f"One name contains the other with version indicator (substring: {is_substring}, version: {has_version})"
+    elif similarity >= FUZZY_MATCH_THRESHOLD:
+        # High similarity, likely same
+        are_same = True
+        confidence = similarity
+        evidence = f"High similarity score ({similarity:.2%}) above threshold ({FUZZY_MATCH_THRESHOLD:.2%})"
+    else:
+        # Low similarity, likely different
+        are_same = False
+        confidence = 1.0 - similarity
+        evidence = f"Low similarity score ({similarity:.2%}) below threshold ({FUZZY_MATCH_THRESHOLD:.2%})"
+
+    logger.info(
+        f"Heuristic disambiguation: '{benchmark1}' vs '{benchmark2}' -> "
+        f"{'SAME' if are_same else 'DIFFERENT'} (confidence: {confidence:.2%})"
+    )
+
+    return {
+        "are_same": are_same,
+        "confidence": confidence,
+        "evidence": evidence,
+        "search_results_used": 0
+    }
+
+
+def _apply_web_search_disambiguation(
+    consolidation_result: Dict[str, Any],
+    threshold: float
+) -> bool:
+    """
+    Apply web search disambiguation to uncertain benchmark mappings.
+
+    Processes uncertain_mappings and uses web search to resolve ambiguous pairs.
+    Updates consolidations list based on disambiguation results.
+
+    Args:
+        consolidation_result: Result from Claude consolidation with uncertain_mappings
+        threshold: Fuzzy match threshold for similarity
+
+    Returns:
+        True if web search was used, False otherwise
+    """
+    uncertain = consolidation_result.get("uncertain_mappings", [])
+    if not uncertain:
+        return False
+
+    logger.info(f"Processing {len(uncertain)} uncertain mappings with web search")
+
+    web_search_used = False
+    resolved_consolidations = []
+
+    for uncertain_pair in uncertain:
+        # Extract benchmark names and similarity
+        benchmark1 = uncertain_pair.get("benchmark1")
+        benchmark2 = uncertain_pair.get("benchmark2")
+        similarity = uncertain_pair.get("similarity", 0.0)
+
+        if not benchmark1 or not benchmark2:
+            logger.warning(f"Skipping uncertain pair with missing names: {uncertain_pair}")
+            continue
+
+        # Trigger web search (T080-T082)
+        disambiguation = trigger_web_search(benchmark1, benchmark2, similarity)
+        web_search_used = True
+
+        # Update consolidations based on result
+        if disambiguation["are_same"]:
+            # Merge into same consolidation
+            resolved_consolidations.append({
+                "canonical_name": benchmark1,  # Use first as canonical
+                "variations": [benchmark1, benchmark2],
+                "benchmark_type": "same",
+                "confidence": disambiguation["confidence"],
+                "notes": f"Web search disambiguation: {disambiguation['evidence']}"
+            })
+            logger.info(f"Merged '{benchmark1}' and '{benchmark2}' based on web search")
+        else:
+            # Keep as distinct benchmarks
+            consolidation_result["distinct_benchmarks"].extend([benchmark1, benchmark2])
+            logger.info(f"Separated '{benchmark1}' and '{benchmark2}' based on web search")
+
+    # Add resolved consolidations to result
+    consolidation_result["consolidations"].extend(resolved_consolidations)
+
+    # Clear uncertain mappings (all resolved)
+    consolidation_result["uncertain_mappings"] = []
+
+    return web_search_used

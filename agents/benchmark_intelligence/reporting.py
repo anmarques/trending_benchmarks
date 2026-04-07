@@ -98,8 +98,21 @@ class ReportGenerator:
         # Most Common Benchmarks
         report_sections.append(self._generate_most_common_benchmarks(benchmark_trends))
 
-        # Emerging Benchmarks
-        report_sections.append(self._generate_emerging_benchmarks(all_benchmarks))
+        # Emerging Benchmarks (T062)
+        # Use new status-based section if snapshot data available
+        try:
+            report_sections.append(self.generate_emerging_benchmarks_section())
+        except Exception as e:
+            logger.debug(f"Failed to generate emerging section from snapshot: {e}")
+            # Fallback to legacy method
+            report_sections.append(self._generate_emerging_benchmarks(all_benchmarks))
+
+        # Almost Extinct Benchmarks (T062)
+        try:
+            report_sections.append(self.generate_almost_extinct_section())
+        except Exception as e:
+            logger.debug(f"Failed to generate almost-extinct section: {e}")
+            # No fallback - section is optional
 
         # Benchmark Categories
         report_sections.append(self._generate_category_distribution(all_benchmarks))
@@ -120,11 +133,43 @@ class ReportGenerator:
         return report
 
     def _generate_header(self) -> str:
-        """Generate report header."""
+        """
+        Generate report header with window information (T062A).
+
+        Shows actual time window when <12 months data available.
+        """
         now = datetime.utcnow()
+
+        # Get latest snapshot to display window information (T062A)
+        try:
+            with self.cache._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT window_start, window_end FROM snapshots
+                    ORDER BY timestamp DESC
+                    LIMIT 1
+                """)
+                snapshot = cursor.fetchone()
+
+                if snapshot:
+                    window_start = snapshot['window_start']
+                    window_end = snapshot['window_end']
+
+                    # Calculate actual window duration
+                    window_start_dt = datetime.fromisoformat(window_start.replace('Z', '+00:00'))
+                    window_end_dt = datetime.fromisoformat(window_end.replace('Z', '+00:00'))
+                    window_months = round((window_end_dt - window_start_dt).days / 30)
+
+                    window_info = f"\n**Analysis Window:** {window_months}-month ({window_start[:10]} to {window_end[:10]})"
+                else:
+                    window_info = ""
+        except Exception as e:
+            logger.debug(f"Could not fetch snapshot window info: {e}")
+            window_info = ""
+
         return f"""# Benchmark Intelligence Report
 
-**Generated:** {now.strftime('%Y-%m-%d %H:%M:%S')} UTC
+**Generated:** {now.strftime('%Y-%m-%d %H:%M:%S')} UTC{window_info}
 
 ---"""
 
@@ -266,11 +311,192 @@ No benchmark data available."""
 
         return "\n".join(lines)
 
+    def generate_emerging_benchmarks_section(self, snapshot_id: Optional[int] = None) -> str:
+        """
+        Generate emerging benchmarks section using benchmark_mentions table.
+
+        Queries benchmarks with status='emerging' from the most recent snapshot
+        or specified snapshot ID (T059, T061).
+
+        Args:
+            snapshot_id: Optional snapshot ID to query (uses latest if None)
+
+        Returns:
+            Markdown section for emerging benchmarks with visual indicators
+        """
+        with self.cache._get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Get snapshot ID if not provided
+            if snapshot_id is None:
+                cursor.execute("""
+                    SELECT id, window_start, window_end FROM snapshots
+                    ORDER BY timestamp DESC
+                    LIMIT 1
+                """)
+                snapshot = cursor.fetchone()
+                if not snapshot:
+                    return """## 🌱 Emerging Benchmarks
+
+No snapshot data available."""
+                snapshot_id = snapshot['id']
+                window_start = snapshot['window_start']
+                window_end = snapshot['window_end']
+            else:
+                cursor.execute("""
+                    SELECT window_start, window_end FROM snapshots
+                    WHERE id = ?
+                """, (snapshot_id,))
+                snapshot = cursor.fetchone()
+                window_start = snapshot['window_start']
+                window_end = snapshot['window_end']
+
+            # Query emerging benchmarks (T061)
+            cursor.execute("""
+                SELECT
+                    bm.absolute_mentions,
+                    bm.relative_frequency,
+                    bm.first_seen,
+                    bm.last_seen,
+                    b.canonical_name,
+                    b.categories
+                FROM benchmark_mentions bm
+                JOIN benchmarks b ON bm.benchmark_id = b.id
+                WHERE bm.snapshot_id = ?
+                  AND bm.status = 'emerging'
+                ORDER BY bm.absolute_mentions DESC
+            """, (snapshot_id,))
+
+            emerging = cursor.fetchall()
+
+        if not emerging:
+            return """## 🌱 Emerging Benchmarks
+
+No emerging benchmarks detected in the current window."""
+
+        # Calculate window duration for display
+        window_start_dt = datetime.fromisoformat(window_start.replace('Z', '+00:00'))
+        window_end_dt = datetime.fromisoformat(window_end.replace('Z', '+00:00'))
+        window_months = round((window_end_dt - window_start_dt).days / 30)
+
+        lines = ["## 🌱 Emerging Benchmarks", ""]
+        lines.append(f"**Window:** {window_months}-month ({window_start[:10]} to {window_end[:10]})")
+        lines.append("")
+        lines.append(f"Discovered {len(emerging)} emerging benchmarks (first seen ≤3 months ago):")
+        lines.append("")
+        lines.append("| Benchmark | Categories | Mentions | Frequency | First Seen |")
+        lines.append("|-----------|------------|----------|-----------|------------|")
+
+        for bench in emerging:
+            name = bench['canonical_name']
+            categories = json.loads(bench['categories']) if bench['categories'] else []
+            categories_str = ", ".join(categories[:3]) if categories else "Uncategorized"
+            mentions = bench['absolute_mentions']
+            frequency = f"{bench['relative_frequency'] * 100:.1f}%"
+            first_seen = bench['first_seen'][:10]
+
+            lines.append(f"| {name} | {categories_str} | {mentions} | {frequency} | {first_seen} |")
+
+        return "\n".join(lines)
+
+    def generate_almost_extinct_section(self, snapshot_id: Optional[int] = None) -> str:
+        """
+        Generate almost-extinct benchmarks section using benchmark_mentions table.
+
+        Queries benchmarks with status='almost_extinct' from the most recent snapshot
+        or specified snapshot ID (T060, T061).
+
+        Args:
+            snapshot_id: Optional snapshot ID to query (uses latest if None)
+
+        Returns:
+            Markdown section for almost-extinct benchmarks with visual indicators
+        """
+        with self.cache._get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Get snapshot ID if not provided
+            if snapshot_id is None:
+                cursor.execute("""
+                    SELECT id, window_start, window_end FROM snapshots
+                    ORDER BY timestamp DESC
+                    LIMIT 1
+                """)
+                snapshot = cursor.fetchone()
+                if not snapshot:
+                    return """## ⚠️ Almost Extinct Benchmarks
+
+No snapshot data available."""
+                snapshot_id = snapshot['id']
+                window_start = snapshot['window_start']
+                window_end = snapshot['window_end']
+            else:
+                cursor.execute("""
+                    SELECT window_start, window_end FROM snapshots
+                    WHERE id = ?
+                """, (snapshot_id,))
+                snapshot = cursor.fetchone()
+                window_start = snapshot['window_start']
+                window_end = snapshot['window_end']
+
+            # Query almost-extinct benchmarks (T061)
+            cursor.execute("""
+                SELECT
+                    bm.absolute_mentions,
+                    bm.relative_frequency,
+                    bm.first_seen,
+                    bm.last_seen,
+                    b.canonical_name,
+                    b.categories
+                FROM benchmark_mentions bm
+                JOIN benchmarks b ON bm.benchmark_id = b.id
+                WHERE bm.snapshot_id = ?
+                  AND bm.status = 'almost_extinct'
+                ORDER BY bm.last_seen ASC
+            """, (snapshot_id,))
+
+            almost_extinct = cursor.fetchall()
+
+        if not almost_extinct:
+            return """## ⚠️ Almost Extinct Benchmarks
+
+No almost-extinct benchmarks detected. All benchmarks remain actively used."""
+
+        # Calculate window duration for display
+        window_start_dt = datetime.fromisoformat(window_start.replace('Z', '+00:00'))
+        window_end_dt = datetime.fromisoformat(window_end.replace('Z', '+00:00'))
+        window_months = round((window_end_dt - window_start_dt).days / 30)
+
+        lines = ["## ⚠️ Almost Extinct Benchmarks", ""]
+        lines.append(f"**Window:** {window_months}-month ({window_start[:10]} to {window_end[:10]})")
+        lines.append("")
+        lines.append(f"Found {len(almost_extinct)} benchmarks not seen in ≥9 months:")
+        lines.append("")
+        lines.append("| Benchmark | Categories | Mentions | Frequency | Last Seen |")
+        lines.append("|-----------|------------|----------|-----------|-----------|")
+
+        for bench in almost_extinct:
+            name = bench['canonical_name']
+            categories = json.loads(bench['categories']) if bench['categories'] else []
+            categories_str = ", ".join(categories[:3]) if categories else "Uncategorized"
+            mentions = bench['absolute_mentions']
+            frequency = f"{bench['relative_frequency'] * 100:.1f}%"
+            last_seen = bench['last_seen'][:10]
+
+            lines.append(f"| {name} | {categories_str} | {mentions} | {frequency} | {last_seen} |")
+
+        return "\n".join(lines)
+
     def _generate_emerging_benchmarks(
         self,
         all_benchmarks: List[Dict[str, Any]]
     ) -> str:
-        """Generate emerging benchmarks section."""
+        """
+        Generate emerging benchmarks section (legacy method).
+
+        Note: This method is superseded by generate_emerging_benchmarks_section()
+        which uses the benchmark_mentions table for more accurate tracking.
+        """
         # Get benchmarks first seen in last 90 days
         ninety_days_ago = (datetime.utcnow() - timedelta(days=90)).isoformat()
 

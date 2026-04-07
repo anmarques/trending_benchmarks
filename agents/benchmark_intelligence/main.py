@@ -713,7 +713,7 @@ class BenchmarkIntelligenceAgent:
             # Don't fail the entire run if taxonomy evolution fails
 
     def _create_snapshot(self) -> Optional[int]:
-        """Create a snapshot of current cache state."""
+        """Create a snapshot of current cache state with temporal tracking."""
         if self.dry_run or self.cache is None:
             logger.debug("Skipping snapshot creation (dry run mode or no cache)")
             return None
@@ -733,8 +733,13 @@ class BenchmarkIntelligenceAgent:
             "taxonomy_version": taxonomy_version,
         }
 
-        snapshot_id = self.cache.create_snapshot(summary)
-        logger.info(f"Created snapshot #{snapshot_id}")
+        # Use create_snapshot_with_window for temporal tracking (T051-T055, T058)
+        snapshot_id = self.cache.create_snapshot_with_window(
+            window_months=12,
+            taxonomy_version=taxonomy_version,
+            summary=summary
+        )
+        logger.info(f"Created snapshot #{snapshot_id} with 12-month window")
 
         return snapshot_id
 

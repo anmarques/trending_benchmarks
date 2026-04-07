@@ -3,6 +3,7 @@ Concurrent Model Processor for parallel benchmark extraction.
 
 Provides high-concurrency processing of models (20+ workers) using
 asyncio for I/O-bound operations and ThreadPoolExecutor for CPU-bound tasks.
+Includes integrated rate limiting support.
 """
 
 import asyncio
@@ -49,12 +50,14 @@ class ConcurrentModelProcessor:
 
     Supports both I/O-bound operations (asyncio) and CPU-bound operations
     (ThreadPoolExecutor) to maximize throughput for 20+ concurrent models.
+    Includes integrated rate limiting for API calls.
     """
 
     def __init__(
         self,
         max_workers: int = 20,
-        use_async: bool = False
+        use_async: bool = False,
+        rate_limiter: Optional[Any] = None
     ):
         """
         Initialize concurrent processor.
@@ -62,9 +65,11 @@ class ConcurrentModelProcessor:
         Args:
             max_workers: Maximum number of concurrent workers (default: 20)
             use_async: Use asyncio for I/O-bound operations (default: False)
+            rate_limiter: Optional RateLimiter instance for API rate limiting
         """
         self.max_workers = max_workers
         self.use_async = use_async
+        self.rate_limiter = rate_limiter
         self.tasks: List[ProcessingTask] = []
 
     def process_models(
@@ -292,10 +297,43 @@ class ConcurrentModelProcessor:
         Returns:
             Dictionary with counts and status breakdown
         """
-        return {
+        summary = {
             "total": len(self.tasks),
             "completed": self.get_success_count(),
             "failed": self.get_failure_count(),
             "pending": sum(1 for task in self.tasks if task.status == TaskStatus.PENDING),
             "running": sum(1 for task in self.tasks if task.status == TaskStatus.RUNNING),
         }
+
+        # Add rate limiter stats if available
+        if self.rate_limiter:
+            summary["rate_limiter_stats"] = self.rate_limiter.get_stats()
+
+        return summary
+
+    async def execute_with_rate_limit(
+        self,
+        api_name: str,
+        func: Callable,
+        *args,
+        **kwargs
+    ) -> Any:
+        """
+        Execute a function with rate limiting if rate_limiter is configured.
+
+        Args:
+            api_name: Name of the API
+            func: Function to execute
+            *args: Positional arguments
+            **kwargs: Keyword arguments
+
+        Returns:
+            Result from func
+
+        Raises:
+            Exception: If rate_limiter is not configured or execution fails
+        """
+        if not self.rate_limiter:
+            raise ValueError("Rate limiter not configured")
+
+        return await self.rate_limiter.execute(api_name, func, *args, **kwargs)

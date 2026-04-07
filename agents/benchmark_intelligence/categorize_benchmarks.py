@@ -22,6 +22,10 @@ from agents.benchmark_intelligence.stage_utils import (
     save_stage_json,
     find_latest_stage_output
 )
+from agents.benchmark_intelligence.tools.taxonomy_manager import (
+    load_taxonomy_json,
+    apply_category_overrides
+)
 
 
 logger = logging.getLogger(__name__)
@@ -150,10 +154,16 @@ def run(input_json: Optional[str] = None) -> str:
     stage4_data = load_stage_json(input_json)
     benchmarks = stage4_data['data']
 
+    # Preserve metadata from Stage 4
+    stage4_metadata = stage4_data.get('metadata', {})
+    models_without_benchmarks = stage4_metadata.get('models_without_benchmarks', 0)
+
     logger.info(f"Configuration:")
     logger.info(f"  Benchmarks to categorize: {len(benchmarks)}")
     logger.info(f"  Taxonomy version: MVP-v1 (rule-based)")
     logger.info(f"  Available categories: {len(TAXONOMY_RULES)}")
+    if models_without_benchmarks > 0:
+        logger.info(f"  Models without benchmarks: {models_without_benchmarks}")
 
     if not benchmarks:
         logger.warning("No benchmarks found in input - output will be empty")
@@ -161,15 +171,36 @@ def run(input_json: Optional[str] = None) -> str:
     else:
         logger.info(f"\nCategorizing benchmarks...")
 
+        # T087: Load current taxonomy to track changes
+        try:
+            taxonomy = load_taxonomy_json()
+            taxonomy_version = taxonomy.get("version", "MVP-v1")
+            existing_categories = set()
+            for domain in taxonomy.get("domains", []):
+                existing_categories.update(domain.get("categories", []))
+            logger.info(f"  Loaded taxonomy version: {taxonomy_version}")
+        except Exception as e:
+            logger.warning(f"Failed to load taxonomy.json: {e}, using MVP taxonomy")
+            taxonomy_version = "MVP-v1"
+            existing_categories = set(TAXONOMY_RULES.keys())
+
         # Categorize each benchmark
         output_data = []
         category_counts = {}
+        new_categories = set()  # T087: Track newly created categories
 
         for benchmark in benchmarks:
             canonical_name = benchmark.get('canonical_name', '')
 
             # Get categories
             categories = categorize_benchmark(canonical_name)
+
+            # T087: Check if any category is newly created
+            newly_created = False
+            for cat in categories:
+                if cat not in existing_categories and cat != 'uncategorized':
+                    new_categories.add(cat)
+                    newly_created = True
 
             # Track category distribution
             for cat in categories:
@@ -180,14 +211,18 @@ def run(input_json: Optional[str] = None) -> str:
                 'canonical_name': canonical_name,
                 'categories': categories,
                 'primary_category': categories[0] if categories else 'uncategorized',
-                'taxonomy_version': 'MVP-v1',
-                'newly_created_category': False,  # MVP uses fixed taxonomy
+                'taxonomy_version': taxonomy_version,
+                'newly_created_category': newly_created,
                 # Preserve metadata from Stage 4
                 'mention_count': benchmark.get('mention_count', 0),
                 'model_count': benchmark.get('model_count', 0),
                 'variant_count': benchmark.get('variant_count', 0),
             }
             output_data.append(output_entry)
+
+        # T088: Apply manual category overrides from config.yaml
+        logger.info(f"\nApplying category overrides...")
+        output_data = apply_category_overrides(output_data)
 
         # Statistics
         logger.info(f"\n✓ Categorization complete:")
@@ -196,12 +231,29 @@ def run(input_json: Optional[str] = None) -> str:
         for category, count in sorted(category_counts.items(), key=lambda x: x[1], reverse=True):
             logger.info(f"    {category}: {count} benchmarks")
 
-    # Save standardized JSON output
+        # T087: Report taxonomy changes
+        if new_categories:
+            logger.info(f"\n  New categories created: {len(new_categories)}")
+            for cat in sorted(new_categories):
+                logger.info(f"    - {cat}")
+
+    # T087: Build taxonomy_changes section
+    taxonomy_changes = {
+        "new_categories": list(new_categories) if 'new_categories' in locals() else [],
+        "categories_modified": [],  # Future enhancement: track category definition changes
+        "taxonomy_version": taxonomy_version if 'taxonomy_version' in locals() else "MVP-v1"
+    }
+
+    # Save standardized JSON output with preserved metadata
     output_path = save_stage_json(
         data=output_data,
         stage_name="categorize_benchmarks",
         input_count=len(benchmarks),
-        errors=[]
+        errors=[],
+        metadata={
+            "models_without_benchmarks": models_without_benchmarks,
+            "taxonomy_changes": taxonomy_changes  # T087: Add taxonomy changes to output
+        }
     )
 
     logger.info(f"\n✓ Stage 5 complete")

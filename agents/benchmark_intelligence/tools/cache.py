@@ -813,6 +813,7 @@ class CacheManager:
                 'timestamp': row['timestamp'],
                 'model_count': row['model_count'],
                 'benchmark_count': row['benchmark_count'],
+                'taxonomy_version': row['taxonomy_version'],
                 'summary': json.loads(row['summary']) if row['summary'] else {}
             }
 
@@ -1396,4 +1397,154 @@ class CacheManager:
                 })
 
             return deprecated
+
+    @staticmethod
+    def classify_benchmark_status(first_seen: str, last_seen: str, window_end: str) -> str:
+        """
+        Classify benchmark status based on temporal activity.
+
+        Classification rules (T056-T057):
+        - emerging: first_seen ≤ 3 months before window_end
+        - almost_extinct: last_seen ≥ 9 months before window_end
+        - active: all others
+
+        Args:
+            first_seen: ISO timestamp when benchmark was first seen
+            last_seen: ISO timestamp when benchmark was last seen
+            window_end: ISO timestamp for end of rolling window
+
+        Returns:
+            Status string: "emerging", "almost_extinct", or "active"
+        """
+        # Parse timestamps
+        first_dt = datetime.fromisoformat(first_seen.replace('Z', '+00:00'))
+        last_dt = datetime.fromisoformat(last_seen.replace('Z', '+00:00'))
+        window_end_dt = datetime.fromisoformat(window_end.replace('Z', '+00:00'))
+
+        # Calculate time differences in days
+        days_since_first = (window_end_dt - first_dt).days
+        days_since_last = (window_end_dt - last_dt).days
+
+        # Apply classification rules
+        # Emerging: first seen ≤ 3 months (90 days) before window end
+        if days_since_first <= 90:
+            return "emerging"
+
+        # Almost extinct: last seen ≥ 9 months (270 days) before window end
+        if days_since_last >= 270:
+            return "almost_extinct"
+
+        # Active: everything else
+        return "active"
+
+    def create_snapshot_with_window(
+        self,
+        window_months: int = 12,
+        taxonomy_version: Optional[str] = None,
+        summary: Optional[Dict[str, Any]] = None
+    ) -> int:
+        """
+        Create a snapshot with 12-month rolling window and populate benchmark_mentions.
+
+        Implements temporal tracking for Phase 4 (T051-T055, T058):
+        - Calculates rolling window boundaries (window_start, window_end)
+        - Queries models in window by release_date
+        - Computes benchmark statistics (absolute_mentions, relative_frequency)
+        - Classifies benchmark status (emerging, active, almost_extinct)
+        - Populates benchmark_mentions table with denormalized stats
+
+        Args:
+            window_months: Number of months for rolling window (default: 12)
+            taxonomy_version: Version string of taxonomy used
+            summary: Additional summary information as dictionary
+
+        Returns:
+            Snapshot ID
+        """
+        now = self._now()
+        now_dt = datetime.utcnow()
+
+        # Calculate rolling window boundaries (T052)
+        window_end = now_dt.isoformat()
+        window_start_dt = now_dt - timedelta(days=window_months * 30)
+        window_start = window_start_dt.isoformat()
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Query models in window by release_date (T053)
+            # Use release_date if available, otherwise first_seen
+            cursor.execute("""
+                SELECT id FROM models
+                WHERE deleted_at IS NULL
+                  AND (
+                    (release_date IS NOT NULL AND release_date >= ? AND release_date <= ?)
+                    OR
+                    (release_date IS NULL AND first_seen >= ? AND first_seen <= ?)
+                  )
+            """, (window_start, window_end, window_start, window_end))
+
+            models_in_window = {row['id'] for row in cursor.fetchall()}
+            model_count = len(models_in_window)
+
+            # Get all benchmarks count
+            cursor.execute("SELECT COUNT(*) as count FROM benchmarks")
+            benchmark_count = cursor.fetchone()['count']
+
+            # Create snapshot with window boundaries (T051, T052)
+            summary_json = json.dumps(summary or {})
+            cursor.execute("""
+                INSERT INTO snapshots
+                (timestamp, window_start, window_end, model_count, benchmark_count, taxonomy_version, summary)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (now, window_start, window_end, model_count, benchmark_count, taxonomy_version, summary_json))
+
+            snapshot_id = cursor.lastrowid
+
+            # Compute benchmark statistics for models in window (T054)
+            if models_in_window:
+                # Build SQL query for models in window
+                placeholders = ','.join('?' * len(models_in_window))
+
+                # Get benchmark statistics via SQL aggregation
+                cursor.execute(f"""
+                    SELECT
+                        b.id as benchmark_id,
+                        b.canonical_name,
+                        b.first_seen,
+                        b.last_seen,
+                        COUNT(DISTINCT mb.model_id) as absolute_mentions,
+                        CAST(COUNT(DISTINCT mb.model_id) AS REAL) / ? as relative_frequency
+                    FROM benchmarks b
+                    LEFT JOIN model_benchmarks mb ON b.id = mb.benchmark_id
+                        AND mb.model_id IN ({placeholders})
+                    GROUP BY b.id
+                    HAVING absolute_mentions > 0
+                """, [model_count] + list(models_in_window))
+
+                benchmark_stats = cursor.fetchall()
+
+                # Populate benchmark_mentions table (T055, T058)
+                for stat in benchmark_stats:
+                    benchmark_id = stat['benchmark_id']
+                    absolute_mentions = stat['absolute_mentions']
+                    relative_frequency = stat['relative_frequency']
+                    first_seen = stat['first_seen']
+                    last_seen = stat['last_seen'] or stat['first_seen']  # Fallback to first_seen
+
+                    # Classify benchmark status (T056-T057)
+                    status = self.classify_benchmark_status(first_seen, last_seen, window_end)
+
+                    # Insert into benchmark_mentions
+                    cursor.execute("""
+                        INSERT INTO benchmark_mentions
+                        (snapshot_id, benchmark_id, absolute_mentions, relative_frequency,
+                         first_seen, last_seen, status)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (snapshot_id, benchmark_id, absolute_mentions, relative_frequency,
+                          first_seen, last_seen, status))
+
+            conn.commit()
+
+        return snapshot_id
 

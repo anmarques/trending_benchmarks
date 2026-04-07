@@ -165,12 +165,12 @@ def test_model_extraction(
             if stats['extra_count'] > 10:
                 print(f"    ... and {stats['extra_count'] - 10} more")
 
-        # Check performance criteria
-        passed_rate = stats['rate'] >= 0.90
+        # Check performance criteria (SC-002: ≥95% extraction accuracy)
+        passed_rate = stats['rate'] >= 0.95
         passed_time = extraction_time < 60.0
 
         print(f"\nPerformance Criteria:")
-        print(f"  Extraction rate ≥90%: {'✓ PASS' if passed_rate else '✗ FAIL'} ({stats['rate']*100:.1f}%)")
+        print(f"  Extraction rate ≥95% (SC-002): {'✓ PASS' if passed_rate else '✗ FAIL'} ({stats['rate']*100:.1f}%)")
         print(f"  Time <60 seconds: {'✓ PASS' if passed_time else '✗ FAIL'} ({extraction_time:.3f}s)")
 
         return {
@@ -253,7 +253,7 @@ def run_ground_truth_validation():
 
     print(f"\nModels tested: {total_models}")
     print(f"Successful extractions: {successful_models}/{total_models}")
-    print(f"Passed extraction rate test (≥90%): {passed_rate_tests}/{total_models}")
+    print(f"Passed extraction rate test (≥95% SC-002): {passed_rate_tests}/{total_models}")
     print(f"Passed time test (<60s): {passed_time_tests}/{total_models}")
 
     # Aggregate statistics

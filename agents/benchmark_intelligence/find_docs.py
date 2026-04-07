@@ -23,6 +23,7 @@ from agents.benchmark_intelligence.stage_utils import (
     find_latest_stage_output
 )
 from agents.benchmark_intelligence.tools.cache import CacheManager
+from agents.benchmark_intelligence.error_aggregator import ErrorAggregator
 
 
 logger = logging.getLogger(__name__)
@@ -164,6 +165,9 @@ def run(models_json: Optional[str] = None) -> str:
     # Initialize cache for document hash tracking
     cache = CacheManager(use_pool=False)  # Simple mode for this stage
 
+    # Initialize error aggregator
+    error_aggregator = ErrorAggregator(max_samples_per_type=5)
+
     output_data = []
     total_docs_found = 0
 
@@ -171,20 +175,41 @@ def run(models_json: Optional[str] = None) -> str:
     for i, model in enumerate(models, 1):
         model_id = model['model_id']
 
-        # Construct document URLs
-        documents = construct_document_urls(model)
+        try:
+            # Construct document URLs
+            documents = construct_document_urls(model)
 
-        # Count found documents
-        found_count = sum(1 for doc in documents if doc.get('found', False))
-        total_docs_found += found_count
+            # Count found documents
+            found_count = sum(1 for doc in documents if doc.get('found', False))
+            total_docs_found += found_count
 
-        output_entry = {
-            'model_id': model_id,
-            'documents': documents,
-            'doc_count': len(documents),
-            'found_count': found_count
-        }
-        output_data.append(output_entry)
+            output_entry = {
+                'model_id': model_id,
+                'documents': documents,
+                'doc_count': len(documents),
+                'found_count': found_count
+            }
+            output_data.append(output_entry)
+
+        except Exception as e:
+            error_msg = f"Failed to construct URLs: {str(e)}"
+            logger.warning(f"  {model_id}: {error_msg}")
+
+            error_aggregator.add_error(
+                "url_construction_failure",
+                model_id,
+                {"error": str(e)}
+            )
+
+            # Add entry with error
+            output_entry = {
+                'model_id': model_id,
+                'documents': [],
+                'doc_count': 0,
+                'found_count': 0,
+                'error': error_msg
+            }
+            output_data.append(output_entry)
 
         if (i % 50 == 0) or (i == len(models)):
             logger.info(f"  Processed {i}/{len(models)} models...")
@@ -197,12 +222,20 @@ def run(models_json: Optional[str] = None) -> str:
     logger.info(f"  Total document URLs: {total_docs_found}")
     logger.info(f"  Avg docs per model: {avg_docs_per_model:.1f}")
 
-    # Save standardized JSON output
+    # Display error summary if any errors occurred
+    if error_aggregator.has_errors():
+        logger.info(f"\n{error_aggregator.format_summary_text()}")
+
+    # Get error summary for JSON output
+    error_summary = error_aggregator.get_summary()
+
+    # Save standardized JSON output with error summary
     output_path = save_stage_json(
         data=output_data,
         stage_name="find_documents",
         input_count=len(models),
-        errors=[]  # No errors in this simple implementation
+        errors=[],
+        metadata={"error_summary": error_summary} if error_summary else None
     )
 
     logger.info(f"\n✓ Stage 2 complete")

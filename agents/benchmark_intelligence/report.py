@@ -31,7 +31,8 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 def generate_report_markdown(
     categorized_benchmarks: List[Dict[str, Any]],
-    snapshot_id: Optional[int] = None
+    snapshot_id: Optional[int] = None,
+    models_without_benchmarks: int = 0
 ) -> str:
     """
     Generate Markdown report from categorized benchmarks.
@@ -39,6 +40,7 @@ def generate_report_markdown(
     Args:
         categorized_benchmarks: List of categorized benchmarks from Stage 5
         snapshot_id: Optional snapshot ID for report metadata
+        models_without_benchmarks: Count of models with no benchmarks found
 
     Returns:
         Markdown report content
@@ -79,6 +81,11 @@ def generate_report_markdown(
     lines.append("")
     lines.append(f"This report analyzes {len(categorized_benchmarks)} unique benchmarks "
                  f"mentioned across multiple AI models.")
+    if models_without_benchmarks > 0:
+        lines.append("")
+        lines.append(f"**Note:** {models_without_benchmarks} models had no benchmarks extracted. "
+                     f"This may be due to missing documentation, extraction failures, or "
+                     f"models without published benchmark results.")
     lines.append("")
 
     # Category Distribution
@@ -186,8 +193,15 @@ def run(input_json: Optional[str] = None, snapshot_id: Optional[int] = None) -> 
     stage5_data = load_stage_json(input_json)
     benchmarks = stage5_data['data']
 
+    # Check for models with no benchmarks in metadata
+    models_without_benchmarks = 0
+    if 'metadata' in stage5_data and 'models_without_benchmarks' in stage5_data['metadata']:
+        models_without_benchmarks = stage5_data['metadata']['models_without_benchmarks']
+
     logger.info(f"Configuration:")
     logger.info(f"  Benchmarks to report: {len(benchmarks)}")
+    if models_without_benchmarks > 0:
+        logger.info(f"  Models with no benchmarks: {models_without_benchmarks}")
     if snapshot_id:
         logger.info(f"  Snapshot ID: {snapshot_id}")
 
@@ -197,7 +211,11 @@ def run(input_json: Optional[str] = None, snapshot_id: Optional[int] = None) -> 
     logger.info(f"\nGenerating Markdown report...")
 
     # Generate report content
-    report_content = generate_report_markdown(benchmarks, snapshot_id)
+    report_content = generate_report_markdown(
+        benchmarks,
+        snapshot_id,
+        models_without_benchmarks
+    )
 
     # Create reports directory
     reports_dir = Path(__file__).parent / "reports"

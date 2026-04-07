@@ -64,3 +64,41 @@ parallelization:
   max_concurrent_document_fetches: 5
   enabled: true
   timeout_per_document_seconds: 60
+
+# Benchmark consolidation configuration (T079)
+consolidation:
+  fuzzy_match_threshold: 0.90  # Threshold for treating benchmark names as same (0.0-1.0)
+  enable_web_search: true      # Enable web search disambiguation for ambiguous pairs
+  web_search_max_results: 3    # Number of search results to analyze
+
+# Taxonomy configuration (T088)
+taxonomy:
+  # Manual category overrides (takes precedence over AI classification)
+  # Format: benchmark_name: "Category Name"
+  category_overrides:
+    # Example overrides (uncomment and modify as needed):
+    # "MMLU": "Knowledge & General Understanding"
+    # "GSM8K": "Mathematical Reasoning"
+
+# Rate limiting configuration (T091)
+rate_limiting:
+  huggingface:
+    requests_per_minute: 60
+    max_retries: 5
+    initial_backoff_seconds: 2.0
+    max_backoff_seconds: 60.0
+    backoff_multiplier: 2.0
+
+  anthropic:
+    requests_per_minute: 50
+    max_retries: 5
+    initial_backoff_seconds: 2.0
+    max_backoff_seconds: 120.0
+    backoff_multiplier: 2.0
+
+  arxiv:
+    requests_per_minute: 30
+    max_retries: 3
+    initial_backoff_seconds: 1.0
+    max_backoff_seconds: 30.0
+    backoff_multiplier: 2.0

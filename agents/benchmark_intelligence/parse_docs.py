@@ -30,18 +30,26 @@ from agents.benchmark_intelligence.tools.parse_table import (
 from agents.benchmark_intelligence.tools.extract_benchmarks_vision import extract_benchmarks_from_pdf
 from agents.benchmark_intelligence.concurrent_processor import ConcurrentModelProcessor
 from agents.benchmark_intelligence.tools.cache import CacheManager
+from agents.benchmark_intelligence.error_aggregator import ErrorAggregator
+from agents.benchmark_intelligence.progress_tracker import ProgressTracker
 
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 
-def extract_benchmarks_from_model_docs(model_entry: Dict[str, Any]) -> Dict[str, Any]:
+def extract_benchmarks_from_model_docs(
+    model_entry: Dict[str, Any],
+    error_aggregator: Optional[ErrorAggregator] = None,
+    progress_tracker: Optional[ProgressTracker] = None
+) -> Dict[str, Any]:
     """
     Process a single model: fetch documents and extract benchmarks.
 
     Args:
         model_entry: Model entry from Stage 2 with documents list
+        error_aggregator: Optional error aggregator for tracking errors
+        progress_tracker: Optional progress tracker for live updates
 
     Returns:
         Dictionary containing extracted benchmarks and metadata:
@@ -63,11 +71,16 @@ def extract_benchmarks_from_model_docs(model_entry: Dict[str, Any]) -> Dict[str,
     )
 
     if not fetch_results:
+        error_msg = "Failed to fetch documents"
+        if error_aggregator:
+            error_aggregator.add_error("fetch_failure", model_id, {"reason": error_msg})
+        if progress_tracker:
+            progress_tracker.increment_errors_encountered()
         return {
             "model_id": model_id,
             "documents_processed": 0,
             "benchmarks": [],
-            "errors": ["Failed to fetch documents"]
+            "errors": [error_msg]
         }
 
     # Get fetched documents for this model
@@ -139,6 +152,21 @@ def extract_benchmarks_from_model_docs(model_entry: Dict[str, Any]) -> Dict[str,
             logger.warning(f"  {model_id}: {error_msg}")
             errors.append(error_msg)
 
+            # Track extraction error
+            if error_aggregator:
+                error_aggregator.add_error(
+                    f"extraction_{doc.get('type', 'unknown')}",
+                    model_id,
+                    {"url": doc.get("url"), "error": str(e)}
+                )
+            if progress_tracker:
+                progress_tracker.increment_errors_encountered()
+
+    # Update progress tracker
+    if progress_tracker:
+        progress_tracker.increment_models_processed()
+        progress_tracker.increment_benchmarks_extracted(len(all_benchmarks))
+
     return {
         "model_id": model_id,
         "documents_processed": len(successful_docs),
@@ -190,22 +218,39 @@ def run(docs_json: Optional[str] = None, concurrency: int = 20) -> str:
     logger.info(f"  Concurrency: {concurrency} workers")
     logger.info(f"  AI extraction: Enabled (Claude)")
 
+    # Initialize error aggregator and progress tracker
+    error_aggregator = ErrorAggregator(max_samples_per_type=5)
+    progress_tracker = ProgressTracker(
+        total_models=len(models),
+        update_interval=5.0,
+        enable_console_updates=True
+    )
+
     # Initialize concurrent processor
     processor = ConcurrentModelProcessor(max_workers=concurrency)
 
-    # Progress callback
-    def progress_callback(completed: int, total: int):
-        if completed % 10 == 0 or completed == total:
-            logger.info(f"  Progress: {completed}/{total} models processed")
-
     logger.info(f"\nProcessing {len(models)} models in parallel...")
+
+    # Start progress tracking
+    progress_tracker.start()
+
+    # Wrapper function to pass error_aggregator and progress_tracker
+    def process_with_tracking(model_entry):
+        return extract_benchmarks_from_model_docs(
+            model_entry,
+            error_aggregator=error_aggregator,
+            progress_tracker=progress_tracker
+        )
 
     # Process all models concurrently
     results = processor.process_models(
         models=models,
-        process_func=extract_benchmarks_from_model_docs,
-        progress_callback=progress_callback
+        process_func=process_with_tracking,
+        progress_callback=None  # Progress tracker handles this now
     )
+
+    # Stop progress tracking
+    progress_tracker.stop()
 
     # Aggregate statistics
     output_data = []
@@ -240,6 +285,7 @@ def run(docs_json: Optional[str] = None, concurrency: int = 20) -> str:
 
     # Calculate statistics
     models_with_benchmarks = sum(1 for r in results if r.get("benchmark_count", 0) > 0)
+    models_without_benchmarks = len(models) - models_with_benchmarks
     avg_benchmarks_per_model = total_benchmarks / len(models) if models else 0
 
     logger.info(f"\n✓ Benchmark extraction complete:")
@@ -247,17 +293,31 @@ def run(docs_json: Optional[str] = None, concurrency: int = 20) -> str:
     logger.info(f"  Documents processed: {total_docs_processed}")
     logger.info(f"  Total benchmarks extracted: {total_benchmarks}")
     logger.info(f"  Models with benchmarks: {models_with_benchmarks} ({models_with_benchmarks/len(models)*100:.1f}%)")
+    logger.info(f"  Models without benchmarks: {models_without_benchmarks}")
     logger.info(f"  Avg benchmarks per model: {avg_benchmarks_per_model:.1f}")
 
     if errors_list:
         logger.warning(f"  Errors encountered: {len(errors_list)}")
 
-    # Save standardized JSON output
+    # Display error summary
+    if error_aggregator.has_errors():
+        logger.info(f"\n{error_aggregator.format_summary_text()}")
+
+    # Get error summary for JSON output
+    error_summary = error_aggregator.get_summary()
+
+    # Save standardized JSON output with error summary and statistics
     output_path = save_stage_json(
         data=output_data,
         stage_name="parse_documents",
         input_count=len(models),
-        errors=errors_list
+        errors=errors_list,
+        metadata={
+            "error_summary": error_summary,
+            "models_without_benchmarks": models_without_benchmarks,
+            "models_with_benchmarks": models_with_benchmarks,
+            "total_benchmarks": total_benchmarks
+        }
     )
 
     # Get processing summary

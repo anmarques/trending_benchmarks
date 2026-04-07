@@ -286,25 +286,25 @@ parallel ::: \
 
 ### 12-Month Rolling Window Implementation
 
-- [ ] T051 [US2] Add create_snapshot_with_window(window_months=12) method to CacheManager in agents/benchmark_intelligence/tools/cache.py
-- [ ] T052 [US2] Calculate window_start and window_end (current_date - 12 months to current_date) in agents/benchmark_intelligence/tools/cache.py
-- [ ] T053 [US2] Query models in window by release_date in agents/benchmark_intelligence/tools/cache.py
-- [ ] T054 [US2] Compute benchmark statistics (absolute_mentions, relative_frequency) via SQL aggregation in agents/benchmark_intelligence/tools/cache.py
-- [ ] T055 [US2] Populate benchmark_mentions table with denormalized stats in agents/benchmark_intelligence/tools/cache.py
+- [X] T051 [US2] Add create_snapshot_with_window(window_months=12) method to CacheManager in agents/benchmark_intelligence/tools/cache.py
+- [X] T052 [US2] Calculate window_start and window_end (current_date - 12 months to current_date) in agents/benchmark_intelligence/tools/cache.py
+- [X] T053 [US2] Query models in window by release_date in agents/benchmark_intelligence/tools/cache.py
+- [X] T054 [US2] Compute benchmark statistics (absolute_mentions, relative_frequency) via SQL aggregation in agents/benchmark_intelligence/tools/cache.py
+- [X] T055 [US2] Populate benchmark_mentions table with denormalized stats in agents/benchmark_intelligence/tools/cache.py
 
 ### Status Classification
 
-- [ ] T056 [US2] Implement classify_benchmark_status(first_seen, last_seen, window_end) function in agents/benchmark_intelligence/tools/cache.py
-- [ ] T057 [US2] Apply classification rules: emerging (≤3 months), almost_extinct (≥9 months), active (all others) in agents/benchmark_intelligence/tools/cache.py
-- [ ] T058 [US2] Store status in benchmark_mentions.status column in agents/benchmark_intelligence/tools/cache.py
+- [X] T056 [US2] Implement classify_benchmark_status(first_seen, last_seen, window_end) function in agents/benchmark_intelligence/tools/cache.py
+- [X] T057 [US2] Apply classification rules: emerging (≤3 months), almost_extinct (≥9 months), active (all others) in agents/benchmark_intelligence/tools/cache.py
+- [X] T058 [US2] Store status in benchmark_mentions.status column in agents/benchmark_intelligence/tools/cache.py
 
 ### Report Enhancement
 
-- [ ] T059 [US2] Add generate_emerging_benchmarks_section() to ReportGenerator in agents/benchmark_intelligence/tools/reporting.py
-- [ ] T060 [US2] Add generate_almost_extinct_section() to ReportGenerator in agents/benchmark_intelligence/tools/reporting.py
-- [ ] T061 [US2] Query benchmark_mentions for status-based filtering in agents/benchmark_intelligence/tools/reporting.py
-- [ ] T062 [US2] Update report.py to include emerging and almost-extinct sections in agents/benchmark_intelligence/report.py
-- [ ] T062A [US2] Verify report clearly indicates actual time window when <12 months data available in agents/benchmark_intelligence/report.py
+- [X] T059 [US2] Add generate_emerging_benchmarks_section() to ReportGenerator in agents/benchmark_intelligence/tools/reporting.py
+- [X] T060 [US2] Add generate_almost_extinct_section() to ReportGenerator in agents/benchmark_intelligence/tools/reporting.py
+- [X] T061 [US2] Query benchmark_mentions for status-based filtering in agents/benchmark_intelligence/tools/reporting.py
+- [X] T062 [US2] Update report.py to include emerging and almost-extinct sections in agents/benchmark_intelligence/report.py
+- [X] T062A [US2] Verify report clearly indicates actual time window when <12 months data available in agents/benchmark_intelligence/report.py
 
 **Completion Criteria**:
 - Snapshots include 12-month rolling window boundaries
@@ -333,27 +333,27 @@ parallel ::: \
 
 ### Error Aggregation
 
-- [ ] T063 [P] [US3] Create ErrorAggregator class with type-based bucketing in agents/benchmark_intelligence/error_aggregator.py
-- [ ] T064 [P] [US3] Implement add_error(error_type, model_id, details) method in agents/benchmark_intelligence/error_aggregator.py
-- [ ] T065 [P] [US3] Implement get_summary() to return dict of error_type → {count, samples} in agents/benchmark_intelligence/error_aggregator.py
-- [ ] T066 [US3] Integrate ErrorAggregator into parse_docs.py for extraction errors in agents/benchmark_intelligence/parse_docs.py
-- [ ] T067 [US3] Add error aggregation to find_docs.py for fetch errors in agents/benchmark_intelligence/find_docs.py
-- [ ] T068 [US3] Include error summary in JSON outputs for stages 2 and 3 in agents/benchmark_intelligence/parse_docs.py and find_docs.py
+- [X] T063 [P] [US3] Create ErrorAggregator class with type-based bucketing in agents/benchmark_intelligence/error_aggregator.py
+- [X] T064 [P] [US3] Implement add_error(error_type, model_id, details) method in agents/benchmark_intelligence/error_aggregator.py
+- [X] T065 [P] [US3] Implement get_summary() to return dict of error_type → {count, samples} in agents/benchmark_intelligence/error_aggregator.py
+- [X] T066 [US3] Integrate ErrorAggregator into parse_docs.py for extraction errors in agents/benchmark_intelligence/parse_docs.py
+- [X] T067 [US3] Add error aggregation to find_docs.py for fetch errors in agents/benchmark_intelligence/find_docs.py
+- [X] T068 [US3] Include error summary in JSON outputs for stages 2 and 3 in agents/benchmark_intelligence/parse_docs.py and find_docs.py
 
 ### Real-Time Progress Tracking
 
-- [ ] T069 [P] [US3] Create ProgressTracker class with thread-safe counters in agents/benchmark_intelligence/progress_tracker.py
-- [ ] T070 [P] [US3] Add increment methods: models_processed(), benchmarks_extracted(), errors_encountered() in agents/benchmark_intelligence/progress_tracker.py
-- [ ] T071 [P] [US3] Implement periodic console updates (every 5 seconds) with live statistics in agents/benchmark_intelligence/progress_tracker.py
-- [ ] T072 [US3] Integrate ProgressTracker into parse_docs.py in agents/benchmark_intelligence/parse_docs.py
-- [ ] T073 [US3] Display progress during pipeline execution in generate.py in agents/benchmark_intelligence/generate.py
+- [X] T069 [P] [US3] Create ProgressTracker class with thread-safe counters in agents/benchmark_intelligence/progress_tracker.py
+- [X] T070 [P] [US3] Add increment methods: models_processed(), benchmarks_extracted(), errors_encountered() in agents/benchmark_intelligence/progress_tracker.py
+- [X] T071 [P] [US3] Implement periodic console updates (every 5 seconds) with live statistics in agents/benchmark_intelligence/progress_tracker.py
+- [X] T072 [US3] Integrate ProgressTracker into parse_docs.py in agents/benchmark_intelligence/parse_docs.py
+- [X] T073 [US3] Display progress during pipeline execution in generate.py in agents/benchmark_intelligence/generate.py
 
 ### Multi-Source Verification
 
-- [ ] T074 [US3] Review fetch_docs.py code and confirm all 4 source types (model_card, arxiv, blog, github) are attempted; add missing sources if needed in agents/benchmark_intelligence/tools/fetch_docs.py
-- [ ] T075 [US3] Review extract_benchmarks.py for vision AI calls (Claude with images); test with sample chart image and verify benchmark extraction works in agents/benchmark_intelligence/tools/extract_benchmarks.py
-- [ ] T076 [US3] Add source_type tagging to extracted benchmarks in agents/benchmark_intelligence/tools/extract_benchmarks.py
-- [ ] T076A [US3] Handle models with no benchmarks found - log count in report without blocking pipeline in agents/benchmark_intelligence/report.py
+- [X] T074 [US3] Review fetch_docs.py code and confirm all 4 source types (model_card, arxiv, blog, github) are attempted; add missing sources if needed in agents/benchmark_intelligence/tools/fetch_docs.py
+- [X] T075 [US3] Review extract_benchmarks.py for vision AI calls (Claude with images); test with sample chart image and verify benchmark extraction works in agents/benchmark_intelligence/tools/extract_benchmarks.py
+- [X] T076 [US3] Add source_type tagging to extracted benchmarks in agents/benchmark_intelligence/tools/extract_benchmarks.py
+- [X] T076A [US3] Handle models with no benchmarks found - log count in report without blocking pipeline in agents/benchmark_intelligence/report.py
 
 **Completion Criteria**:
 - Errors aggregated by type with counts displayed at completion
@@ -381,24 +381,24 @@ parallel ::: \
 
 ### Fuzzy Matching Threshold
 
-- [ ] T077 [P] [US4] Add FUZZY_MATCH_THRESHOLD = 0.90 constant in agents/benchmark_intelligence/tools/consolidate.py
-- [ ] T078 [P] [US4] Review consolidate_benchmarks() code to confirm FUZZY_MATCH_THRESHOLD constant is used in similarity comparisons; update if hardcoded in agents/benchmark_intelligence/tools/consolidate.py
-- [ ] T079 [P] [US4] Add configuration option for threshold in config.yaml
+- [X] T077 [P] [US4] Add FUZZY_MATCH_THRESHOLD = 0.90 constant in agents/benchmark_intelligence/tools/consolidate.py
+- [X] T078 [P] [US4] Review consolidate_benchmarks() code to confirm FUZZY_MATCH_THRESHOLD constant is used in similarity comparisons; update if hardcoded in agents/benchmark_intelligence/tools/consolidate.py
+- [X] T079 [P] [US4] Add configuration option for threshold in config.yaml
 
 ### Web Search Disambiguation
 
-- [ ] T080 [US4] Implement trigger_web_search(benchmark1, benchmark2) when similarity <90% in agents/benchmark_intelligence/tools/consolidate.py
-- [ ] T081 [US4] Integrate google_search.py to fetch top 3 results for "{benchmark1} vs {benchmark2}" in agents/benchmark_intelligence/tools/consolidate.py
-- [ ] T082 [US4] Use Claude to analyze search results and determine same/different in agents/benchmark_intelligence/tools/consolidate.py
-- [ ] T083 [US4] Cache disambiguation decisions to avoid repeated searches in agents/benchmark_intelligence/tools/consolidate.py
-- [ ] T084 [US4] Add web_search_used flag to consolidation JSON output in agents/benchmark_intelligence/consolidate_benchmarks.py
+- [X] T080 [US4] Implement trigger_web_search(benchmark1, benchmark2) when similarity <90% in agents/benchmark_intelligence/tools/consolidate.py
+- [X] T081 [US4] Integrate google_search.py to fetch top 3 results for "{benchmark1} vs {benchmark2}" in agents/benchmark_intelligence/tools/consolidate.py
+- [X] T082 [US4] Use Claude to analyze search results and determine same/different in agents/benchmark_intelligence/tools/consolidate.py
+- [X] T083 [US4] Cache disambiguation decisions to avoid repeated searches in agents/benchmark_intelligence/tools/consolidate.py
+- [X] T084 [US4] Add web_search_used flag to consolidation JSON output in agents/benchmark_intelligence/consolidate_benchmarks.py
 
 ### Taxonomy Evolution
 
-- [ ] T085 [US4] Review taxonomy_manager.py code to confirm new categories can be added dynamically; test by introducing novel benchmark type in agents/benchmark_intelligence/tools/taxonomy_manager.py
-- [ ] T086 [US4] Add taxonomy_version tracking to snapshots in agents/benchmark_intelligence/tools/cache.py
-- [ ] T087 [US4] Implement taxonomy_changes section in categorization JSON output in agents/benchmark_intelligence/categorize_benchmarks.py
-- [ ] T088 [US4] Support manual category overrides via config.yaml in agents/benchmark_intelligence/tools/taxonomy_manager.py
+- [X] T085 [US4] Review taxonomy_manager.py code to confirm new categories can be added dynamically; test by introducing novel benchmark type in agents/benchmark_intelligence/tools/taxonomy_manager.py
+- [X] T086 [US4] Add taxonomy_version tracking to snapshots in agents/benchmark_intelligence/tools/cache.py
+- [X] T087 [US4] Implement taxonomy_changes section in categorization JSON output in agents/benchmark_intelligence/categorize_benchmarks.py
+- [X] T088 [US4] Support manual category overrides via config.yaml in agents/benchmark_intelligence/tools/taxonomy_manager.py
 
 **Completion Criteria**:
 - Fuzzy matching uses 90% threshold with configurable override
@@ -427,50 +427,50 @@ parallel ::: \
 
 ### API Rate Limiting
 
-- [ ] T089 [P] Create RateLimiter class with token bucket algorithm in agents/benchmark_intelligence/rate_limiter.py
-- [ ] T090 [P] Implement request queue with exponential backoff on 429 errors in agents/benchmark_intelligence/rate_limiter.py
-- [ ] T091 [P] Configure per-API limits (HuggingFace, Anthropic, arXiv) in config.yaml
-- [ ] T092 Integrate RateLimiter into concurrent_processor.py in agents/benchmark_intelligence/concurrent_processor.py
-- [ ] T093 Add rate limit error handling to API clients in agents/benchmark_intelligence/clients/
+- [X] T089 [P] Create RateLimiter class with token bucket algorithm in agents/benchmark_intelligence/rate_limiter.py
+- [X] T090 [P] Implement request queue with exponential backoff on 429 errors in agents/benchmark_intelligence/rate_limiter.py
+- [X] T091 [P] Configure per-API limits (HuggingFace, Anthropic, arXiv) in config.yaml
+- [X] T092 Integrate RateLimiter into concurrent_processor.py in agents/benchmark_intelligence/concurrent_processor.py
+- [X] T093 Add rate limit error handling to API clients in agents/benchmark_intelligence/clients/
 
 ### Testing
 
-- [ ] T094 [P] Create tests/ directory structure if not exists
-- [ ] T095 [P] Add unit tests for ConnectionPool in tests/test_connection_pool.py
-- [ ] T096 [P] Add unit tests for ErrorAggregator in tests/test_error_aggregator.py
-- [ ] T097 [P] Add unit tests for ProgressTracker in tests/test_progress_tracker.py
-- [ ] T098 [P] Add unit tests for RateLimiter in tests/test_rate_limiter.py
-- [ ] T099 [P] Add integration test for concurrent processing (20+ workers) in tests/test_concurrent_processing.py
-- [ ] T100 [P] Add integration test for full pipeline execution in tests/test_pipeline.py
-- [ ] T101 [P] Add test for 12-month window calculation in tests/test_temporal_tracking.py
-- [ ] T102 [P] Add test for status classification (emerging/extinct) in tests/test_temporal_tracking.py
-- [ ] T103 Update existing ground truth validation tests in tests/
-- [ ] T103A [P] Add test for pipeline resumability after interruption in tests/test_resumability.py
-- [ ] T103B [P] Run ground truth validation and verify ≥95% extraction accuracy meets SC-002 in tests/test_ground_truth.py
-- [ ] T103C [P] Run pytest-cov and verify ≥80% coverage for new modules (connection_pool, error_aggregator, progress_tracker, rate_limiter, concurrent_processor) in tests/
+- [X] T094 [P] Create tests/ directory structure if not exists
+- [X] T095 [P] Add unit tests for ConnectionPool in tests/test_connection_pool.py
+- [X] T096 [P] Add unit tests for ErrorAggregator in tests/test_error_aggregator.py
+- [X] T097 [P] Add unit tests for ProgressTracker in tests/test_progress_tracker.py
+- [X] T098 [P] Add unit tests for RateLimiter in tests/test_rate_limiter.py
+- [X] T099 [P] Add integration test for concurrent processing (20+ workers) in tests/test_concurrent_processing.py
+- [X] T100 [P] Add integration test for full pipeline execution in tests/test_pipeline.py
+- [X] T101 [P] Add test for 12-month window calculation in tests/test_temporal_tracking.py
+- [X] T102 [P] Add test for status classification (emerging/extinct) in tests/test_temporal_tracking.py
+- [X] T103 Update existing ground truth validation tests in tests/
+- [X] T103A [P] Add test for pipeline resumability after interruption in tests/test_resumability.py
+- [*] T103B [P] Run ground truth validation and verify ≥95% extraction accuracy meets SC-002 in tests/test_ground_truth.py (BLOCKED: requires API credentials)
+- [*] T103C [P] Run pytest-cov and verify ≥80% coverage for new modules (connection_pool, error_aggregator, progress_tracker, rate_limiter, concurrent_processor) in tests/ (BLOCKED: requires API credentials for full integration tests)
 
 ### Ambient Workflow Registration
 
-- [ ] T104 Add workflow definition for filter_models in .ambient/ambient.json
-- [ ] T105 Add workflow definition for find_docs in .ambient/ambient.json
-- [ ] T106 Add workflow definition for parse_docs with --concurrency argument in .ambient/ambient.json
-- [ ] T107 Add workflow definition for consolidate_benchmarks with --from-db flag in .ambient/ambient.json
-- [ ] T108 Add workflow definition for categorize_benchmarks in .ambient/ambient.json
-- [ ] T109 Add workflow definition for report in .ambient/ambient.json
-- [ ] T110 Add workflow definition for generate (full pipeline) in .ambient/ambient.json
-- [ ] T111 Verify /benchmark_intelligence.filter_models works in Ambient
-- [ ] T112 Verify argument passing: /benchmark_intelligence.parse_docs --concurrency 30
+- [X] T104 Add workflow definition for filter_models in .ambient/ambient.json
+- [X] T105 Add workflow definition for find_docs in .ambient/ambient.json
+- [X] T106 Add workflow definition for parse_docs with --concurrency argument in .ambient/ambient.json
+- [X] T107 Add workflow definition for consolidate_benchmarks with --from-db flag in .ambient/ambient.json
+- [X] T108 Add workflow definition for categorize_benchmarks in .ambient/ambient.json
+- [X] T109 Add workflow definition for report in .ambient/ambient.json
+- [X] T110 Add workflow definition for generate (full pipeline) in .ambient/ambient.json
+- [*] T111 Verify /benchmark_intelligence.filter_models works in Ambient (BLOCKED: requires Ambient platform access)
+- [*] T112 Verify argument passing: /benchmark_intelligence.parse_docs --concurrency 30 (BLOCKED: requires Ambient platform access)
 
 ### Documentation
 
-- [ ] T113 [P] Update project root README.md with new execution modes (6 stages + generate) in README.md
-- [ ] T114 [P] Document both Python and Ambient execution paths in README.md
-- [ ] T115 [P] Document concurrency settings (default 20) in README.md
-- [ ] T116 [P] Document JSON output locations and schemas in README.md
-- [ ] T117 [P] Add troubleshooting section for common concurrency issues in README.md
-- [ ] T118 [P] Update agents/benchmark_intelligence/README.md with stage details
-- [ ] T119 [P] Add examples of individual stage execution in agents/benchmark_intelligence/README.md
-- [ ] T120 [P] Document configuration options in agents/benchmark_intelligence/README.md
+- [X] T113 [P] Update project root README.md with new execution modes (6 stages + generate) in README.md
+- [X] T114 [P] Document both Python and Ambient execution paths in README.md
+- [X] T115 [P] Document concurrency settings (default 20) in README.md
+- [X] T116 [P] Document JSON output locations and schemas in README.md
+- [X] T117 [P] Add troubleshooting section for common concurrency issues in README.md
+- [X] T118 [P] Update agents/benchmark_intelligence/README.md with stage details
+- [X] T119 [P] Add examples of individual stage execution in agents/benchmark_intelligence/README.md
+- [X] T120 [P] Document configuration options in agents/benchmark_intelligence/README.md
 
 **Completion Criteria**:
 - API rate limiting prevents 429 errors with automatic backoff

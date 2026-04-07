@@ -186,6 +186,10 @@ def run(input_json: Optional[str] = None) -> str:
     stage3_data = load_stage_json(input_json)
     models = stage3_data['data']
 
+    # Preserve metadata from Stage 3
+    stage3_metadata = stage3_data.get('metadata', {})
+    models_without_benchmarks = stage3_metadata.get('models_without_benchmarks', 0)
+
     # Collect all benchmarks from all models
     all_benchmarks = []
     for model in models:
@@ -195,6 +199,8 @@ def run(input_json: Optional[str] = None) -> str:
     logger.info(f"Configuration:")
     logger.info(f"  Models processed: {len(models)}")
     logger.info(f"  Total benchmark mentions: {len(all_benchmarks)}")
+    if models_without_benchmarks > 0:
+        logger.info(f"  Models without benchmarks: {models_without_benchmarks}")
 
     if not all_benchmarks:
         logger.warning("No benchmarks found in input - output will be empty")
@@ -225,12 +231,15 @@ def run(input_json: Optional[str] = None) -> str:
                     f"{item['variant_count']} variants"
                 )
 
-    # Save standardized JSON output
+    # Save standardized JSON output with preserved metadata
     output_path = save_stage_json(
         data=output_data,
         stage_name="consolidate_names",
         input_count=len(all_benchmarks),
-        errors=[]
+        errors=[],
+        metadata={
+            "models_without_benchmarks": models_without_benchmarks
+        }
     )
 
     logger.info(f"\n✓ Stage 4 complete")
