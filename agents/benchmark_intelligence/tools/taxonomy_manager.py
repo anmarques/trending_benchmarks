@@ -7,6 +7,8 @@ This module manages the benchmark taxonomy lifecycle:
 - Proposing new categories based on poor-fit benchmarks
 - Evolving taxonomy with new categories
 - Archiving taxonomy versions when changes occur
+- Managing taxonomy.json with domain classification
+- Supporting manual category overrides from config.yaml
 """
 
 import logging
@@ -16,6 +18,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 import json
 import re
+import yaml
 
 from ._claude_client import call_claude_json, is_anthropic_available
 
@@ -655,3 +658,327 @@ def _build_taxonomy_markdown(
             ])
 
         return "\n".join(content_parts)
+
+
+def load_taxonomy_json(path: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Load taxonomy from taxonomy.json file.
+
+    T085: Supports dynamic category addition with domain classification.
+
+    Args:
+        path: Path to taxonomy.json file (defaults to tools/taxonomy.json)
+
+    Returns:
+        Dictionary containing:
+            - version: Taxonomy version string
+            - last_updated: ISO timestamp
+            - domains: List of domain definitions
+            - benchmarks: List of benchmark entries with domain, is_emerging, is_almost_extinct
+            - category_overrides: Manual overrides from config
+
+    Example:
+        >>> taxonomy = load_taxonomy_json()
+        >>> print(taxonomy["version"])
+        '1.0.0'
+    """
+    if path is None:
+        path = str(Path(__file__).parent / "taxonomy.json")
+
+    taxonomy_path = Path(path)
+
+    if not taxonomy_path.exists():
+        logger.warning(f"Taxonomy JSON not found at {path}, creating default")
+        return _create_default_taxonomy_json()
+
+    try:
+        with open(taxonomy_path, 'r', encoding='utf-8') as f:
+            taxonomy = json.load(f)
+
+        logger.info(f"Loaded taxonomy version {taxonomy.get('version')} from {path}")
+        return taxonomy
+
+    except Exception as e:
+        logger.error(f"Failed to load taxonomy JSON from {path}: {e}")
+        return _create_default_taxonomy_json()
+
+
+def _create_default_taxonomy_json() -> Dict[str, Any]:
+    """Create default taxonomy.json structure."""
+    return {
+        "version": "1.0.0",
+        "last_updated": datetime.utcnow().isoformat(),
+        "domains": [
+            {
+                "name": "language",
+                "description": "Language understanding and generation benchmarks",
+                "categories": ["Knowledge & General Understanding", "Reasoning & Commonsense"]
+            },
+            {
+                "name": "multimodal",
+                "description": "Multimodal benchmarks combining text, vision, audio",
+                "categories": ["Vision & Multimodal", "Audio & Speech Processing"]
+            },
+            {
+                "name": "coding",
+                "description": "Code generation and software engineering benchmarks",
+                "categories": ["Code Generation & Software Engineering"]
+            },
+            {
+                "name": "math",
+                "description": "Mathematical problem solving benchmarks",
+                "categories": ["Mathematical Reasoning"]
+            }
+        ],
+        "benchmarks": [],
+        "category_overrides": {}
+    }
+
+
+def add_benchmark_to_taxonomy(
+    canonical_name: str,
+    domain: str,
+    is_emerging: bool = False,
+    is_almost_extinct: bool = False,
+    taxonomy_path: Optional[str] = None
+) -> None:
+    """
+    Add a benchmark to the taxonomy.json file.
+
+    T085: Implements dynamic benchmark addition to taxonomy with domain classification.
+
+    Args:
+        canonical_name: Canonical benchmark name
+        domain: Domain classification (language, multimodal, vision, reasoning, coding, math, knowledge)
+        is_emerging: Whether benchmark is emerging (recently introduced)
+        is_almost_extinct: Whether benchmark is almost extinct (rarely used)
+        taxonomy_path: Path to taxonomy.json file (defaults to tools/taxonomy.json)
+
+    Example:
+        >>> add_benchmark_to_taxonomy("NewBenchmark", "reasoning", is_emerging=True)
+    """
+    if taxonomy_path is None:
+        taxonomy_path = str(Path(__file__).parent / "taxonomy.json")
+
+    # Load current taxonomy
+    taxonomy = load_taxonomy_json(taxonomy_path)
+
+    # Check if benchmark already exists
+    existing_benchmarks = {b["canonical_name"]: b for b in taxonomy.get("benchmarks", [])}
+
+    if canonical_name in existing_benchmarks:
+        # Update existing benchmark
+        existing_benchmarks[canonical_name]["domain"] = domain
+        existing_benchmarks[canonical_name]["is_emerging"] = is_emerging
+        existing_benchmarks[canonical_name]["is_almost_extinct"] = is_almost_extinct
+        existing_benchmarks[canonical_name]["last_seen"] = datetime.utcnow().isoformat()
+        logger.info(f"Updated benchmark '{canonical_name}' in taxonomy")
+    else:
+        # Add new benchmark
+        new_benchmark = {
+            "canonical_name": canonical_name,
+            "domain": domain,
+            "is_emerging": is_emerging,
+            "is_almost_extinct": is_almost_extinct,
+            "first_seen": datetime.utcnow().isoformat(),
+            "last_seen": datetime.utcnow().isoformat()
+        }
+        taxonomy["benchmarks"].append(new_benchmark)
+        logger.info(f"Added new benchmark '{canonical_name}' to taxonomy (domain: {domain})")
+
+    # Update version and timestamp
+    taxonomy["last_updated"] = datetime.utcnow().isoformat()
+
+    # Save updated taxonomy
+    _save_taxonomy_json(taxonomy, taxonomy_path)
+
+
+def _save_taxonomy_json(taxonomy: Dict[str, Any], path: str) -> None:
+    """Save taxonomy to JSON file."""
+    try:
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(taxonomy, f, indent=2, ensure_ascii=False)
+        logger.info(f"Saved taxonomy to {path}")
+    except Exception as e:
+        logger.error(f"Failed to save taxonomy JSON: {e}")
+        raise
+
+
+def populate_taxonomy_from_mentions(
+    benchmark_mentions: List[Dict[str, Any]],
+    taxonomy_path: Optional[str] = None
+) -> None:
+    """
+    Auto-populate taxonomy from benchmark_mentions table status.
+
+    T085: Automatically populates is_emerging and is_almost_extinct flags
+    from benchmark_mentions table status field.
+
+    Args:
+        benchmark_mentions: List of benchmark mention records with status field
+                           (status: 'emerging', 'active', 'almost_extinct')
+        taxonomy_path: Path to taxonomy.json file
+
+    Example:
+        >>> mentions = [
+        ...     {"canonical_name": "MMLU", "status": "active"},
+        ...     {"canonical_name": "NewBench", "status": "emerging"}
+        ... ]
+        >>> populate_taxonomy_from_mentions(mentions)
+    """
+    if taxonomy_path is None:
+        taxonomy_path = str(Path(__file__).parent / "taxonomy.json")
+
+    taxonomy = load_taxonomy_json(taxonomy_path)
+
+    for mention in benchmark_mentions:
+        canonical_name = mention.get("canonical_name")
+        status = mention.get("status", "active")
+
+        if not canonical_name:
+            continue
+
+        # Determine flags from status
+        is_emerging = (status == "emerging")
+        is_almost_extinct = (status == "almost_extinct")
+
+        # Classify domain (use AI or heuristic)
+        domain = _classify_benchmark_domain(canonical_name, taxonomy)
+
+        # Add/update benchmark
+        add_benchmark_to_taxonomy(
+            canonical_name=canonical_name,
+            domain=domain,
+            is_emerging=is_emerging,
+            is_almost_extinct=is_almost_extinct,
+            taxonomy_path=taxonomy_path
+        )
+
+
+def _classify_benchmark_domain(
+    benchmark_name: str,
+    taxonomy: Dict[str, Any]
+) -> str:
+    """
+    Classify benchmark into a domain using heuristics.
+
+    Falls back to 'knowledge' domain if classification is uncertain.
+
+    Args:
+        benchmark_name: Benchmark name to classify
+        taxonomy: Current taxonomy structure
+
+    Returns:
+        Domain name (language, multimodal, vision, reasoning, coding, math, knowledge)
+    """
+    name_lower = benchmark_name.lower()
+
+    # Heuristic classification based on name patterns
+    if any(kw in name_lower for kw in ["code", "humaneval", "mbpp", "swe", "programming"]):
+        return "coding"
+    elif any(kw in name_lower for kw in ["math", "gsm", "aime", "olympiad"]):
+        return "math"
+    elif any(kw in name_lower for kw in ["vision", "image", "vqa", "coco", "imagenet"]):
+        return "vision"
+    elif any(kw in name_lower for kw in ["multimodal", "vlm", "audio", "video", "speech"]):
+        return "multimodal"
+    elif any(kw in name_lower for kw in ["reason", "logic", "arc", "hellaswag", "piqa"]):
+        return "reasoning"
+    elif any(kw in name_lower for kw in ["mmlu", "knowledge", "qa", "trivia"]):
+        return "knowledge"
+    else:
+        # Default to knowledge domain
+        return "knowledge"
+
+
+def load_category_overrides(config_path: Optional[str] = None) -> Dict[str, str]:
+    """
+    Load manual category overrides from config.yaml.
+
+    T088: Supports manual category overrides via config.yaml.
+
+    Args:
+        config_path: Path to config.yaml file (defaults to repo root)
+
+    Returns:
+        Dictionary mapping benchmark names to category overrides
+
+    Example:
+        >>> overrides = load_category_overrides()
+        >>> print(overrides.get("MMLU"))  # "Knowledge & General Understanding"
+    """
+    if config_path is None:
+        # Try to find config.yaml in repo root
+        config_path = str(Path(__file__).parent.parent.parent.parent / "config.yaml")
+
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+
+        overrides = config.get("taxonomy", {}).get("category_overrides", {})
+        logger.info(f"Loaded {len(overrides)} category overrides from config")
+        return overrides
+
+    except FileNotFoundError:
+        logger.debug(f"Config file not found at {config_path}")
+        return {}
+    except Exception as e:
+        logger.error(f"Failed to load category overrides from config: {e}")
+        return {}
+
+
+def apply_category_overrides(
+    benchmarks: List[Dict[str, Any]],
+    config_path: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """
+    Apply manual category overrides to benchmark categorization results.
+
+    T088: Manual overrides from config.yaml take precedence over AI classification.
+
+    Args:
+        benchmarks: List of benchmark categorization results
+        config_path: Path to config.yaml file
+
+    Returns:
+        Updated benchmarks list with overrides applied
+
+    Example:
+        >>> benchmarks = [{"name": "MMLU", "category": "Knowledge"}]
+        >>> updated = apply_category_overrides(benchmarks)
+    """
+    overrides = load_category_overrides(config_path)
+
+    if not overrides:
+        return benchmarks
+
+    updated_benchmarks = []
+    override_count = 0
+
+    for benchmark in benchmarks:
+        benchmark_name = benchmark.get("name") or benchmark.get("canonical_name")
+        if not benchmark_name:
+            updated_benchmarks.append(benchmark)
+            continue
+
+        # Check for override
+        if benchmark_name in overrides:
+            override_category = overrides[benchmark_name]
+            original_category = benchmark.get("category")
+
+            benchmark["category"] = override_category
+            benchmark["category_source"] = "manual_override"
+
+            if original_category != override_category:
+                logger.info(
+                    f"Override applied: '{benchmark_name}' category changed from "
+                    f"'{original_category}' to '{override_category}'"
+                )
+                override_count += 1
+
+        updated_benchmarks.append(benchmark)
+
+    if override_count > 0:
+        logger.info(f"Applied {override_count} category overrides")
+
+    return updated_benchmarks

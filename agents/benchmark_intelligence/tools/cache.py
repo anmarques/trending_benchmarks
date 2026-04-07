@@ -13,29 +13,62 @@ from typing import Dict, List, Optional, Any, Tuple
 from pathlib import Path
 from contextlib import contextmanager
 
+from ..connection_pool import ConnectionPool
+
 
 class CacheManager:
     """SQLite-backed cache manager for benchmark intelligence data."""
 
-    def __init__(self, db_path: str = "benchmark_cache.db"):
+    def __init__(
+        self,
+        db_path: str = "benchmark_cache.db",
+        pool_size: int = 5,
+        use_pool: bool = True
+    ):
         """
         Initialize the cache manager.
 
         Args:
             db_path: Path to SQLite database file
+            pool_size: Size of connection pool for concurrent access
+            use_pool: Whether to use connection pooling (default: True)
         """
         self.db_path = db_path
+        self.use_pool = use_pool
+
+        # Initialize connection pool for concurrent access (T012)
+        if self.use_pool:
+            self._pool = ConnectionPool(
+                db_path=db_path,
+                pool_size=pool_size,
+                timeout=30.0,
+                max_retries=3
+            )
+        else:
+            self._pool = None
+
         self._init_db()
 
     @contextmanager
     def _get_connection(self):
-        """Context manager for database connections."""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        try:
-            yield conn
-        finally:
-            conn.close()
+        """
+        Context manager for database connections with automatic retry.
+
+        Uses ConnectionPool for concurrent access with SQLITE_BUSY retry logic.
+        Falls back to direct connection if pooling is disabled.
+        """
+        if self.use_pool and self._pool:
+            # Use connection pool with automatic retry (T012)
+            with self._pool.connection() as conn:
+                yield conn
+        else:
+            # Direct connection (legacy mode)
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            try:
+                yield conn
+            finally:
+                conn.close()
 
     def _init_db(self):
         """Initialize database schema with all tables and indexes."""
@@ -109,9 +142,29 @@ class CacheManager:
                 CREATE TABLE IF NOT EXISTS snapshots (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     timestamp TEXT NOT NULL,
+                    window_start TEXT NOT NULL,
+                    window_end TEXT NOT NULL,
                     model_count INTEGER NOT NULL,
                     benchmark_count INTEGER NOT NULL,
+                    taxonomy_version TEXT,
                     summary TEXT  -- JSON object with additional stats
+                )
+            """)
+
+            # Benchmark mentions table (denormalized temporal tracking per snapshot)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS benchmark_mentions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    snapshot_id INTEGER NOT NULL,
+                    benchmark_id INTEGER NOT NULL,
+                    absolute_mentions INTEGER NOT NULL,
+                    relative_frequency REAL NOT NULL,
+                    first_seen TEXT NOT NULL,
+                    last_seen TEXT NOT NULL,
+                    status TEXT NOT NULL,  -- emerging, active, almost_extinct
+                    FOREIGN KEY (snapshot_id) REFERENCES snapshots(id) ON DELETE CASCADE,
+                    FOREIGN KEY (benchmark_id) REFERENCES benchmarks(id) ON DELETE CASCADE,
+                    UNIQUE(snapshot_id, benchmark_id)
                 )
             """)
 
@@ -188,7 +241,48 @@ class CacheManager:
                 ON snapshots(timestamp)
             """)
 
+            # Benchmark mentions indexes
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_benchmark_mentions_snapshot
+                ON benchmark_mentions(snapshot_id)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_benchmark_mentions_benchmark
+                ON benchmark_mentions(benchmark_id)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_benchmark_mentions_status
+                ON benchmark_mentions(status)
+            """)
+
+            # Run migration for existing databases
+            self._migrate_schema(cursor)
+
             conn.commit()
+
+    def _migrate_schema(self, cursor):
+        """
+        Migrate existing databases to new schema.
+
+        Adds missing columns to existing tables to support new features.
+        This is called during _init_db() to ensure backward compatibility.
+        """
+        # Check if snapshots table needs migration
+        cursor.execute("PRAGMA table_info(snapshots)")
+        columns = {row[1] for row in cursor.fetchall()}
+
+        # Add missing columns to snapshots table (T005)
+        if 'window_start' not in columns:
+            cursor.execute("ALTER TABLE snapshots ADD COLUMN window_start TEXT DEFAULT ''")
+        if 'window_end' not in columns:
+            cursor.execute("ALTER TABLE snapshots ADD COLUMN window_end TEXT DEFAULT ''")
+        if 'taxonomy_version' not in columns:
+            cursor.execute("ALTER TABLE snapshots ADD COLUMN taxonomy_version TEXT")
+
+        # Note: benchmark_mentions table is created via CREATE TABLE IF NOT EXISTS
+        # so no migration needed for new table
 
     @staticmethod
     def _compute_hash(content: str) -> str:
@@ -649,17 +743,29 @@ class CacheManager:
             return content_hash == new_content_hash
 
 
-    def create_snapshot(self, summary: Optional[Dict[str, Any]] = None) -> int:
+    def create_snapshot(
+        self,
+        summary: Optional[Dict[str, Any]] = None,
+        window_months: int = 12,
+        taxonomy_version: Optional[str] = None
+    ) -> int:
         """
-        Create a snapshot of the current cache state.
+        Create a snapshot of the current cache state with rolling window.
 
         Args:
             summary: Additional summary information as dictionary
+            window_months: Number of months for rolling window (default: 12)
+            taxonomy_version: Version string of taxonomy used
 
         Returns:
             Snapshot ID
         """
         now = self._now()
+        now_dt = datetime.utcnow()
+
+        # Calculate rolling window boundaries (T008)
+        window_end = now_dt.isoformat()
+        window_start = (now_dt - timedelta(days=window_months * 30)).isoformat()
 
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -671,13 +777,13 @@ class CacheManager:
             cursor.execute("SELECT COUNT(*) as count FROM benchmarks")
             benchmark_count = cursor.fetchone()['count']
 
-            # Create snapshot
+            # Create snapshot with new fields (T008)
             summary_json = json.dumps(summary or {})
             cursor.execute("""
                 INSERT INTO snapshots
-                (timestamp, model_count, benchmark_count, summary)
-                VALUES (?, ?, ?, ?)
-            """, (now, model_count, benchmark_count, summary_json))
+                (timestamp, window_start, window_end, model_count, benchmark_count, taxonomy_version, summary)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (now, window_start, window_end, model_count, benchmark_count, taxonomy_version, summary_json))
 
             snapshot_id = cursor.lastrowid
             conn.commit()
@@ -707,6 +813,7 @@ class CacheManager:
                 'timestamp': row['timestamp'],
                 'model_count': row['model_count'],
                 'benchmark_count': row['benchmark_count'],
+                'taxonomy_version': row['taxonomy_version'],
                 'summary': json.loads(row['summary']) if row['summary'] else {}
             }
 
@@ -1290,4 +1397,154 @@ class CacheManager:
                 })
 
             return deprecated
+
+    @staticmethod
+    def classify_benchmark_status(first_seen: str, last_seen: str, window_end: str) -> str:
+        """
+        Classify benchmark status based on temporal activity.
+
+        Classification rules (T056-T057):
+        - emerging: first_seen ≤ 3 months before window_end
+        - almost_extinct: last_seen ≥ 9 months before window_end
+        - active: all others
+
+        Args:
+            first_seen: ISO timestamp when benchmark was first seen
+            last_seen: ISO timestamp when benchmark was last seen
+            window_end: ISO timestamp for end of rolling window
+
+        Returns:
+            Status string: "emerging", "almost_extinct", or "active"
+        """
+        # Parse timestamps
+        first_dt = datetime.fromisoformat(first_seen.replace('Z', '+00:00'))
+        last_dt = datetime.fromisoformat(last_seen.replace('Z', '+00:00'))
+        window_end_dt = datetime.fromisoformat(window_end.replace('Z', '+00:00'))
+
+        # Calculate time differences in days
+        days_since_first = (window_end_dt - first_dt).days
+        days_since_last = (window_end_dt - last_dt).days
+
+        # Apply classification rules
+        # Emerging: first seen ≤ 3 months (90 days) before window end
+        if days_since_first <= 90:
+            return "emerging"
+
+        # Almost extinct: last seen ≥ 9 months (270 days) before window end
+        if days_since_last >= 270:
+            return "almost_extinct"
+
+        # Active: everything else
+        return "active"
+
+    def create_snapshot_with_window(
+        self,
+        window_months: int = 12,
+        taxonomy_version: Optional[str] = None,
+        summary: Optional[Dict[str, Any]] = None
+    ) -> int:
+        """
+        Create a snapshot with 12-month rolling window and populate benchmark_mentions.
+
+        Implements temporal tracking for Phase 4 (T051-T055, T058):
+        - Calculates rolling window boundaries (window_start, window_end)
+        - Queries models in window by release_date
+        - Computes benchmark statistics (absolute_mentions, relative_frequency)
+        - Classifies benchmark status (emerging, active, almost_extinct)
+        - Populates benchmark_mentions table with denormalized stats
+
+        Args:
+            window_months: Number of months for rolling window (default: 12)
+            taxonomy_version: Version string of taxonomy used
+            summary: Additional summary information as dictionary
+
+        Returns:
+            Snapshot ID
+        """
+        now = self._now()
+        now_dt = datetime.utcnow()
+
+        # Calculate rolling window boundaries (T052)
+        window_end = now_dt.isoformat()
+        window_start_dt = now_dt - timedelta(days=window_months * 30)
+        window_start = window_start_dt.isoformat()
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Query models in window by release_date (T053)
+            # Use release_date if available, otherwise first_seen
+            cursor.execute("""
+                SELECT id FROM models
+                WHERE deleted_at IS NULL
+                  AND (
+                    (release_date IS NOT NULL AND release_date >= ? AND release_date <= ?)
+                    OR
+                    (release_date IS NULL AND first_seen >= ? AND first_seen <= ?)
+                  )
+            """, (window_start, window_end, window_start, window_end))
+
+            models_in_window = {row['id'] for row in cursor.fetchall()}
+            model_count = len(models_in_window)
+
+            # Get all benchmarks count
+            cursor.execute("SELECT COUNT(*) as count FROM benchmarks")
+            benchmark_count = cursor.fetchone()['count']
+
+            # Create snapshot with window boundaries (T051, T052)
+            summary_json = json.dumps(summary or {})
+            cursor.execute("""
+                INSERT INTO snapshots
+                (timestamp, window_start, window_end, model_count, benchmark_count, taxonomy_version, summary)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (now, window_start, window_end, model_count, benchmark_count, taxonomy_version, summary_json))
+
+            snapshot_id = cursor.lastrowid
+
+            # Compute benchmark statistics for models in window (T054)
+            if models_in_window:
+                # Build SQL query for models in window
+                placeholders = ','.join('?' * len(models_in_window))
+
+                # Get benchmark statistics via SQL aggregation
+                cursor.execute(f"""
+                    SELECT
+                        b.id as benchmark_id,
+                        b.canonical_name,
+                        b.first_seen,
+                        b.last_seen,
+                        COUNT(DISTINCT mb.model_id) as absolute_mentions,
+                        CAST(COUNT(DISTINCT mb.model_id) AS REAL) / ? as relative_frequency
+                    FROM benchmarks b
+                    LEFT JOIN model_benchmarks mb ON b.id = mb.benchmark_id
+                        AND mb.model_id IN ({placeholders})
+                    GROUP BY b.id
+                    HAVING absolute_mentions > 0
+                """, [model_count] + list(models_in_window))
+
+                benchmark_stats = cursor.fetchall()
+
+                # Populate benchmark_mentions table (T055, T058)
+                for stat in benchmark_stats:
+                    benchmark_id = stat['benchmark_id']
+                    absolute_mentions = stat['absolute_mentions']
+                    relative_frequency = stat['relative_frequency']
+                    first_seen = stat['first_seen']
+                    last_seen = stat['last_seen'] or stat['first_seen']  # Fallback to first_seen
+
+                    # Classify benchmark status (T056-T057)
+                    status = self.classify_benchmark_status(first_seen, last_seen, window_end)
+
+                    # Insert into benchmark_mentions
+                    cursor.execute("""
+                        INSERT INTO benchmark_mentions
+                        (snapshot_id, benchmark_id, absolute_mentions, relative_frequency,
+                         first_seen, last_seen, status)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (snapshot_id, benchmark_id, absolute_mentions, relative_frequency,
+                          first_seen, last_seen, status))
+
+            conn.commit()
+
+        return snapshot_id
 

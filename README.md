@@ -35,18 +35,57 @@ This AI agent automatically:
 
 ## 🚀 Quick Start
 
-### On Ambient Code Platform (Recommended)
+### Execution Modes
+
+The agent supports **2 execution paths** with **7 individual stages** or a full pipeline:
+
+#### 1. **Python Direct Execution** (Recommended for Development)
+
+```bash
+# Full pipeline (all 6 stages)
+python -m agents.benchmark_intelligence.main generate
+
+# Individual stages (for debugging/development)
+python -m agents.benchmark_intelligence.main filter_models
+python -m agents.benchmark_intelligence.main find_docs
+python -m agents.benchmark_intelligence.main parse_docs --concurrency 30
+python -m agents.benchmark_intelligence.main consolidate_benchmarks
+python -m agents.benchmark_intelligence.main categorize_benchmarks
+python -m agents.benchmark_intelligence.main report
+```
+
+#### 2. **Ambient Workflow Execution** (Recommended for Production)
+
+```bash
+# Full pipeline
+/benchmark_intelligence.generate
+
+# Individual stages
+/benchmark_intelligence.filter_models
+/benchmark_intelligence.find_docs
+/benchmark_intelligence.parse_docs --concurrency 30
+/benchmark_intelligence.consolidate_benchmarks --from-db
+/benchmark_intelligence.categorize_benchmarks
+/benchmark_intelligence.report
+```
+
+### Setup
+
+#### On Ambient Code Platform (Recommended)
 
 ```bash
 # 1. Set HuggingFace token in Workspace Settings → Environment Variables
 # HF_TOKEN = "hf_..."
 
-# 2. Run (Claude is natively available, no API key needed!)
+# 2. Run via Ambient workflow
+/benchmark_intelligence.generate
+
+# Or via Python
 cd /workspace/repos/trending_benchmarks
-python -m agents.benchmark_intelligence.main
+python -m agents.benchmark_intelligence.main generate
 ```
 
-### On Other Platforms
+#### On Other Platforms
 
 ```bash
 # 1. Install dependencies
@@ -57,10 +96,10 @@ export HF_TOKEN="your_huggingface_token"
 export ANTHROPIC_API_KEY="your_claude_key"  # Not needed on Ambient
 
 # 3. Run
-python -m agents.benchmark_intelligence.main
+python -m agents.benchmark_intelligence.main generate
 ```
 
-**Expected runtime**: ~50-60 minutes for 65 models (with AI extraction)
+**Expected runtime**: ~50-60 minutes for 65 models (with AI extraction, default concurrency: 20)
 
 ---
 
@@ -72,7 +111,7 @@ python -m agents.benchmark_intelligence.main
 |------|---------|----------|
 | **[benchmark_taxonomy.md](benchmark_taxonomy.md)** | Complete reference of 30+ benchmarks | Root |
 | **[categories.yaml](categories.yaml)** | 13 benchmark categories & definitions | Root |
-| **[labs.yaml](agents/benchmark_intelligence/config/labs.yaml)** | Target labs/organizations to track | Config |
+| **[config.yaml](config.yaml)** | Target labs/organizations to track | Config |
 
 ### Reports & Data
 
@@ -231,7 +270,7 @@ Generate Markdown Report
 - **baichuan-inc** • **internlm**
 - **MinimaxAI**
 
-Configure in [`agents/benchmark_intelligence/config/labs.yaml`](agents/benchmark_intelligence/config/labs.yaml)
+Configure in [`config.yaml`](config.yaml)
 
 ---
 
@@ -239,16 +278,68 @@ Configure in [`agents/benchmark_intelligence/config/labs.yaml`](agents/benchmark
 
 ### Discovery Settings
 
-Edit [`labs.yaml`](agents/benchmark_intelligence/config/labs.yaml):
+Edit [`config.yaml`](config.yaml):
 
 ```yaml
 discovery:
-  models_per_lab: 10           # Models to fetch per lab
+  models_per_lab: 15           # Models to fetch per lab
   sort_by: "downloads"         # downloads | trending | lastModified
-  filter_tags: ["text-generation", "multimodal"]  # Task filters
-  min_downloads: 10000         # Minimum popularity threshold
+  filter_tags: []              # Task filters (empty = all)
+  min_downloads: 1000          # Minimum popularity threshold
   date_filter_months: 12       # Only models from last N months
+  exclude_tags:                # Skip these model types
+    - "time-series-forecasting"
+    - "fill-mask"
+
+# Concurrency settings
+parallelization:
+  max_concurrent_document_fetches: 5
+  enabled: true
+  timeout_per_document_seconds: 60
+
+# Rate limiting (prevents API 429 errors)
+rate_limiting:
+  huggingface:
+    requests_per_minute: 60
+    max_retries: 5
+    initial_backoff_seconds: 2.0
+  anthropic:
+    requests_per_minute: 50
+    max_retries: 5
+  arxiv:
+    requests_per_minute: 30
+    max_retries: 3
 ```
+
+### Concurrency Settings
+
+**Default**: 20 concurrent workers for document parsing
+
+**Adjust based on your needs**:
+
+```bash
+# Low concurrency (safer, slower)
+python -m agents.benchmark_intelligence.main parse_docs --concurrency 10
+
+# High concurrency (faster, may hit rate limits)
+python -m agents.benchmark_intelligence.main parse_docs --concurrency 50
+
+# Ambient workflow
+/benchmark_intelligence.parse_docs --concurrency 30
+```
+
+### JSON Output Locations
+
+All outputs are saved to `agents/benchmark_intelligence/outputs/`:
+
+| Stage | Output File | Schema |
+|-------|-------------|--------|
+| **filter_models** | `filtered_models/models_YYYYMMDD_HHMMSS.json` | `[{id, author, downloads, likes, tags, created_at}]` |
+| **find_docs** | `docs/docs_YYYYMMDD_HHMMSS.json` | `[{model_id, documents: [{type, url, found}]}]` |
+| **parse_docs** | `parsed/parsed_YYYYMMDD_HHMMSS.json` | `[{model_id, benchmarks: [{name, score, metric}]}]` |
+| **consolidate** | `consolidated/benchmarks_YYYYMMDD_HHMMSS.json` | `[{canonical_name, occurrences, models: [...]}]` |
+| **categorize** | `categorized/categorized_YYYYMMDD_HHMMSS.json` | `[{benchmark_name, category, subcategory, confidence}]` |
+| **report** | `reports/report_YYYYMMDD_HHMMSS.md` | Markdown report |
 
 ### Categories & Taxonomy
 
@@ -261,10 +352,10 @@ discovery:
 
 ```bash
 # Via cron (automatically configured)
-0 9 1 * * cd /workspace/repos/trending_benchmarks && python -m agents.benchmark_intelligence.main
+0 9 1 * * cd /workspace/repos/trending_benchmarks && /benchmark_intelligence.generate
 
 # Or manual
-python -m agents.benchmark_intelligence.main
+python -m agents.benchmark_intelligence.main generate
 ```
 
 ---
@@ -295,7 +386,7 @@ python -m agents.benchmark_intelligence.main
 ### Custom Date Range
 
 ```bash
-# Edit labs.yaml:
+# Edit config.yaml:
 discovery:
   date_filter_months: 24  # Last 2 years
 ```
@@ -345,15 +436,86 @@ Only needed outside Ambient. Get key: https://console.anthropic.com
 On Ambient: Uses native Vertex AI Claude support (no key needed)
 
 ### Getting irrelevant models?
-Edit `labs.yaml` → remove labs that produce noise (e.g., "huggingface" org gets time-series models)
+Edit `config.yaml` → remove labs that produce noise (e.g., "huggingface" org gets time-series models)
 
 ### Models from wrong time period?
-Edit `labs.yaml` → `date_filter_months: 12` (or higher)
+Edit `config.yaml` → `date_filter_months: 12` (or higher)
 
 ### Cache corruption
 ```bash
 rm benchmark_cache.db
 # Re-run will rebuild from scratch
+```
+
+### Common Concurrency Issues
+
+#### 429 Rate Limit Errors
+
+**Symptom**: "Too many requests" errors from APIs
+
+**Solutions**:
+1. **Reduce concurrency**:
+   ```bash
+   python -m agents.benchmark_intelligence.main parse_docs --concurrency 10
+   ```
+
+2. **Adjust rate limits** in `config.yaml`:
+   ```yaml
+   rate_limiting:
+     huggingface:
+       requests_per_minute: 30  # Lower = safer
+   ```
+
+3. **Rate limiter automatically retries** with exponential backoff
+
+#### Timeout Errors
+
+**Symptom**: "Connection timeout" or "Read timeout"
+
+**Solutions**:
+1. **Increase timeout** in `config.yaml`:
+   ```yaml
+   parallelization:
+     timeout_per_document_seconds: 120  # Default: 60
+   ```
+
+2. **Reduce concurrent fetches**:
+   ```yaml
+   parallelization:
+     max_concurrent_document_fetches: 3  # Default: 5
+   ```
+
+#### Memory Issues
+
+**Symptom**: Process killed or "Out of memory"
+
+**Solutions**:
+1. **Lower concurrency** (fewer workers = less memory):
+   ```bash
+   python -m agents.benchmark_intelligence.main parse_docs --concurrency 5
+   ```
+
+2. **Process in batches** (run individual stages separately)
+
+#### Connection Pool Exhausted
+
+**Symptom**: "No available connections" or hanging requests
+
+**Solutions**:
+1. **Connection pool auto-manages** resources
+2. **Check logs** for specific errors
+3. **Restart** with lower concurrency
+
+#### Resuming After Interruption
+
+**The pipeline is resumable!** Hash cache prevents re-processing:
+
+```bash
+# If interrupted, just re-run the same command
+python -m agents.benchmark_intelligence.main generate
+
+# Hash cache will skip already-processed documents
+# Only new/changed documents will be processed
 ```
 
 ---

@@ -73,7 +73,7 @@ class BenchmarkIntelligenceAgent:
         Initialize the benchmark intelligence agent.
 
         Args:
-            config_path: Path to configuration YAML file (default: labs.yaml at project root)
+            config_path: Path to configuration YAML file (default: config.yaml at project root)
             cache_path: Path to cache database (default: benchmark_cache.db)
             dry_run: If True, don't write to cache or files
             verbose: If True, enable verbose logging
@@ -86,7 +86,7 @@ class BenchmarkIntelligenceAgent:
 
         # Load configuration
         if config_path is None:
-            config_path = Path(__file__).parent.parent.parent / "labs.yaml"
+            config_path = Path(__file__).parent.parent.parent / "config.yaml"
         else:
             config_path = Path(config_path)
 
@@ -713,7 +713,7 @@ class BenchmarkIntelligenceAgent:
             # Don't fail the entire run if taxonomy evolution fails
 
     def _create_snapshot(self) -> Optional[int]:
-        """Create a snapshot of current cache state."""
+        """Create a snapshot of current cache state with temporal tracking."""
         if self.dry_run or self.cache is None:
             logger.debug("Skipping snapshot creation (dry run mode or no cache)")
             return None
@@ -733,8 +733,13 @@ class BenchmarkIntelligenceAgent:
             "taxonomy_version": taxonomy_version,
         }
 
-        snapshot_id = self.cache.create_snapshot(summary)
-        logger.info(f"Created snapshot #{snapshot_id}")
+        # Use create_snapshot_with_window for temporal tracking (T051-T055, T058)
+        snapshot_id = self.cache.create_snapshot_with_window(
+            window_months=12,
+            taxonomy_version=taxonomy_version,
+            summary=summary
+        )
+        logger.info(f"Created snapshot #{snapshot_id} with 12-month window")
 
         return snapshot_id
 
@@ -808,7 +813,7 @@ Examples:
     parser.add_argument(
         "--config",
         type=str,
-        help="Path to configuration YAML file (default: labs.yaml at project root)",
+        help="Path to configuration YAML file (default: config.yaml at project root)",
     )
 
     parser.add_argument(

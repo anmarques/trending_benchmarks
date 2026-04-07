@@ -84,7 +84,9 @@ def extract_benchmarks_from_text(
                     "Anthropic API not available. Set ANTHROPIC_API_KEY environment "
                     "variable or install anthropic package (pip install anthropic)"
                 )
-            result = call_claude_json(prompt=prompt)
+            # Use 8192 tokens for benchmark extraction
+            # (typical model card abstracts are 1-2K tokens, response ~2-4K)
+            result = call_claude_json(prompt=prompt, max_tokens=8192)
         else:
             result = claude_fn(prompt=prompt)
 

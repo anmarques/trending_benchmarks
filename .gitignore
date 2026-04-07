@@ -3,6 +3,7 @@ cache/
 *.db
 *.sqlite
 temp_images/
+outputs/
 
 # Authentication
 **/auth.yaml
@@ -49,3 +50,5 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+*.db-shm
+*.db-wal

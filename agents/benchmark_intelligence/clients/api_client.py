@@ -99,15 +99,36 @@ class HFAPIClient(HFClientBase):
                 return func(*args, **kwargs)
             except HfHubHTTPError as e:
                 last_exception = e
-                # Check if it's a rate limit error (429)
-                if e.response.status_code == 429:
+                # Check if it's a rate limit error (429 or 503)
+                status_code = e.response.status_code if hasattr(e, 'response') else None
+                is_rate_limit = (
+                    status_code == 429 or
+                    status_code == 503 or
+                    "rate limit" in str(e).lower() or
+                    "too many requests" in str(e).lower()
+                )
+
+                if is_rate_limit:
                     if attempt < self.max_retries - 1:
+                        logger.warning(
+                            f"Rate limit encountered (status: {status_code}). "
+                            f"Retry {attempt + 1}/{self.max_retries}"
+                        )
                         self._handle_rate_limit(attempt)
                         continue
+                    else:
+                        logger.error(f"Rate limit retries exhausted after {self.max_retries} attempts")
                 # For other HTTP errors, raise immediately
                 raise
             except Exception as e:
-                # For non-HTTP errors, raise immediately
+                # Check for rate limit in exception message
+                error_msg = str(e).lower()
+                if ("rate limit" in error_msg or "429" in error_msg) and attempt < self.max_retries - 1:
+                    logger.warning(f"Rate limit detected in error message. Retry {attempt + 1}/{self.max_retries}")
+                    self._handle_rate_limit(attempt)
+                    last_exception = e
+                    continue
+                # For other non-HTTP errors, raise immediately
                 raise
 
         # If we exhausted all retries, raise the last exception

@@ -1,0 +1,112 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2026-04-07T04:14:44.272030",
+  "domains": [
+    {
+      "name": "language",
+      "description": "Language understanding and generation benchmarks",
+      "categories": [
+        "Knowledge & General Understanding",
+        "Reasoning & Commonsense"
+      ]
+    },
+    {
+      "name": "multimodal",
+      "description": "Multimodal benchmarks combining text, vision, audio",
+      "categories": [
+        "Vision & Multimodal",
+        "Audio & Speech Processing"
+      ]
+    },
+    {
+      "name": "vision",
+      "description": "Visual understanding and generation benchmarks",
+      "categories": [
+        "Image Understanding",
+        "Video Understanding"
+      ]
+    },
+    {
+      "name": "reasoning",
+      "description": "Logical and abstract reasoning benchmarks",
+      "categories": [
+        "Mathematical Reasoning",
+        "Logical Reasoning"
+      ]
+    },
+    {
+      "name": "coding",
+      "description": "Code generation and software engineering benchmarks",
+      "categories": [
+        "Code Generation & Software Engineering"
+      ]
+    },
+    {
+      "name": "math",
+      "description": "Mathematical problem solving benchmarks",
+      "categories": [
+        "Mathematical Reasoning",
+        "Theorem Proving"
+      ]
+    },
+    {
+      "name": "knowledge",
+      "description": "Factual knowledge and information retrieval benchmarks",
+      "categories": [
+        "Knowledge & General Understanding",
+        "Domain-Specific Knowledge"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "canonical_name": "MMLU",
+      "domain": "knowledge",
+      "is_emerging": false,
+      "is_almost_extinct": false,
+      "first_seen": "2020-01-01",
+      "last_seen": "2026-04-07T04:14:44.270452"
+    },
+    {
+      "canonical_name": "GSM8K",
+      "domain": "math",
+      "is_emerging": false,
+      "is_almost_extinct": false,
+      "first_seen": "2021-01-01",
+      "last_seen": "2026-04-07"
+    },
+    {
+      "canonical_name": "HumanEval",
+      "domain": "coding",
+      "is_emerging": false,
+      "is_almost_extinct": false,
+      "first_seen": "2021-07-01",
+      "last_seen": "2026-04-07"
+    },
+    {
+      "canonical_name": "TestBenchmark",
+      "domain": "reasoning",
+      "is_emerging": true,
+      "is_almost_extinct": false,
+      "first_seen": "2026-04-07T04:13:30.947371",
+      "last_seen": "2026-04-07T04:14:44.269838"
+    },
+    {
+      "canonical_name": "NewEmergingBench",
+      "domain": "knowledge",
+      "is_emerging": true,
+      "is_almost_extinct": false,
+      "first_seen": "2026-04-07T04:13:30.949042",
+      "last_seen": "2026-04-07T04:14:44.271125"
+    },
+    {
+      "canonical_name": "OldBench",
+      "domain": "knowledge",
+      "is_emerging": false,
+      "is_almost_extinct": true,
+      "first_seen": "2026-04-07T04:13:30.950082",
+      "last_seen": "2026-04-07T04:14:44.272024"
+    }
+  ],
+  "category_overrides": {}
+}
