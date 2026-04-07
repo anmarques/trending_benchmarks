@@ -132,6 +132,85 @@ def fetch_arxiv_abstract(arxiv_id: str) -> Optional[Dict[str, str]]:
         return None
 
 
+def search_arxiv_api(
+    model_name: str,
+    lab_name: str,
+    max_results: int = 5
+) -> List[str]:
+    """
+    Search arXiv API for papers about a model.
+
+    Uses arXiv's official API to search for papers matching the model name
+    and lab. This is more reliable than web scraping.
+
+    Args:
+        model_name: Name of the model (e.g., "Qwen3-8B")
+        lab_name: Name of the lab/organization (e.g., "Qwen")
+        max_results: Maximum number of results to return (default: 5)
+
+    Returns:
+        List of arXiv IDs found via API search
+
+    Example:
+        >>> ids = search_arxiv_api("Qwen3-8B", "Qwen", max_results=3)
+        >>> print(ids)
+        ['2505.09388', '2407.21783']
+    """
+    try:
+        import xml.etree.ElementTree as ET
+        from urllib.parse import quote
+
+        # Build search query
+        # Search for papers containing both model name and lab name
+        # Clean model name for search (remove special chars)
+        clean_model = re.sub(r'[^\w\s-]', ' ', model_name)
+        clean_lab = re.sub(r'[^\w\s-]', ' ', lab_name)
+
+        # arXiv API query format: all:term1+AND+term2
+        query = f"all:{quote(clean_model)}+AND+{quote(clean_lab)}"
+        url = f"http://export.arxiv.org/api/query?search_query={query}&max_results={max_results}"
+
+        logger.debug(f"Searching arXiv API: {query}")
+
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+
+        # Parse XML response
+        # arXiv API returns Atom XML format
+        root = ET.fromstring(response.content)
+
+        # Extract arXiv IDs from entries
+        # Namespace for Atom feed
+        ns = {'atom': 'http://www.w3.org/2005/Atom'}
+
+        arxiv_ids = []
+        for entry in root.findall('atom:entry', ns):
+            # Get the arXiv ID from the entry ID
+            # Format: http://arxiv.org/abs/2505.09388v1
+            id_elem = entry.find('atom:id', ns)
+            if id_elem is not None:
+                entry_id = id_elem.text
+                # Extract arXiv ID from URL
+                match = re.search(r'arxiv\.org/abs/(\d+\.\d+)', entry_id)
+                if match:
+                    arxiv_id = match.group(1)
+                    arxiv_ids.append(arxiv_id)
+
+        if arxiv_ids:
+            logger.info(f"Found {len(arxiv_ids)} papers via arXiv API for {model_name}: {arxiv_ids}")
+        else:
+            logger.debug(f"No papers found via arXiv API for {model_name}")
+
+        return arxiv_ids
+
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"arXiv API search failed for {model_name}: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Error searching arXiv API for {model_name}: {e}")
+        return []
+
+
 def select_best_arxiv_paper(
     abstracts: List[Dict[str, str]],
     model_name: str,

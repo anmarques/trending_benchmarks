@@ -27,7 +27,8 @@ from agents.benchmark_intelligence.error_aggregator import ErrorAggregator
 from agents.benchmark_intelligence.tools.document_selection import (
     extract_all_arxiv_ids,
     fetch_arxiv_abstract,
-    select_best_arxiv_paper
+    select_best_arxiv_paper,
+    search_arxiv_api
 )
 from agents.benchmark_intelligence.tools.parse_model_card import parse_model_card
 
@@ -64,7 +65,7 @@ def construct_document_urls(model_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         'found': True
     })
 
-    # 2. arXiv Papers - Extract from model card only
+    # 2. arXiv Papers - Extract from model card, fallback to arXiv API search
     try:
         # Fetch model card to search for arXiv references
         logger.debug(f"Fetching model card for {model_id} to find arXiv papers")
@@ -73,8 +74,13 @@ def construct_document_urls(model_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         model_card = parse_model_card(model_id, hf_client)
         model_card_content = model_card.get('content', '')
 
-        # Extract arXiv IDs from tags and content only (no web search)
+        # Extract arXiv IDs from tags and content
         arxiv_ids = extract_all_arxiv_ids(model_card_content, tags)
+
+        # If no papers found in model card, search arXiv API
+        if not arxiv_ids:
+            logger.info(f"No arXiv papers in model card for {model_id}, searching arXiv API")
+            arxiv_ids = search_arxiv_api(model_name, author, max_results=5)
 
         if arxiv_ids:
             logger.info(

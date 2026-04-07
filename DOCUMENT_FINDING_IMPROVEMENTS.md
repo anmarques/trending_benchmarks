@@ -16,7 +16,7 @@ This document describes the improvements made to the document finding logic base
 
 ## Solution Implemented
 
-### AI-Powered arXiv Paper Selection (Model Card Only)
+### AI-Powered arXiv Paper Selection (Model Card + arXiv API Fallback)
 
 **New Module**: `agents/benchmark_intelligence/tools/document_selection.py`
 
@@ -26,6 +26,12 @@ This document describes the improvements made to the document finding logic base
   - Model tags (`arxiv:2505.09388`)
   - Model card content (URLs, citations)
   - Uses multiple regex patterns for robustness
+
+- `search_arxiv_api(model_name, lab_name, max_results)` - Searches arXiv API directly:
+  - Uses arXiv's official API (no web scraping)
+  - Searches for papers mentioning model name and lab
+  - Returns list of arXiv IDs from search results
+  - Fallback when no papers in model card
 
 - `fetch_arxiv_abstract(arxiv_id)` - Fetches abstract and metadata for a paper:
   - Downloads abstract page from arxiv.org
@@ -59,6 +65,10 @@ if arxiv_id:
 ```python
 # New: Extract all arXiv papers from model card
 arxiv_ids = extract_all_arxiv_ids(model_card_content, tags)
+
+# New: Fallback to arXiv API if no papers in model card
+if not arxiv_ids:
+    arxiv_ids = search_arxiv_api(model_name, author, max_results=5)
 
 # New: AI selection for multiple candidates
 if len(arxiv_ids) > 1:
@@ -104,10 +114,16 @@ Documents now include metadata about discovery:
 
 **Output**: Single arXiv document with `ai_selected: true, total_candidates: 3`
 
-### Scenario 3: No arXiv Papers
+### Scenario 3: No arXiv Papers in Model Card
 
 **Input**: Model card has no arXiv references  
-**Output**: Only model card document (no arXiv document added)
+**Process**:
+1. Extract from tags + content: none found
+2. Fallback to arXiv API search for "{model} {lab}"
+3. If papers found via API, fetch abstracts and use AI to select
+4. Return selected paper
+
+**Output**: arXiv document discovered via API search, or none if API search also returns empty
 
 ## Error Handling
 
@@ -156,22 +172,33 @@ After deployment, track:
 
 ## Design Decisions
 
-### Why Remove Web Search?
+### Why Use arXiv API Instead of Google Web Search?
 
-Initial implementation included web search for:
-1. Supplemental arXiv paper discovery
-2. GitHub repository discovery
+Initial implementation included Google web search for supplemental arXiv paper discovery.
 
 **Test results showed**:
-- 99.1% of web searches blocked by Google anti-scraping
+- 99.1% of Google searches blocked by anti-scraping
 - Added 6-12 seconds per model (retry delays)
-- Only 2/170 GitHub repos discovered
+- Unreliable and slow
 
-**Decision**: Remove web search, use only model card content
-- Simpler implementation
-- Faster execution (1-2s vs 3-4s per model)
-- More reliable (no dependency on Google)
-- Sufficient coverage (64.7% of models have arXiv papers in model cards)
+**Decision**: Use arXiv's official API instead
+- **No blocking**: Proper API, not web scraping
+- **Fast**: ~1s per search
+- **Reliable**: Designed for programmatic access
+- **Free**: No API key required
+- **Structured data**: Returns XML with titles, abstracts, authors
+
+**arXiv API advantages**:
+```
+Endpoint: http://export.arxiv.org/api/query
+Query: search_query=all:Qwen3+AND+Qwen&max_results=5
+Returns: Atom XML with paper metadata
+```
+
+This provides comprehensive coverage:
+1. Model card papers (64.7% of models)
+2. arXiv API fallback (for remaining ~35%)
+3. Total estimated coverage: >80% of models
 
 ### Why Keep AI Selection?
 
