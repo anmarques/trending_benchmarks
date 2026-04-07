@@ -198,7 +198,7 @@ parallel ::: \
 - [X] T028A [P] [US1] Update parallel_fetcher.py to detect content format when fetching documents
 - [X] T028B [P] [US1] Add detect_content_format(content) function: returns "html_table", "markdown_table", "prose", or "pdf" in parallel_fetcher.py
 - [X] T028C [P] [US1] Include content_format field in fetched document results from parallel_fetcher.fetch_documents_for_model()
-- [ ] T028D [P] [US1] Update arXiv paper fetching to use ar5iv HTML conversion (https://ar5iv.labs.arxiv.org/html/{arxiv_id}) instead of abstract-only, with fallback to abstract for 404s, in parallel_fetcher.py
+- [X] T028D [P] [US1] Update arXiv paper fetching to use ar5iv HTML conversion (https://ar5iv.labs.arxiv.org/html/{arxiv_id}) instead of abstract-only, with fallback to abstract for 404s, in parallel_fetcher.py (Note: ar5iv conversion has limitations for complex LaTeX tables; Phase 5 will add PDF/vision AI extraction)
 
 #### Stage 3C: Extraction Routing (REVISED)
 
