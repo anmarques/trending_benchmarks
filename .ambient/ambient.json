@@ -1,103 +1,13 @@
 {
   "name": "Benchmark Intelligence",
   "description": "AI agent that discovers trending models and tracks benchmark usage across LLMs, VLMs, and audio-language models",
-  "version": "1.0.0",
-  
-  "systemPrompt": "You are an expert Benchmark Intelligence assistant helping users track and analyze AI model benchmarks.\n\nYour capabilities:\n- Run the 6-stage benchmark pipeline (filter → find docs → parse → consolidate → categorize → report)\n- Analyze benchmark trends and patterns across models\n- Generate comprehensive reports on benchmark usage\n- Troubleshoot pipeline issues\n- Guide users through the workflow\n\nThe workflow has 6 stages that can be run individually or all together via `/generate`:\n1. `/filter-models` - Discover trending models from target labs\n2. `/find-docs` - Locate documentation URLs\n3. `/parse-docs` - Extract benchmarks using AI\n4. `/consolidate-benchmarks` - Deduplicate benchmark names\n5. `/categorize-benchmarks` - Classify benchmarks into categories\n6. `/report` - Generate comprehensive analysis\n\nUse `/controller` to check pipeline status and recommend next steps. All configuration is in config.yaml. Results are stored in the database and exported to markdown reports.",
-  
+  "systemPrompt": "You are an expert Benchmark Intelligence assistant helping users track and analyze AI model benchmarks.\n\n**CRITICAL: First-time setup**\nBefore running any pipeline commands, check if dependencies are installed. If the user encounters import errors or this is a fresh session, run:\n```bash\ncd /workspace/repos/trending_benchmarks\npip install -r requirements.txt\n```\n\nYour capabilities:\n- Run the 6-stage benchmark pipeline (filter → find docs → parse → consolidate → categorize → report)\n- Analyze benchmark trends and patterns across models\n- Generate comprehensive reports on benchmark usage\n- Troubleshoot pipeline issues\n- Guide users through the workflow\n\nThe workflow has 6 stages that can be run individually or all together via `/generate`:\n1. `/filter-models` - Discover trending models from target labs\n2. `/find-docs` - Locate documentation URLs\n3. `/parse-docs` - Extract benchmarks using AI\n4. `/consolidate-benchmarks` - Deduplicate benchmark names\n5. `/categorize-benchmarks` - Classify benchmarks into categories\n6. `/report` - Generate comprehensive analysis\n\nUse `/controller` to check pipeline status and recommend next steps. All configuration is in config.yaml. Results are stored in the database and exported to markdown reports.",
   "startupPrompt": "Greet the user and introduce yourself as their Benchmark Intelligence assistant. Explain the 6-stage pipeline and mention that they can run individual stages or use `/generate` for the full pipeline. Also mention `/controller` to check status. Ask what they'd like to do.",
-  
   "results": {
     "Benchmark Report": "agents/benchmark_intelligence/reports/report_*.md",
     "Filtered Models": "agents/benchmark_intelligence/data/filtered_models.json",
     "Model Documentation": "agents/benchmark_intelligence/data/model_docs.json",
     "Parsed Benchmarks": "agents/benchmark_intelligence/data/parsed_docs.json",
     "Database": "agents/benchmark_intelligence/benchmark_intelligence.db"
-  },
-  
-  "agents": {
-    "benchmark-intelligence": {
-      "description": "Main benchmark tracking agent",
-      "entrypoint": "agents/benchmark_intelligence/main.py",
-      "type": "python",
-      "requires": [
-        "HF_TOKEN",
-        "ANTHROPIC_API_KEY"
-      ]
-    }
-  },
-  
-  "workflows": {
-    "scan-benchmarks": {
-      "description": "Discover models and track benchmarks",
-      "agent": "benchmark-intelligence",
-      "schedule": "0 9 1 * *"
-    },
-    "filter_models": {
-      "description": "Stage 1: Filter trending models from target labs",
-      "agent": "benchmark-intelligence",
-      "command": "filter_models",
-      "args": []
-    },
-    "find_docs": {
-      "description": "Stage 2: Find documentation URLs for filtered models",
-      "agent": "benchmark-intelligence",
-      "command": "find_docs",
-      "args": []
-    },
-    "parse_docs": {
-      "description": "Stage 3: Parse documents and extract benchmarks",
-      "agent": "benchmark-intelligence",
-      "command": "parse_docs",
-      "args": [
-        {
-          "name": "concurrency",
-          "type": "int",
-          "description": "Number of concurrent workers (default: 20)",
-          "default": 20,
-          "flag": "--concurrency"
-        }
-      ]
-    },
-    "consolidate_benchmarks": {
-      "description": "Stage 4: Consolidate and deduplicate benchmark names",
-      "agent": "benchmark-intelligence",
-      "command": "consolidate_benchmarks",
-      "args": [
-        {
-          "name": "from_db",
-          "type": "boolean",
-          "description": "Load from database instead of JSON files",
-          "default": false,
-          "flag": "--from-db"
-        }
-      ]
-    },
-    "categorize_benchmarks": {
-      "description": "Stage 5: Categorize benchmarks using AI",
-      "agent": "benchmark-intelligence",
-      "command": "categorize_benchmarks",
-      "args": []
-    },
-    "report": {
-      "description": "Stage 6: Generate comprehensive benchmark reports",
-      "agent": "benchmark-intelligence",
-      "command": "report",
-      "args": []
-    },
-    "generate": {
-      "description": "Full pipeline: Run all 6 stages sequentially",
-      "agent": "benchmark-intelligence",
-      "command": "generate",
-      "args": [
-        {
-          "name": "concurrency",
-          "type": "int",
-          "description": "Number of concurrent workers for parsing (default: 20)",
-          "default": 20,
-          "flag": "--concurrency"
-        }
-      ]
-    }
   }
 }
