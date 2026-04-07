@@ -86,20 +86,36 @@ def fetch_document_content(
             return card_data.get("content", ""), "text/html"
 
         elif doc_type == "arxiv_paper":
-            # Fetch arXiv abstract
+            # Fetch arXiv paper - try HTML conversion first, fallback to abstract
             # Format: https://arxiv.org/abs/2505.09388
             arxiv_id = url.split("/abs/")[-1]
-            # Try HTML abstract page first (easier to parse than PDF)
+
+            # Try ar5iv HTML conversion first (full paper with tables)
+            html_url = f"https://ar5iv.labs.arxiv.org/html/{arxiv_id}"
+            try:
+                logger.debug(f"Attempting ar5iv HTML conversion for {arxiv_id}")
+                response = requests.get(html_url, timeout=timeout)
+
+                if response.status_code == 200:
+                    logger.info(f"Successfully fetched ar5iv HTML for {arxiv_id} ({len(response.text)} chars)")
+                    return response.text, response.headers.get('content-type', 'text/html')
+
+                # If not 200, fall through to abstract
+                logger.debug(f"ar5iv HTML not available (status {response.status_code}), falling back to abstract")
+
+            except requests.exceptions.RequestException as e:
+                logger.debug(f"ar5iv HTML fetch failed ({e}), falling back to abstract")
+
+            # Fallback: Fetch abstract only
+            logger.debug(f"Fetching abstract for {arxiv_id}")
             abstract_url = f"https://export.arxiv.org/abs/{arxiv_id}"
             response = requests.get(abstract_url, timeout=timeout)
             response.raise_for_status()
 
-            # Simple extraction of abstract from HTML
-            # (Full PDF parsing would be in Phase 5 - multi-source extraction quality)
+            # Extract abstract content between <blockquote> tags
             html = response.text
             content_type = response.headers.get('content-type', 'text/html')
 
-            # Extract abstract content between <blockquote> tags
             abstract_match = re.search(
                 r'<blockquote[^>]*class="abstract mathjax"[^>]*>(.*?)</blockquote>',
                 html,
@@ -111,6 +127,7 @@ def fetch_document_content(
                 abstract_text = re.sub(r'<[^>]+>', '', abstract_text)
                 # Clean whitespace
                 abstract_text = re.sub(r'\s+', ' ', abstract_text).strip()
+                logger.info(f"Fetched abstract for {arxiv_id} ({len(abstract_text)} chars)")
                 return abstract_text, content_type
 
             logger.warning(f"Could not extract abstract from {url}")
