@@ -1,0 +1,1004 @@
+{
+  "stage": "consolidate_names",
+  "timestamp": "2026-04-07T13:59:05.406858",
+  "input_count": 201,
+  "output_count": 82,
+  "data": [
+    {
+      "canonical_name": "MMLU",
+      "normalized": "mmlu",
+      "variants": [
+        "MMLU"
+      ],
+      "variant_count": 1,
+      "mention_count": 15,
+      "model_count": 2,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "MMLU PRO",
+      "normalized": "mmlupro",
+      "variants": [
+        "MMLU PRO",
+        "MMLU-Pro"
+      ],
+      "variant_count": 2,
+      "mention_count": 9,
+      "model_count": 2,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "GPQA",
+      "normalized": "gpqa",
+      "variants": [
+        "GPQA"
+      ],
+      "variant_count": 1,
+      "mention_count": 8,
+      "model_count": 2,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "HumanEval",
+      "normalized": "humaneval",
+      "variants": [
+        "HumanEval"
+      ],
+      "variant_count": 1,
+      "mention_count": 8,
+      "model_count": 2,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "GSM-8K",
+      "normalized": "gsm8k",
+      "variants": [
+        "GSM-8K",
+        "GSM8K"
+      ],
+      "variant_count": 2,
+      "mention_count": 8,
+      "model_count": 2,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "MATH",
+      "normalized": "math",
+      "variants": [
+        "MATH"
+      ],
+      "variant_count": 1,
+      "mention_count": 8,
+      "model_count": 2,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "IFEval",
+      "normalized": "ifeval",
+      "variants": [
+        "IFEval",
+        "IFeval"
+      ],
+      "variant_count": 2,
+      "mention_count": 7,
+      "model_count": 2,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "MBPP",
+      "normalized": "mbpp",
+      "variants": [
+        "MBPP"
+      ],
+      "variant_count": 1,
+      "mention_count": 6,
+      "model_count": 2,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "MultiPL-E",
+      "normalized": "multiple",
+      "variants": [
+        "MultiPL-E"
+      ],
+      "variant_count": 1,
+      "mention_count": 6,
+      "model_count": 2,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "MMLU-redux",
+      "normalized": "mmluredux",
+      "variants": [
+        "MMLU-redux"
+      ],
+      "variant_count": 1,
+      "mention_count": 5,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "Winogrande",
+      "normalized": "winogrande",
+      "variants": [
+        "Winogrande"
+      ],
+      "variant_count": 1,
+      "mention_count": 4,
+      "model_count": 2,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "ARC Challenge",
+      "normalized": "arcchallenge",
+      "variants": [
+        "ARC Challenge",
+        "ARC-Challenge",
+        "ARC-challenge"
+      ],
+      "variant_count": 3,
+      "mention_count": 4,
+      "model_count": 2,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "ARC-C",
+      "normalized": "arcc",
+      "variants": [
+        "ARC-C"
+      ],
+      "variant_count": 1,
+      "mention_count": 3,
+      "model_count": 2,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "BFCL",
+      "normalized": "bfcl",
+      "variants": [
+        "BFCL"
+      ],
+      "variant_count": 1,
+      "mention_count": 3,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "Nexus",
+      "normalized": "nexus",
+      "variants": [
+        "Nexus"
+      ],
+      "variant_count": 1,
+      "mention_count": 3,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "HumanEval+",
+      "normalized": "humaneval+",
+      "variants": [
+        "HumanEval+"
+      ],
+      "variant_count": 1,
+      "mention_count": 3,
+      "model_count": 2,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "BBH",
+      "normalized": "bbh",
+      "variants": [
+        "BBH"
+      ],
+      "variant_count": 1,
+      "mention_count": 3,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "Multi-Exam",
+      "normalized": "multiexam",
+      "variants": [
+        "Multi-Exam"
+      ],
+      "variant_count": 1,
+      "mention_count": 3,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "Multi-Understanding",
+      "normalized": "multiunderstanding",
+      "variants": [
+        "Multi-Understanding"
+      ],
+      "variant_count": 1,
+      "mention_count": 3,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "Multi-Mathematics",
+      "normalized": "multimathematics",
+      "variants": [
+        "Multi-Mathematics"
+      ],
+      "variant_count": 1,
+      "mention_count": 3,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "Multi-Translation",
+      "normalized": "multitranslation",
+      "variants": [
+        "Multi-Translation"
+      ],
+      "variant_count": 1,
+      "mention_count": 3,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "LiveCodeBench",
+      "normalized": "livecodebench",
+      "variants": [
+        "LiveCodeBench"
+      ],
+      "variant_count": 1,
+      "mention_count": 3,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "LiveBench",
+      "normalized": "livebench",
+      "variants": [
+        "LiveBench"
+      ],
+      "variant_count": 1,
+      "mention_count": 3,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "Arena-Hard",
+      "normalized": "arenahard",
+      "variants": [
+        "Arena-Hard"
+      ],
+      "variant_count": 1,
+      "mention_count": 3,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "AlignBench",
+      "normalized": "alignbench",
+      "variants": [
+        "AlignBench"
+      ],
+      "variant_count": 1,
+      "mention_count": 3,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "MT-bench",
+      "normalized": "mtbench",
+      "variants": [
+        "MT-bench",
+        "MTBench",
+        "MTbench"
+      ],
+      "variant_count": 3,
+      "mention_count": 3,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "CommonSenseQA",
+      "normalized": "commonsenseqa",
+      "variants": [
+        "CommonSenseQA"
+      ],
+      "variant_count": 1,
+      "mention_count": 2,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "BIG-Bench Hard",
+      "normalized": "bigbenchhard",
+      "variants": [
+        "BIG-Bench Hard"
+      ],
+      "variant_count": 1,
+      "mention_count": 2,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "SQuAD",
+      "normalized": "squad",
+      "variants": [
+        "SQuAD"
+      ],
+      "variant_count": 1,
+      "mention_count": 2,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "QuAC",
+      "normalized": "quac",
+      "variants": [
+        "QuAC"
+      ],
+      "variant_count": 1,
+      "mention_count": 2,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "DROP",
+      "normalized": "drop",
+      "variants": [
+        "DROP"
+      ],
+      "variant_count": 1,
+      "mention_count": 2,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "API-Bank",
+      "normalized": "apibank",
+      "variants": [
+        "API-Bank"
+      ],
+      "variant_count": 1,
+      "mention_count": 2,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "Multilingual MGSM",
+      "normalized": "multilingualmgsm",
+      "variants": [
+        "Multilingual MGSM"
+      ],
+      "variant_count": 1,
+      "mention_count": 2,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "MBPP EvalPlus",
+      "normalized": "mbppevalplus",
+      "variants": [
+        "MBPP EvalPlus"
+      ],
+      "variant_count": 1,
+      "mention_count": 2,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "ZeroSCROLLS",
+      "normalized": "zeroscrolls",
+      "variants": [
+        "ZeroSCROLLS"
+      ],
+      "variant_count": 1,
+      "mention_count": 2,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "InfiniteBench",
+      "normalized": "infinitebench",
+      "variants": [
+        "InfiniteBench"
+      ],
+      "variant_count": 1,
+      "mention_count": 2,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "TruthfulQA",
+      "normalized": "truthfulqa",
+      "variants": [
+        "TruthfulQA"
+      ],
+      "variant_count": 1,
+      "mention_count": 2,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "HellaSwag",
+      "normalized": "hellaswag",
+      "variants": [
+        "HellaSwag"
+      ],
+      "variant_count": 1,
+      "mention_count": 2,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "TheoremQA",
+      "normalized": "theoremqa",
+      "variants": [
+        "TheoremQA",
+        "Theoremqa"
+      ],
+      "variant_count": 2,
+      "mention_count": 2,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "MMLU-stem",
+      "normalized": "mmlustem",
+      "variants": [
+        "MMLU-stem"
+      ],
+      "variant_count": 1,
+      "mention_count": 2,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "MBPP+",
+      "normalized": "mbpp+",
+      "variants": [
+        "MBPP+"
+      ],
+      "variant_count": 1,
+      "mention_count": 2,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "AGIEval English",
+      "normalized": "agievalenglish",
+      "variants": [
+        "AGIEval English"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "TriviaQA-Wiki",
+      "normalized": "triviaqawiki",
+      "variants": [
+        "TriviaQA-Wiki"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "BoolQ",
+      "normalized": "boolq",
+      "variants": [
+        "BoolQ"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "MBPP++",
+      "normalized": "mbpp++",
+      "variants": [
+        "MBPP++"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "Multipl-E HumanEval",
+      "normalized": "multiplehumaneval",
+      "variants": [
+        "Multipl-E HumanEval"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "Multipl-E MBPP",
+      "normalized": "multiplembpp",
+      "variants": [
+        "Multipl-E MBPP"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "Gorilla Benchmark API Bench",
+      "normalized": "gorillabenchmarkapibench",
+      "variants": [
+        "Gorilla Benchmark API Bench"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "NIH",
+      "normalized": "nih",
+      "variants": [
+        "NIH"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "AGIEval",
+      "normalized": "agieval",
+      "variants": [
+        "AGIEval"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "PiQA",
+      "normalized": "piqa",
+      "variants": [
+        "PiQA"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "SiQA",
+      "normalized": "siqa",
+      "variants": [
+        "SiQA"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "OpenBookQA",
+      "normalized": "openbookqa",
+      "variants": [
+        "OpenBookQA"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "WorldSense",
+      "normalized": "worldsense",
+      "variants": [
+        "WorldSense"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "RACE",
+      "normalized": "race",
+      "variants": [
+        "RACE"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "SQuAD V2",
+      "normalized": "squadv2",
+      "variants": [
+        "SQuAD V2"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "PAWS",
+      "normalized": "paws",
+      "variants": [
+        "PAWS"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "Adv SQuAD",
+      "normalized": "advsquad",
+      "variants": [
+        "Adv SQuAD"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "Dynabench SQuAD",
+      "normalized": "dynabenchsquad",
+      "variants": [
+        "Dynabench SQuAD"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "GSM-Plus",
+      "normalized": "gsmplus",
+      "variants": [
+        "GSM-Plus"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "many-shot GSM8K",
+      "normalized": "manyshotgsm8k",
+      "variants": [
+        "many-shot GSM8K"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "QuALITY",
+      "normalized": "quality",
+      "variants": [
+        "QuALITY"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "Needle-in-a-Haystack",
+      "normalized": "needleinahaystack",
+      "variants": [
+        "Needle-in-a-Haystack"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "MGSM",
+      "normalized": "mgsm",
+      "variants": [
+        "MGSM"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "Multilingual MMLU",
+      "normalized": "multilingualmmlu",
+      "variants": [
+        "Multilingual MMLU"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "API-Bench",
+      "normalized": "apibench",
+      "variants": [
+        "API-Bench"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "GRE",
+      "normalized": "gre",
+      "variants": [
+        "GRE"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "LSAT",
+      "normalized": "lsat",
+      "variants": [
+        "LSAT"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "SAT",
+      "normalized": "sat",
+      "variants": [
+        "SAT"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "AP",
+      "normalized": "ap",
+      "variants": [
+        "AP"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "GMAT",
+      "normalized": "gmat",
+      "variants": [
+        "GMAT"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "AMMLU",
+      "normalized": "ammlu",
+      "variants": [
+        "AMMLU"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "JMMLU",
+      "normalized": "jmmlu",
+      "variants": [
+        "JMMLU"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "KMMLU",
+      "normalized": "kmmlu",
+      "variants": [
+        "KMMLU"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "IndoMMLU",
+      "normalized": "indommlu",
+      "variants": [
+        "IndoMMLU"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "TurkishMMLU",
+      "normalized": "turkishmmlu",
+      "variants": [
+        "TurkishMMLU"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "okapi MMLU",
+      "normalized": "okapimmlu",
+      "variants": [
+        "okapi MMLU"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "MGSM8K",
+      "normalized": "mgsm8k",
+      "variants": [
+        "MGSM8K"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "BLEnD",
+      "normalized": "blend",
+      "variants": [
+        "BLEnD"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "RULER",
+      "normalized": "ruler",
+      "variants": [
+        "RULER"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "LV-Eval",
+      "normalized": "lveval",
+      "variants": [
+        "LV-Eval"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    },
+    {
+      "canonical_name": "LongBench-Chat",
+      "normalized": "longbenchchat",
+      "variants": [
+        "LongBench-Chat"
+      ],
+      "variant_count": 1,
+      "mention_count": 1,
+      "model_count": 1,
+      "similarity_scores": [],
+      "web_search_used": false
+    }
+  ],
+  "errors": [],
+  "metadata": {
+    "models_without_benchmarks": 0
+  }
+}
