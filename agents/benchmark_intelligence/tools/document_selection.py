@@ -132,6 +132,83 @@ def fetch_arxiv_abstract(arxiv_id: str) -> Optional[Dict[str, str]]:
         return None
 
 
+def extract_blog_urls(model_card_content: str) -> List[Dict[str, str]]:
+    """
+    Extract blog post URLs from model card content.
+
+    Looks for URLs containing blog-related keywords like 'blog', 'announcement',
+    'introducing', 'news', etc.
+
+    Args:
+        model_card_content: Full model card markdown content
+
+    Returns:
+        List of blog URL dictionaries with 'url' and optional 'title':
+            [{"url": "https://...", "title": "Blog post title"}, ...]
+
+    Example:
+        >>> content = "[Introducing Qwen3](https://qwenlm.github.io/blog/qwen3/)"
+        >>> blogs = extract_blog_urls(content)
+        >>> print(blogs)
+        [{"url": "https://qwenlm.github.io/blog/qwen3/", "title": "Introducing Qwen3"}]
+    """
+    blog_urls = []
+    seen_urls = set()
+
+    # Pattern 1: Markdown links [text](url)
+    markdown_link_pattern = r'\[([^\]]+)\]\(([^\)]+)\)'
+    matches = re.findall(markdown_link_pattern, model_card_content)
+
+    for title, url in matches:
+        # Check if URL contains blog-related keywords
+        url_lower = url.lower()
+        blog_keywords = [
+            'blog', 'announcement', 'introducing', 'news',
+            'article', 'post', 'release', 'launch'
+        ]
+
+        if any(keyword in url_lower for keyword in blog_keywords):
+            # Skip non-http URLs
+            if not url.startswith(('http://', 'https://')):
+                continue
+
+            # Skip duplicates
+            if url in seen_urls:
+                continue
+
+            seen_urls.add(url)
+            blog_urls.append({
+                "url": url,
+                "title": title.strip()
+            })
+
+    # Pattern 2: Plain URLs in text (without markdown links)
+    # Only if they clearly look like blog posts
+    plain_url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+(?:blog|announcement|news|article|post)[^\s<>"{}|\\^`\[\]]*'
+    plain_matches = re.findall(plain_url_pattern, model_card_content, re.IGNORECASE)
+
+    for url in plain_matches:
+        # Clean up URL first (remove trailing punctuation)
+        url = re.sub(r'[.,;:!?)]+$', '', url)
+
+        # Skip if already found
+        if url in seen_urls:
+            continue
+
+        seen_urls.add(url)
+        blog_urls.append({
+            "url": url,
+            "title": None  # No title available for plain URLs
+        })
+
+    if blog_urls:
+        logger.info(f"Found {len(blog_urls)} blog URLs in model card")
+        for blog in blog_urls:
+            logger.debug(f"  Blog: {blog['url']} ({blog.get('title', 'No title')})")
+
+    return blog_urls
+
+
 def search_arxiv_api(
     model_name: str,
     lab_name: str,

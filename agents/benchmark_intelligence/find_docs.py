@@ -28,7 +28,8 @@ from agents.benchmark_intelligence.tools.document_selection import (
     extract_all_arxiv_ids,
     fetch_arxiv_abstract,
     select_best_arxiv_paper,
-    search_arxiv_api
+    search_arxiv_api,
+    extract_blog_urls
 )
 from agents.benchmark_intelligence.tools.parse_model_card import parse_model_card
 
@@ -39,12 +40,13 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 def construct_document_urls(model_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
-    Construct documentation URLs for a model from model card content only.
+    Construct documentation URLs for a model from model card content.
 
     Strategy:
     1. Always include HuggingFace model card
-    2. Extract ALL arXiv papers from model card (tags + content)
+    2. Extract ALL arXiv papers from model card (tags + content), fallback to arXiv API
     3. Use AI to select best paper if multiple found
+    4. Extract blog post URLs from model card content
 
     Args:
         model_data: Model information dictionary
@@ -116,6 +118,25 @@ def construct_document_urls(model_data: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     except Exception as e:
         logger.warning(f"Failed to discover arXiv papers for {model_id}: {e}")
+
+    # 3. Blog Posts - Extract from model card content
+    try:
+        # Extract blog URLs from model card content (already fetched above)
+        blog_urls = extract_blog_urls(model_card_content)
+
+        for blog in blog_urls:
+            documents.append({
+                'type': 'blog',
+                'url': blog['url'],
+                'found': True,
+                'metadata': {
+                    'title': blog.get('title'),
+                    'source': 'model_card'
+                }
+            })
+
+    except Exception as e:
+        logger.warning(f"Failed to extract blog URLs for {model_id}: {e}")
 
     return documents
 

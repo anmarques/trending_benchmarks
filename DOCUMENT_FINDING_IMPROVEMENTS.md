@@ -14,9 +14,9 @@ This document describes the improvements made to the document finding logic base
 - Problem: When multiple papers referenced, no mechanism to choose the best one
 - Missing: Abstracts not collected, no AI-powered selection
 
-## Solution Implemented
+## Solutions Implemented
 
-### AI-Powered arXiv Paper Selection (Model Card + arXiv API Fallback)
+### 1. AI-Powered arXiv Paper Selection (Model Card + arXiv API Fallback)
 
 **New Module**: `agents/benchmark_intelligence/tools/document_selection.py`
 
@@ -42,6 +42,16 @@ This document describes the improvements made to the document finding logic base
   - Analyzes all abstracts in context of model name and lab
   - Selects primary technical paper (not comparison/survey papers)
   - Returns selected arXiv ID with reasoning
+
+### 2. Blog Post URL Extraction from Model Card
+
+**Key Functions**:
+
+- `extract_blog_urls(model_card_content)` - Extracts blog post URLs from model card:
+  - Finds markdown links: `[Blog post](https://blog.example.com/post)`
+  - Finds plain URLs containing blog keywords: `blog`, `announcement`, `news`, etc.
+  - Returns list of blog dictionaries with URL and title (if available)
+  - Deduplicates URLs automatically
 
 **Selection Criteria**:
 - Paper directly introduces/describes the target model
@@ -76,6 +86,11 @@ if len(arxiv_ids) > 1:
     selected_id = select_best_arxiv_paper(abstracts, model_name, author)
 else:
     selected_id = arxiv_ids[0]
+
+# New: Extract blog URLs from model card
+blog_urls = extract_blog_urls(model_card_content)
+for blog in blog_urls:
+    documents.append({'type': 'blog', 'url': blog['url'], 'found': True})
 ```
 
 ## Metadata Enhancements
