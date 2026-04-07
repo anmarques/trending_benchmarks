@@ -79,17 +79,61 @@ def consolidate_benchmarks(
         # Load configuration (T078, T079)
         threshold = FUZZY_MATCH_THRESHOLD
         enable_web_search = True
+        benchmark_aliases = {}
+        ai_review_min = 0.70
+        ai_review_max = 0.89
+
         if config:
             consolidation_config = config.get("consolidation", {})
             threshold = consolidation_config.get("fuzzy_match_threshold", FUZZY_MATCH_THRESHOLD)
             enable_web_search = consolidation_config.get("enable_web_search", True)
+            benchmark_aliases = consolidation_config.get("benchmark_aliases", {})
+            ai_review_min = consolidation_config.get("ai_review_min_similarity", 0.70)
+            ai_review_max = consolidation_config.get("ai_review_max_similarity", 0.89)
 
         logger.info(f"Using fuzzy match threshold: {threshold:.2%}, web search: {enable_web_search}")
+        if benchmark_aliases:
+            logger.info(f"Loaded {len(benchmark_aliases)} benchmark aliases from config")
+
+        # Step 1: Apply benchmark aliases (resolve known alternate names)
+        benchmark_names = _apply_aliases(benchmark_names, benchmark_aliases)
 
         # Remove duplicates while preserving order
         unique_names = list(dict.fromkeys(benchmark_names))
 
         logger.info(f"Consolidating {len(unique_names)} unique benchmark names")
+
+        # Step 2: AI review for questionable pairs (70-89% similarity)
+        ai_reviews = []
+        if enable_web_search and ai_review_min < ai_review_max:
+            ai_reviews = _ai_review_questionable_pairs(
+                unique_names,
+                min_similarity=ai_review_min,
+                max_similarity=ai_review_max,
+                enable_web_search=enable_web_search
+            )
+
+            # Apply AI review decisions: merge pairs identified as same benchmark
+            if ai_reviews:
+                for review in ai_reviews:
+                    if review["same_benchmark"] and review["canonical_name"]:
+                        # Replace both names with canonical name in the list
+                        name1 = review["benchmark1"]
+                        name2 = review["benchmark2"]
+                        canonical = review["canonical_name"]
+
+                        unique_names = [
+                            canonical if (name == name1 or name == name2) else name
+                            for name in unique_names
+                        ]
+
+                        logger.info(
+                            f"Pre-consolidated based on AI review: '{name1}' + '{name2}' → '{canonical}'"
+                        )
+
+                # Remove duplicates again after AI merges
+                unique_names = list(dict.fromkeys(unique_names))
+                logger.info(f"After AI review: {len(unique_names)} unique benchmark names")
 
         # Build consolidation prompt
         prompt = _build_consolidation_prompt(unique_names)
@@ -133,14 +177,20 @@ def consolidate_benchmarks(
         if "metadata" not in result:
             result["metadata"] = {}
 
-        result["metadata"]["total_input_names"] = len(unique_names)
+        result["metadata"]["total_input_names"] = len(benchmark_names)  # Original count before aliases
+        result["metadata"]["aliases_resolved"] = len(benchmark_names) - len(unique_names)
         result["metadata"]["total_canonical_names"] = len(result["consolidations"])
         result["metadata"]["consolidation_date"] = datetime.utcnow().isoformat()
         result["metadata"]["cooccurrence_constraints"] = len(cooccurrences) if cooccurrences else 0
         result["metadata"]["fuzzy_match_threshold"] = threshold
 
+        # AI review metadata
+        result["metadata"]["ai_reviews_performed"] = len(ai_reviews)
+        ai_merges = sum(1 for r in ai_reviews if r["same_benchmark"])
+        result["metadata"]["ai_merges"] = ai_merges
+
         # T084: Add web_search_used flag
-        result["web_search_used"] = web_search_used
+        result["web_search_used"] = web_search_used or any(r.get("web_search_used", False) for r in ai_reviews)
 
         logger.info(
             f"Consolidated {len(unique_names)} names into "
@@ -851,3 +901,206 @@ def _apply_web_search_disambiguation(
     consolidation_result["uncertain_mappings"] = []
 
     return web_search_used
+
+
+def _apply_aliases(benchmark_names: List[str], aliases: Dict[str, str]) -> List[str]:
+    """
+    Apply benchmark aliases to normalize known alternate names.
+
+    Resolves known alternate names to their canonical forms before consolidation.
+    This prevents false negatives where known aliases would otherwise be treated
+    as distinct benchmarks.
+
+    Args:
+        benchmark_names: List of benchmark names to process
+        aliases: Dictionary mapping alternate names to canonical names
+                 Example: {"ARC-C": "ARC-Challenge", "BBH": "BIG-Bench Hard"}
+
+    Returns:
+        List of benchmark names with aliases resolved
+
+    Example:
+        >>> aliases = {"ARC-C": "ARC-Challenge", "BBH": "BIG-Bench Hard"}
+        >>> names = ["ARC-C", "MMLU", "BBH", "HumanEval"]
+        >>> _apply_aliases(names, aliases)
+        ['ARC-Challenge', 'MMLU', 'BIG-Bench Hard', 'HumanEval']
+    """
+    if not aliases:
+        return benchmark_names
+
+    resolved_names = []
+    alias_count = 0
+
+    for name in benchmark_names:
+        # Check exact match first
+        if name in aliases:
+            canonical = aliases[name]
+            resolved_names.append(canonical)
+            alias_count += 1
+            logger.debug(f"Resolved alias: '{name}' → '{canonical}'")
+        else:
+            # Check case-insensitive match
+            name_lower = name.lower()
+            alias_found = False
+            for alias, canonical in aliases.items():
+                if alias.lower() == name_lower:
+                    resolved_names.append(canonical)
+                    alias_count += 1
+                    logger.debug(f"Resolved alias (case-insensitive): '{name}' → '{canonical}'")
+                    alias_found = True
+                    break
+            if not alias_found:
+                resolved_names.append(name)
+
+    if alias_count > 0:
+        logger.info(f"Resolved {alias_count} benchmark aliases")
+
+    return resolved_names
+
+
+def _ai_review_questionable_pairs(
+    benchmark_names: List[str],
+    min_similarity: float = 0.70,
+    max_similarity: float = 0.89,
+    enable_web_search: bool = True
+) -> List[Dict[str, Any]]:
+    """
+    Use AI to review questionable benchmark pairs with medium similarity.
+
+    For pairs in the "questionable" similarity range (70-89%), use AI + web search
+    to determine if they represent the same benchmark or distinct benchmarks.
+
+    This catches cases like:
+    - "ARC-C" vs "ARC-Challenge" (abbreviation vs full name)
+    - "BBH" vs "BIG-Bench Hard" (acronym vs full name)
+    - "GSM8K" vs "GSM-8K" (spacing variation)
+
+    Args:
+        benchmark_names: List of benchmark names to analyze
+        min_similarity: Minimum similarity to trigger review (default: 0.70)
+        max_similarity: Maximum similarity to trigger review (default: 0.89)
+        enable_web_search: Whether to use web search for context (default: True)
+
+    Returns:
+        List of AI review results with consolidation decisions
+
+    Example:
+        >>> names = ["ARC-C", "ARC-Challenge", "MMLU", "HumanEval"]
+        >>> results = _ai_review_questionable_pairs(names)
+        >>> # Results show ARC-C and ARC-Challenge should consolidate
+    """
+    from fuzzywuzzy import fuzz
+
+    questionable_pairs = []
+
+    # Find all pairs in the questionable similarity range
+    for i, name1 in enumerate(benchmark_names):
+        for name2 in benchmark_names[i+1:]:
+            similarity = fuzz.ratio(name1.lower(), name2.lower()) / 100.0
+
+            if min_similarity <= similarity <= max_similarity:
+                questionable_pairs.append({
+                    "benchmark1": name1,
+                    "benchmark2": name2,
+                    "similarity": similarity
+                })
+
+    if not questionable_pairs:
+        logger.debug("No questionable pairs found in similarity range "
+                    f"{min_similarity:.0%}-{max_similarity:.0%}")
+        return []
+
+    logger.info(f"Found {len(questionable_pairs)} questionable pairs for AI review "
+                f"(similarity {min_similarity:.0%}-{max_similarity:.0%})")
+
+    # AI review each questionable pair
+    ai_reviews = []
+
+    for pair in questionable_pairs:
+        name1 = pair["benchmark1"]
+        name2 = pair["benchmark2"]
+        similarity = pair["similarity"]
+
+        logger.info(f"AI reviewing: '{name1}' vs '{name2}' (similarity: {similarity:.1%})")
+
+        # Step 1: Web search for context (if enabled)
+        web_context = ""
+        if enable_web_search:
+            try:
+                # Search for both benchmarks
+                search_query = f'"{name1}" benchmark AND "{name2}" benchmark'
+                search_results = scrape_google_search(search_query, max_results=3)
+
+                if search_results:
+                    web_context = "\n\nWeb search results:\n"
+                    for i, result in enumerate(search_results, 1):
+                        web_context += f"\n{i}. {result.get('title', '')}\n"
+                        web_context += f"   {result.get('snippet', '')}\n"
+                else:
+                    web_context = "\n\nNo web search results found."
+            except Exception as e:
+                logger.warning(f"Web search failed for '{name1}' vs '{name2}': {e}")
+                web_context = "\n\nWeb search unavailable."
+
+        # Step 2: AI analysis
+        prompt = f"""Determine if these two benchmark names refer to the same benchmark or are distinct:
+
+Benchmark 1: "{name1}"
+Benchmark 2: "{name2}"
+
+Similarity score: {similarity:.1%}
+{web_context}
+
+Are these the same benchmark (just different names/abbreviations) or distinct benchmarks?
+
+Respond with JSON:
+{{
+  "same_benchmark": true or false,
+  "confidence": "high" or "medium" or "low",
+  "reasoning": "brief explanation",
+  "canonical_name": "preferred name if same_benchmark=true, otherwise null"
+}}
+
+Examples of SAME benchmark:
+- "ARC-C" and "ARC-Challenge" (abbreviation)
+- "BBH" and "BIG-Bench Hard" (acronym)
+- "GSM8K" and "GSM-8K" (spacing)
+
+Examples of DISTINCT benchmarks:
+- "MMLU" and "MMLU-Pro" (different difficulty)
+- "HumanEval" and "HumanEval+" (different test sets)
+- "MBPP" and "MBPP++" (different versions)
+"""
+
+        try:
+            ai_result = call_claude_json(prompt=prompt, max_tokens=1024)
+
+            ai_reviews.append({
+                "benchmark1": name1,
+                "benchmark2": name2,
+                "similarity": similarity,
+                "same_benchmark": ai_result.get("same_benchmark", False),
+                "confidence": ai_result.get("confidence", "medium"),
+                "reasoning": ai_result.get("reasoning", ""),
+                "canonical_name": ai_result.get("canonical_name"),
+                "web_search_used": bool(web_context and "unavailable" not in web_context)
+            })
+
+            decision = "SAME" if ai_result.get("same_benchmark") else "DISTINCT"
+            logger.info(f"  AI decision: {decision} (confidence: {ai_result.get('confidence')})")
+
+        except Exception as e:
+            logger.error(f"AI review failed for '{name1}' vs '{name2}': {e}")
+            # Conservative default: treat as distinct
+            ai_reviews.append({
+                "benchmark1": name1,
+                "benchmark2": name2,
+                "similarity": similarity,
+                "same_benchmark": False,
+                "confidence": "low",
+                "reasoning": f"AI review failed: {e}",
+                "canonical_name": None,
+                "web_search_used": False
+            })
+
+    return ai_reviews

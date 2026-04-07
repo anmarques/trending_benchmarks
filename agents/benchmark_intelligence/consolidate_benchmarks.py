@@ -70,15 +70,16 @@ def normalize_benchmark_name(name: str) -> str:
     return normalized
 
 
-def consolidate_benchmark_names(benchmarks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def consolidate_benchmark_names(benchmarks: List[Dict[str, Any]], config: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     """
     Consolidate benchmark names from extraction results.
 
     Groups benchmark variants by normalized name and creates canonical
-    name mappings. This is a simple MVP implementation.
+    name mappings. Applies benchmark aliases from config before normalization.
 
     Args:
         benchmarks: List of benchmark entries from Stage 3
+        config: Optional configuration dict with consolidation settings
 
     Returns:
         List of consolidated benchmark groups:
@@ -96,6 +97,14 @@ def consolidate_benchmark_names(benchmarks: List[Dict[str, Any]]) -> List[Dict[s
         >>> result = consolidate_benchmark_names(benchmarks)
         # Returns groups for "MMLU" and "GSM8K"
     """
+    # Load benchmark aliases from config
+    benchmark_aliases = {}
+    if config:
+        consolidation_config = config.get("consolidation", {})
+        benchmark_aliases = consolidation_config.get("benchmark_aliases", {})
+        if benchmark_aliases:
+            logger.info(f"Loaded {len(benchmark_aliases)} benchmark aliases from config")
+
     # Group by normalized name
     groups: Dict[str, Dict[str, Any]] = defaultdict(lambda: {
         'variants': set(),
@@ -103,10 +112,27 @@ def consolidate_benchmark_names(benchmarks: List[Dict[str, Any]]) -> List[Dict[s
         'mention_count': 0
     })
 
+    alias_count = 0
     for bench in benchmarks:
         name = bench.get('name', '')
         if not name:
             continue
+
+        # Apply alias resolution
+        if name in benchmark_aliases:
+            canonical = benchmark_aliases[name]
+            logger.debug(f"Resolved alias: '{name}' → '{canonical}'")
+            name = canonical
+            alias_count += 1
+        elif benchmark_aliases:
+            # Check case-insensitive match
+            name_lower = name.lower()
+            for alias, canonical in benchmark_aliases.items():
+                if alias.lower() == name_lower:
+                    logger.debug(f"Resolved alias (case-insensitive): '{name}' → '{canonical}'")
+                    name = canonical
+                    alias_count += 1
+                    break
 
         model_id = bench.get('model_id', '')
         normalized = normalize_benchmark_name(name)
@@ -123,6 +149,9 @@ def consolidate_benchmark_names(benchmarks: List[Dict[str, Any]]) -> List[Dict[s
 
         # Increment mention count
         groups[normalized]['mention_count'] += 1
+
+    if alias_count > 0:
+        logger.info(f"Resolved {alias_count} benchmark aliases")
 
     # Convert to output format
     consolidated = []
@@ -208,8 +237,19 @@ def run(input_json: Optional[str] = None) -> str:
     else:
         logger.info(f"\nConsolidating benchmark names...")
 
-        # Perform consolidation
-        output_data = consolidate_benchmark_names(all_benchmarks)
+        # Load configuration for advanced consolidation
+        import yaml
+        config_path = Path(__file__).parent.parent.parent / "config.yaml"
+        config = {}
+        try:
+            with open(config_path, 'r') as f:
+                config = yaml.safe_load(f)
+            logger.debug(f"Loaded configuration from {config_path}")
+        except Exception as e:
+            logger.warning(f"Could not load config.yaml: {e}, using defaults")
+
+        # Perform consolidation with config
+        output_data = consolidate_benchmark_names(all_benchmarks, config=config)
 
         # Statistics
         unique_benchmarks = len(output_data)

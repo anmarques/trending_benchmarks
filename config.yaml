@@ -71,6 +71,36 @@ consolidation:
   enable_web_search: true      # Enable web search disambiguation for ambiguous pairs
   web_search_max_results: 3    # Number of search results to analyze
 
+  # AI review threshold for questionable cases (0.70-0.89 similarity)
+  ai_review_min_similarity: 0.70  # Below this, definitely different benchmarks
+  ai_review_max_similarity: 0.89  # Above this, use fuzzy_match_threshold logic
+
+  # Benchmark aliases - known alternate names that should consolidate to canonical form
+  # Format: "alternate_name": "canonical_name"
+  benchmark_aliases:
+    # ARC variants
+    "ARC-C": "ARC-Challenge"
+    "ARC-c": "ARC-Challenge"
+    "ARC Challenge": "ARC-Challenge"
+    "ARC challenge": "ARC-Challenge"
+    "arc-challenge": "ARC-Challenge"
+
+    # BBH variants
+    "BBH": "BIG-Bench Hard"
+    "Big-Bench Hard": "BIG-Bench Hard"
+    "BigBench Hard": "BIG-Bench Hard"
+
+    # GSM8K variants (hyphen handling)
+    "GSM8K": "GSM-8K"
+    "gsm8k": "GSM-8K"
+
+    # IFEval variants (capitalization)
+    "IFeval": "IFEval"
+    "Ifeval": "IFEval"
+    "ifeval": "IFEval"
+
+    # Add more known aliases as discovered
+
 # Taxonomy configuration (T088)
 taxonomy:
   # Manual category overrides (takes precedence over AI classification)
