@@ -6,6 +6,7 @@ arXiv papers, GitHub repos, blog posts) in parallel using concurrent processing.
 """
 
 import logging
+import re
 import requests
 from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -17,11 +18,48 @@ from ..clients.factory import get_hf_client
 logger = logging.getLogger(__name__)
 
 
+def detect_content_format(content: str, content_type: str = "text/html") -> str:
+    """
+    Detect the format of document content for routing to appropriate parser.
+
+    Args:
+        content: Document content to analyze
+        content_type: HTTP Content-Type header (optional)
+
+    Returns:
+        Format identifier: "html_table", "markdown_table", "prose", or "pdf"
+
+    Example:
+        >>> html = "<table><tr><th>Benchmark</th></tr></table>"
+        >>> detect_content_format(html)
+        'html_table'
+        >>> markdown = "| Benchmark | Score |\\n|-----------|-------|"
+        >>> detect_content_format(markdown)
+        'markdown_table'
+    """
+    # Check for PDF content type
+    if "application/pdf" in content_type.lower():
+        return "pdf"
+
+    # Check for HTML tables (case-insensitive)
+    # Look for <table> tag with optional attributes
+    if re.search(r'<table[\s>]', content, re.IGNORECASE):
+        return "html_table"
+
+    # Check for markdown tables
+    # Require header separator line with pipes and dashes: |---|---|
+    if re.search(r'\|[-:\s]+\|[-:\s]+\|', content):
+        return "markdown_table"
+
+    # Default to prose (unstructured text)
+    return "prose"
+
+
 def fetch_document_content(
     url: str,
     doc_type: str,
     timeout: int = 30
-) -> Optional[str]:
+) -> tuple[Optional[str], str]:
     """
     Fetch content from a single document URL.
 
@@ -31,10 +69,12 @@ def fetch_document_content(
         timeout: Request timeout in seconds
 
     Returns:
-        Document content as string, or None if fetch fails
+        Tuple of (content, content_type):
+            - content: Document content as string, or None if fetch fails
+            - content_type: MIME type (e.g., "text/html", "text/plain")
 
     Example:
-        >>> content = fetch_document_content("https://arxiv.org/abs/2505.09388", "arxiv_paper")
+        >>> content, ctype = fetch_document_content("https://arxiv.org/abs/2505.09388", "arxiv_paper")
     """
     try:
         if doc_type == "model_card":
@@ -43,7 +83,7 @@ def fetch_document_content(
             model_id = url.replace("https://huggingface.co/", "")
             hf_client = get_hf_client()
             card_data = parse_model_card(model_id, hf_client)
-            return card_data.get("content", "")
+            return card_data.get("content", ""), "text/html"
 
         elif doc_type == "arxiv_paper":
             # Fetch arXiv abstract
@@ -57,8 +97,9 @@ def fetch_document_content(
             # Simple extraction of abstract from HTML
             # (Full PDF parsing would be in Phase 5 - multi-source extraction quality)
             html = response.text
+            content_type = response.headers.get('content-type', 'text/html')
+
             # Extract abstract content between <blockquote> tags
-            import re
             abstract_match = re.search(
                 r'<blockquote[^>]*class="abstract mathjax"[^>]*>(.*?)</blockquote>',
                 html,
@@ -70,10 +111,10 @@ def fetch_document_content(
                 abstract_text = re.sub(r'<[^>]+>', '', abstract_text)
                 # Clean whitespace
                 abstract_text = re.sub(r'\s+', ' ', abstract_text).strip()
-                return abstract_text
+                return abstract_text, content_type
 
             logger.warning(f"Could not extract abstract from {url}")
-            return None
+            return None, content_type
 
         elif doc_type == "github":
             # Fetch GitHub README
@@ -88,37 +129,39 @@ def fetch_document_content(
                     try:
                         response = requests.get(readme_url, timeout=timeout)
                         if response.status_code == 200:
-                            return response.text
+                            content_type = response.headers.get('content-type', 'text/markdown')
+                            return response.text, content_type
                     except Exception:
                         continue
 
             logger.warning(f"Could not fetch GitHub README from {url}")
-            return None
+            return None, "text/plain"
 
-        elif doc_type == "blog":
+        elif doc_type in ("blog", "blog_post"):
             # Fetch blog post content (generic HTML fetch)
             # Note: This is basic - proper blog parsing would use BeautifulSoup
             # or dedicated scrapers (Phase 5 improvement)
             response = requests.get(url, timeout=timeout)
             response.raise_for_status()
 
+            content_type = response.headers.get('content-type', 'text/html')
             # Return raw HTML for now
             # (Phase 5 would add proper content extraction)
-            return response.text
+            return response.text, content_type
 
         else:
             logger.warning(f"Unknown document type: {doc_type}")
-            return None
+            return None, "text/plain"
 
     except requests.exceptions.Timeout:
         logger.warning(f"Timeout fetching {url}")
-        return None
+        return None, "text/plain"
     except requests.exceptions.RequestException as e:
         logger.warning(f"Error fetching {url}: {e}")
-        return None
+        return None, "text/plain"
     except Exception as e:
         logger.error(f"Unexpected error fetching {url}: {e}")
-        return None
+        return None, "text/plain"
 
 
 def fetch_documents_for_model(
@@ -142,6 +185,7 @@ def fetch_documents_for_model(
             - type: Document type
             - url: Document URL
             - content: Fetched content (or None if failed)
+            - content_format: Format detected ("html_table", "markdown_table", "prose", "pdf")
             - success: Boolean indicating successful fetch
 
     Example:
@@ -177,18 +221,25 @@ def fetch_documents_for_model(
         for future in as_completed(future_to_doc):
             doc = future_to_doc[future]
             try:
-                content = future.result()
+                content, content_type = future.result()
                 success = content is not None
+
+                # Detect content format for routing
+                content_format = detect_content_format(content or "", content_type)
 
                 results.append({
                     "type": doc["type"],
                     "url": doc["url"],
                     "content": content,
+                    "content_format": content_format,
                     "success": success
                 })
 
                 if success:
-                    logger.debug(f"Fetched {doc['type']} for {model_id}: {len(content)} chars")
+                    logger.debug(
+                        f"Fetched {doc['type']} for {model_id}: {len(content)} chars "
+                        f"(format: {content_format})"
+                    )
                 else:
                     logger.warning(f"Failed to fetch {doc['type']} for {model_id}")
 
@@ -198,6 +249,7 @@ def fetch_documents_for_model(
                     "type": doc["type"],
                     "url": doc["url"],
                     "content": None,
+                    "content_format": "prose",
                     "success": False
                 })
 

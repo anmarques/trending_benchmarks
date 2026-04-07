@@ -23,6 +23,10 @@ from agents.benchmark_intelligence.stage_utils import (
 )
 from agents.benchmark_intelligence.tools.parallel_fetcher import fetch_documents_parallel
 from agents.benchmark_intelligence.tools.extract_benchmarks import extract_benchmarks_from_text
+from agents.benchmark_intelligence.tools.parse_table import (
+    parse_html_table,
+    parse_markdown_table
+)
 from agents.benchmark_intelligence.concurrent_processor import ConcurrentModelProcessor
 from agents.benchmark_intelligence.tools.cache import CacheManager
 
@@ -79,25 +83,50 @@ def extract_benchmarks_from_model_docs(model_entry: Dict[str, Any]) -> Dict[str,
             if not content:
                 continue
 
-            # Extract benchmarks using AI
-            extraction_result = extract_benchmarks_from_text(
-                text=content,
-                source_type=doc.get("type", "unknown"),
-                source_name=doc.get("url"),
-                detect_cooccurrence=True
-            )
+            content_format = doc.get("content_format", "prose")
+            doc_type = doc.get("type", "unknown")
+            url = doc.get("url")
 
-            # Add benchmarks with source attribution
-            benchmarks = extraction_result.get("benchmarks", [])
+            # Route to appropriate parser based on content format
+            benchmarks = []
+
+            if content_format == "html_table":
+                # Use deterministic HTML table parser
+                logger.debug(f"  {model_id}: Parsing HTML tables from {doc_type}")
+                benchmarks = parse_html_table(content, model_id=model_id)
+
+            elif content_format == "markdown_table":
+                # Use deterministic Markdown table parser
+                logger.debug(f"  {model_id}: Parsing Markdown tables from {doc_type}")
+                benchmarks = parse_markdown_table(content, model_id=model_id)
+
+            elif content_format == "prose":
+                # Use AI-powered extraction for unstructured text
+                logger.debug(f"  {model_id}: Using AI extraction for prose from {doc_type}")
+                extraction_result = extract_benchmarks_from_text(
+                    text=content,
+                    source_type=doc_type,
+                    source_name=url,
+                    detect_cooccurrence=True
+                )
+                benchmarks = extraction_result.get("benchmarks", [])
+
+            elif content_format == "pdf":
+                # PDF extraction deferred to Phase 5
+                logger.debug(f"  {model_id}: Skipping PDF extraction (Phase 5)")
+                continue
+
+            # Add source attribution to all benchmarks
             for bench in benchmarks:
                 bench["model_id"] = model_id
-                bench["source_url"] = doc.get("url")
-                bench["source_type"] = doc.get("type")
+                bench["source_url"] = url
+                bench["source_type"] = doc_type
 
             all_benchmarks.extend(benchmarks)
 
             logger.debug(
-                f"  {model_id}: Extracted {len(benchmarks)} benchmarks from {doc['type']}"
+                f"  {model_id}: Extracted {len(benchmarks)} benchmarks from {doc_type} "
+                f"(format: {content_format})"
             )
 
         except Exception as e:
