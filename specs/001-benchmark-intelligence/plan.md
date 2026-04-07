@@ -396,7 +396,55 @@ If a constitution exists in future iterations, verify:
      - Name variations cause matching issues (need better normalization)
      - Cannot extract from charts/figures (text-only extraction)
    - **Future Optimizations**:
-     - Extract only benchmark-related pages/sections (detect tables first)
+     - ~~Extract only benchmark-related pages/sections (detect tables first)~~ ✅ Implemented in Decision #12
+
+12. **PDF Section Filtering with Chunked Extraction** (Phase 5 Optimization)
+   - **Decision**: Three-pass approach - extract section structure, filter to benchmark-relevant sections, chunk and extract
+     - **Pass 1**: Detect section titles using heuristics (numbered headings, title case, keywords)
+     - **Pass 2**: Filter to sections with keywords: evaluation, results, benchmarks, experiments, performance, appendix
+     - **Pass 3**: Split filtered pages into chunks (default: 8 pages/chunk) and extract separately
+   - **Rationale**:
+     - **Token reduction**: Skip irrelevant sections (introduction, related work, methodology) - 50-80% reduction
+     - **Robustness**: Chunking prevents JSON truncation for benchmark-heavy papers
+     - **Fault tolerance**: Failed chunks don't block extraction from other chunks
+     - **Performance**: Parallel chunk processing potential (future optimization)
+   - **Implementation**:
+     - `extract_benchmarks_vision.py`:
+       ```python
+       def _extract_section_structure(pdf) -> List[Dict[str, Any]]:
+           # Detect section headings using regex patterns
+           # Pattern 1: numbered sections "5. Evaluation", "3.2 Results"
+           # Pattern 2: title case keywords "Results", "Evaluation"
+           # Return: [{"title": "...", "start_page": N, "end_page": M}, ...]
+       
+       def _filter_benchmark_sections(sections) -> List[Dict[str, Any]]:
+           # Filter to sections matching benchmark keywords
+           # Keywords: evaluation, result, benchmark, experiment, performance, etc.
+       
+       def extract_benchmarks_from_pdf(..., chunk_size=8):
+           # Split filtered pages into chunks
+           # Extract benchmarks from each chunk independently
+           # Merge results from all successful chunks
+       ```
+   - **Measured Results** (Llama 3.1 paper):
+     - **Section filtering**: 92 pages → 16 pages (82.6% reduction)
+     - **Sections detected**: 105 total → 22 relevant used
+     - **Token reduction**: ~82% input tokens saved
+     - **Chunking**: 16 pages → 2 chunks of 8 pages each
+   - **Metadata Tracking**:
+     - `total_pages`: Total pages in PDF
+     - `pages_processed`: Pages extracted after filtering
+     - `sections_found`: Total sections detected
+     - `sections_used`: Sections matching benchmark keywords
+     - `chunks_total`: Number of chunks created
+     - `chunks_processed`: Chunks successfully processed
+     - `chunks_failed`: Chunks that failed extraction
+     - `chunk_size`: Pages per chunk
+   - **Robustness Benefits**:
+     - **Handles truncation**: Each chunk outputs smaller JSON (unlikely to truncate)
+     - **Partial success**: If chunk 2 fails, benchmarks from chunk 1 still returned
+     - **Configurable**: `chunk_size` parameter adjustable per paper size
+     - **Error isolation**: Failed chunks logged but don't crash entire extraction
      - Parallel page processing for large PDFs
      - Phase 5b: Add vision AI for chart/figure extraction
    - **Phase 5 Scope**: Text-based PDF extraction (IMPLEMENTED)

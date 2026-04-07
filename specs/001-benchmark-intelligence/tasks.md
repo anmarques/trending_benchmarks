@@ -208,6 +208,7 @@ parallel ::: \
 - [X] T029A [P] [US1] Route HTML/Markdown tables to parse_table.parse_html_table() or parse_table.parse_markdown_table()
 - [X] T029B [P] [US1] Route prose content to extract_benchmarks_from_text() (AI extraction) from tools/extract_benchmarks.py
 - [X] T029C [P] [US1] Handle mixed documents (model card with table + prose): extract from both, merge results
+- [X] T029D [P] [US1] **NEW**: Implement PDF section filtering with chunked extraction in extract_benchmarks_vision.py - three-pass approach: (1) extract section structure using heuristics (numbered headings, title case keywords), (2) filter to benchmark-relevant sections (evaluation, results, benchmarks, experiments), (3) split filtered pages into chunks (default 8 pages/chunk) and extract benchmarks from each chunk independently to ensure robustness against JSON truncation
 - [X] T030 [P] [US1] Add __main__ block with argparse for --input and --concurrency in agents/benchmark_intelligence/parse_docs.py
 - [X] T031 [P] [US1] Write extracted benchmarks to database via cache.py in agents/benchmark_intelligence/parse_docs.py
 - [X] T032 [P] [US1] Output JSON with benchmark extractions to outputs/parse_documents_<timestamp>.json in agents/benchmark_intelligence/parse_docs.py
