@@ -27,6 +27,7 @@ from agents.benchmark_intelligence.tools.parse_table import (
     parse_html_table,
     parse_markdown_table
 )
+from agents.benchmark_intelligence.tools.extract_benchmarks_vision import extract_benchmarks_from_pdf
 from agents.benchmark_intelligence.concurrent_processor import ConcurrentModelProcessor
 from agents.benchmark_intelligence.tools.cache import CacheManager
 
@@ -100,6 +101,15 @@ def extract_benchmarks_from_model_docs(model_entry: Dict[str, Any]) -> Dict[str,
                 logger.debug(f"  {model_id}: Parsing Markdown tables from {doc_type}")
                 benchmarks = parse_markdown_table(content, model_id=model_id)
 
+            elif content_format == "pdf":
+                # Use vision AI for PDF extraction
+                logger.debug(f"  {model_id}: Using vision AI extraction for PDF from {doc_type}")
+                extraction_result = extract_benchmarks_from_pdf(
+                    pdf_content=content,
+                    source_name=url
+                )
+                benchmarks = extraction_result.get("benchmarks", [])
+
             elif content_format == "prose":
                 # Use AI-powered extraction for unstructured text
                 logger.debug(f"  {model_id}: Using AI extraction for prose from {doc_type}")
@@ -110,11 +120,6 @@ def extract_benchmarks_from_model_docs(model_entry: Dict[str, Any]) -> Dict[str,
                     detect_cooccurrence=True
                 )
                 benchmarks = extraction_result.get("benchmarks", [])
-
-            elif content_format == "pdf":
-                # PDF extraction deferred to Phase 5
-                logger.debug(f"  {model_id}: Skipping PDF extraction (Phase 5)")
-                continue
 
             # Add source attribution to all benchmarks
             for bench in benchmarks:

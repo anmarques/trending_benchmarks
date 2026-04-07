@@ -18,12 +18,12 @@ from ..clients.factory import get_hf_client
 logger = logging.getLogger(__name__)
 
 
-def detect_content_format(content: str, content_type: str = "text/html") -> str:
+def detect_content_format(content: str | bytes, content_type: str = "text/html") -> str:
     """
     Detect the format of document content for routing to appropriate parser.
 
     Args:
-        content: Document content to analyze
+        content: Document content to analyze (string or bytes)
         content_type: HTTP Content-Type header (optional)
 
     Returns:
@@ -36,11 +36,23 @@ def detect_content_format(content: str, content_type: str = "text/html") -> str:
         >>> markdown = "| Benchmark | Score |\\n|-----------|-------|"
         >>> detect_content_format(markdown)
         'markdown_table'
+        >>> pdf_bytes = b'%PDF-1.4...'
+        >>> detect_content_format(pdf_bytes, "application/pdf")
+        'pdf'
     """
-    # Check for PDF content type
+    # Check for PDF content type or PDF magic bytes
     if "application/pdf" in content_type.lower():
         return "pdf"
 
+    # Check if content is bytes (likely PDF)
+    if isinstance(content, bytes):
+        # Check for PDF magic bytes
+        if content.startswith(b'%PDF'):
+            return "pdf"
+        # If bytes but not PDF, treat as unknown (shouldn't happen)
+        return "prose"
+
+    # For string content, check for tables
     # Check for HTML tables (case-insensitive)
     # Look for <table> tag with optional attributes
     if re.search(r'<table[\s>]', content, re.IGNORECASE):
@@ -58,8 +70,9 @@ def detect_content_format(content: str, content_type: str = "text/html") -> str:
 def fetch_document_content(
     url: str,
     doc_type: str,
-    timeout: int = 30
-) -> tuple[Optional[str], str]:
+    timeout: int = 30,
+    prefer_pdf: bool = True
+) -> tuple[Optional[str | bytes], str]:
     """
     Fetch content from a single document URL.
 
@@ -67,11 +80,12 @@ def fetch_document_content(
         url: Document URL to fetch
         doc_type: Type of document ("model_card", "arxiv_paper", "github", "blog")
         timeout: Request timeout in seconds
+        prefer_pdf: For arXiv papers, prefer PDF over HTML (default: True)
 
     Returns:
         Tuple of (content, content_type):
-            - content: Document content as string, or None if fetch fails
-            - content_type: MIME type (e.g., "text/html", "text/plain")
+            - content: Document content as string or bytes (bytes for PDF), or None if fetch fails
+            - content_type: MIME type (e.g., "text/html", "application/pdf")
 
     Example:
         >>> content, ctype = fetch_document_content("https://arxiv.org/abs/2505.09388", "arxiv_paper")
@@ -86,11 +100,27 @@ def fetch_document_content(
             return card_data.get("content", ""), "text/html"
 
         elif doc_type == "arxiv_paper":
-            # Fetch arXiv paper - try HTML conversion first, fallback to abstract
+            # Fetch arXiv paper - prefer PDF for vision extraction
             # Format: https://arxiv.org/abs/2505.09388
             arxiv_id = url.split("/abs/")[-1]
 
-            # Try ar5iv HTML conversion first (full paper with tables)
+            if prefer_pdf:
+                # Download PDF for vision AI extraction
+                pdf_url = f"https://arxiv.org/pdf/{arxiv_id}.pdf"
+                try:
+                    logger.debug(f"Downloading PDF for {arxiv_id}")
+                    response = requests.get(pdf_url, timeout=timeout)
+
+                    if response.status_code == 200:
+                        logger.info(f"Successfully downloaded PDF for {arxiv_id} ({len(response.content)} bytes)")
+                        return response.content, "application/pdf"
+
+                    logger.debug(f"PDF not available (status {response.status_code}), falling back to HTML")
+
+                except requests.exceptions.RequestException as e:
+                    logger.debug(f"PDF download failed ({e}), falling back to HTML")
+
+            # Try ar5iv HTML conversion as fallback
             html_url = f"https://ar5iv.labs.arxiv.org/html/{arxiv_id}"
             try:
                 logger.debug(f"Attempting ar5iv HTML conversion for {arxiv_id}")
@@ -100,13 +130,12 @@ def fetch_document_content(
                     logger.info(f"Successfully fetched ar5iv HTML for {arxiv_id} ({len(response.text)} chars)")
                     return response.text, response.headers.get('content-type', 'text/html')
 
-                # If not 200, fall through to abstract
                 logger.debug(f"ar5iv HTML not available (status {response.status_code}), falling back to abstract")
 
             except requests.exceptions.RequestException as e:
                 logger.debug(f"ar5iv HTML fetch failed ({e}), falling back to abstract")
 
-            # Fallback: Fetch abstract only
+            # Final fallback: Fetch abstract only
             logger.debug(f"Fetching abstract for {arxiv_id}")
             abstract_url = f"https://export.arxiv.org/abs/{arxiv_id}"
             response = requests.get(abstract_url, timeout=timeout)
