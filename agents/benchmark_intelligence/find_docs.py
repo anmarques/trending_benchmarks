@@ -24,31 +24,28 @@ from agents.benchmark_intelligence.stage_utils import (
 )
 from agents.benchmark_intelligence.tools.cache import CacheManager
 from agents.benchmark_intelligence.error_aggregator import ErrorAggregator
+from agents.benchmark_intelligence.tools.document_selection import (
+    extract_all_arxiv_ids,
+    fetch_arxiv_abstract,
+    select_best_arxiv_paper,
+    search_github_repository,
+    discover_arxiv_papers_via_search
+)
+from agents.benchmark_intelligence.tools.parse_model_card import parse_model_card
 
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 
-def extract_arxiv_id(tags: List[str]) -> Optional[str]:
-    """
-    Extract arXiv ID from model tags.
-
-    Args:
-        tags: List of model tags
-
-    Returns:
-        arXiv ID if found (e.g., "2505.09388"), None otherwise
-    """
-    for tag in tags:
-        if tag.startswith('arxiv:'):
-            return tag.replace('arxiv:', '')
-    return None
-
-
 def construct_document_urls(model_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
-    Construct documentation URLs for a model.
+    Construct documentation URLs for a model using AI selection and web search.
+
+    Improvements over previous version:
+    1. Discovers ALL arXiv papers (tags + content + web search)
+    2. Uses AI to select the best arXiv paper from multiple candidates
+    3. Uses web search to find GitHub repository (no hardcoded paths)
 
     Args:
         model_data: Model information dictionary
@@ -58,6 +55,8 @@ def construct_document_urls(model_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     model_id = model_data['model_id']
     tags = model_data.get('tags', [])
+    author = model_data.get('author', '')
+    model_name = model_id.split('/')[-1]
     documents = []
 
     # 1. HuggingFace Model Card (always available)
@@ -67,59 +66,80 @@ def construct_document_urls(model_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         'found': True
     })
 
-    # 2. arXiv Paper (if referenced in tags)
-    arxiv_id = extract_arxiv_id(tags)
-    if arxiv_id:
-        documents.append({
-            'type': 'arxiv_paper',
-            'url': f'https://arxiv.org/abs/{arxiv_id}',
-            'found': True
-        })
+    # 2. arXiv Paper - ENHANCED with AI selection
+    try:
+        # Step 1: Fetch model card to search for arXiv references
+        logger.debug(f"Fetching model card for {model_id} to find arXiv papers")
+        from agents.benchmark_intelligence.clients.factory import get_hf_client
+        hf_client = get_hf_client()
+        model_card = parse_model_card(model_id, hf_client)
+        model_card_content = model_card.get('content', '')
 
-    # 3. GitHub Repository (construct from model_id)
-    # Format: github.com/org/repo
-    # Some labs have predictable GitHub patterns
-    author = model_data.get('author', '')
-    github_orgs = {
-        'Qwen': 'QwenLM',
-        'meta-llama': 'meta-llama',
-        'mistralai': 'mistralai',
-        'google': 'google-research',
-        'microsoft': 'microsoft',
-        'deepseek-ai': 'deepseek-ai',
-        'nvidia': 'NVIDIA',
-        'openai': 'openai',
-        'moonshotai': 'moonshotai',
-        'zai-org': 'THUDM',
-        'ibm-granite': 'ibm-granite'
-    }
+        # Step 2: Extract arXiv IDs from tags and content
+        arxiv_ids_from_card = extract_all_arxiv_ids(model_card_content, tags)
 
-    github_org = github_orgs.get(author)
-    if github_org:
-        # Extract model name from model_id
-        model_name = model_id.split('/')[-1]
-        documents.append({
-            'type': 'github',
-            'url': f'https://github.com/{github_org}/{model_name}',
-            'found': False  # Will be validated in future if needed
-        })
+        # Step 3: Supplement with web search
+        arxiv_ids_from_search = discover_arxiv_papers_via_search(
+            model_name, author, max_results=2
+        )
 
-    # 4. Official Blog Posts (for major models)
-    # Add predictable blog URLs for major labs
-    blog_urls = {
-        'Qwen': 'https://qwenlm.github.io/blog/',
-        'meta-llama': 'https://ai.meta.com/blog/',
-        'mistralai': 'https://mistral.ai/news/',
-        'google': 'https://blog.research.google/',
-        'deepseek-ai': 'https://www.deepseek.com/blog/',
-    }
+        # Combine and deduplicate
+        all_arxiv_ids = list(set(arxiv_ids_from_card + arxiv_ids_from_search))
 
-    if author in blog_urls:
-        documents.append({
-            'type': 'blog',
-            'url': blog_urls[author],
-            'found': False  # Generic blog URL, not model-specific
-        })
+        if all_arxiv_ids:
+            logger.info(
+                f"Found {len(all_arxiv_ids)} arXiv papers for {model_id}: {all_arxiv_ids}"
+            )
+
+            if len(all_arxiv_ids) == 1:
+                # Only one paper, use it
+                selected_id = all_arxiv_ids[0]
+                logger.info(f"Using single arXiv paper: {selected_id}")
+            else:
+                # Multiple papers - fetch abstracts and use AI to select best one
+                logger.info(f"Multiple arXiv papers found, fetching abstracts...")
+                abstracts = []
+                for arxiv_id in all_arxiv_ids:
+                    abstract = fetch_arxiv_abstract(arxiv_id)
+                    if abstract:
+                        abstracts.append(abstract)
+
+                # Use AI to select the best paper
+                selected_id = select_best_arxiv_paper(abstracts, model_name, author)
+
+            if selected_id:
+                documents.append({
+                    'type': 'arxiv_paper',
+                    'url': f'https://arxiv.org/abs/{selected_id}',
+                    'found': True,
+                    'metadata': {
+                        'total_candidates': len(all_arxiv_ids),
+                        'ai_selected': len(all_arxiv_ids) > 1
+                    }
+                })
+
+    except Exception as e:
+        logger.warning(f"Failed to discover arXiv papers for {model_id}: {e}")
+
+    # 3. GitHub Repository - ENHANCED with web search (no hardcoded paths)
+    try:
+        logger.debug(f"Searching for GitHub repository for {model_name}")
+        github_url = search_github_repository(model_name, author)
+
+        if github_url:
+            documents.append({
+                'type': 'github',
+                'url': github_url,
+                'found': True,
+                'metadata': {
+                    'discovery_method': 'web_search'
+                }
+            })
+        else:
+            logger.debug(f"No GitHub repository found for {model_id}")
+
+    except Exception as e:
+        logger.warning(f"Failed to search for GitHub repository for {model_id}: {e}")
 
     return documents
 
