@@ -179,12 +179,45 @@ parallel ::: \
 
 ### Stage 3: Document Parsing
 
+**ARCHITECTURAL NOTE**: Stage 3 extraction now uses **routing by document format**:
+- HTML/Markdown tables → Deterministic parsing (BeautifulSoup)
+- Prose text → AI extraction (Claude)
+- Reason: HTML table parsing is instant, AI times out on large tables (10min+ for Llama-3.1-8B card)
+
+#### Stage 3A: Deterministic Table Parsing (NEW - based on ground truth testing)
+
+- [ ] T027A [P] [US1] Create parse_table.py with parse_html_table(html_content) function in agents/benchmark_intelligence/tools/parse_table.py
+- [ ] T027B [P] [US1] Implement HTML table detection (check for <table>, <tr>, <td> tags) in parse_table.py
+- [ ] T027C [P] [US1] Extract table rows and map columns (benchmark name, score, metric, shot count, model name) in parse_table.py
+- [ ] T027D [P] [US1] Parse benchmark name context (e.g., "MMLU (5-shot)" → name="MMLU", shot_count=5) in parse_table.py
+- [ ] T027E [P] [US1] Add parse_markdown_table(markdown_content) function for markdown format tables in parse_table.py
+- [ ] T027F [P] [US1] Return list of benchmark dicts with standard schema: {name, score, metric, context: {shot_count, subset, version}, model_name, source_location}
+
+#### Stage 3B: Content Format Detection (NEW)
+
+- [ ] T028A [P] [US1] Update parallel_fetcher.py to detect content format when fetching documents
+- [ ] T028B [P] [US1] Add detect_content_format(content) function: returns "html_table", "markdown_table", "prose", or "pdf" in parallel_fetcher.py
+- [ ] T028C [P] [US1] Include content_format field in fetched document results from parallel_fetcher.fetch_documents_for_model()
+
+#### Stage 3C: Extraction Routing (REVISED)
+
 - [X] T027 [P] [US1] Create parse_docs.py with async run(docs_json, concurrency) function in agents/benchmark_intelligence/parse_docs.py
 - [X] T028 [P] [US1] Integrate ConcurrentModelProcessor for parallel extraction in parse_docs.run()
-- [X] T029 [P] [US1] Wrap extract_benchmarks() from tools/extract_benchmarks.py for each document in agents/benchmark_intelligence/parse_docs.py
+- [ ] T029 [US1] **REVISED**: Add routing logic in parse_docs.extract_benchmarks_from_model_docs() to route by content_format
+- [ ] T029A [P] [US1] Route HTML/Markdown tables to parse_table.parse_html_table() or parse_table.parse_markdown_table()
+- [ ] T029B [P] [US1] Route prose content to extract_benchmarks_from_text() (AI extraction) from tools/extract_benchmarks.py
+- [ ] T029C [P] [US1] Handle mixed documents (model card with table + prose): extract from both, merge results
 - [X] T030 [P] [US1] Add __main__ block with argparse for --input and --concurrency in agents/benchmark_intelligence/parse_docs.py
 - [X] T031 [P] [US1] Write extracted benchmarks to database via cache.py in agents/benchmark_intelligence/parse_docs.py
 - [X] T032 [P] [US1] Output JSON with benchmark extractions to outputs/parse_documents_<timestamp>.json in agents/benchmark_intelligence/parse_docs.py
+
+#### Stage 3D: Ground Truth Validation (NEW)
+
+- [ ] T032A [US1] Test deterministic table parser on meta-llama/Llama-3.1-8B model card (41KB HTML tables)
+- [ ] T032B [US1] Compare extracted benchmarks against tests/ground_truth/ground_truth.yaml for Llama-3.1-8B
+- [ ] T032C [US1] Verify extraction rate ≥90% for HTML table documents
+- [ ] T032D [US1] Test on Qwen/Qwen2.5-72B-Instruct model card
+- [ ] T032E [US1] Document extraction performance (time, accuracy) in test results
 
 ### Stage 4: Name Consolidation
 
@@ -221,6 +254,9 @@ parallel ::: \
 - Full pipeline executable via `python -m benchmark_intelligence.generate`
 - Report shows ranked list of benchmarks with usage counts and percentages
 - All JSON outputs match standardized schema
+- **NEW**: Deterministic table parser extracts ≥90% of benchmarks from HTML/Markdown tables
+- **NEW**: Extraction completes in <1 minute for model cards with large tables (e.g., Llama-3.1-8B: 41KB)
+- **NEW**: Ground truth validation passes for tests/ground_truth/ground_truth.yaml models
 
 **Independent Test**:
 1. Run full pipeline: `python -m benchmark_intelligence.generate`
@@ -229,6 +265,12 @@ parallel ::: \
 4. Verify top 10 benchmarks have usage counts and percentages
 5. Run individual stage: `python -m benchmark_intelligence.parse_docs --input outputs/find_documents_*.json --concurrency 30`
 6. Verify stage completes and outputs valid JSON
+7. **NEW**: Run ground truth test:
+   - Create Stage 2 JSON from tests/ground_truth/ground_truth.yaml (meta-llama/Llama-3.1-8B, Qwen/Qwen2.5-72B-Instruct)
+   - Run: `python -m benchmark_intelligence.parse_docs --input <ground_truth_input>.json`
+   - Compare extracted benchmarks vs ground_truth.yaml
+   - Verify extraction rate ≥90% for documented benchmarks
+   - Verify extraction time <1 minute per model
 
 ---
 

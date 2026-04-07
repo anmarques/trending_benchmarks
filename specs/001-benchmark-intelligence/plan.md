@@ -306,6 +306,35 @@ If a constitution exists in future iterations, verify:
    - Rationale: Consistent structure enables validation; errors array supports debugging; timestamps enable performance analysis
    - Alternatives considered: Ad-hoc formats (inconsistent), no JSON (spec requires), separate error files (harder to correlate)
 
+9. **Benchmark Extraction Routing Strategy**
+   - **Decision**: Route extraction by document structure:
+     - **HTML/Markdown tables** → Deterministic parsing with BeautifulSoup/regex
+     - **Prose/narrative text** → AI extraction with Claude
+     - **PDF charts/figures** → Vision AI extraction (Phase 5)
+   - **Rationale**: 
+     - **Performance**: HTML table parsing is deterministic, instant (<100ms vs 10min+ for AI)
+     - **Reliability**: Tables have fixed structure; no AI timeout/token limits
+     - **Cost**: BeautifulSoup is free; Claude API costs $0.015/1K tokens
+     - **Ground truth testing**: Llama-3.1-8B model card (41KB HTML tables) hit 10min timeout with AI extraction, failed to complete even with 32K max_tokens
+   - **Implementation**:
+     - Detect document format in `parallel_fetcher.py` when content is fetched
+     - Add `content_format` field: `"html_table"`, `"markdown_table"`, `"prose"`, `"pdf"`
+     - Route in `parse_docs.py`:
+       ```python
+       if content_format in ["html_table", "markdown_table"]:
+           benchmarks = parse_table_deterministic(content)
+       elif content_format == "prose":
+           benchmarks = extract_benchmarks_ai(content)
+       ```
+     - Table parser extracts: benchmark name, score, metric, shot count, model name from `<td>` cells
+     - AI extraction only for unstructured text (blog posts, paper prose)
+   - **Alternatives considered**:
+     - Always use AI (current): Timeout on large tables, expensive, slow
+     - Always use deterministic parsing: Cannot handle prose text ("achieves 94.2% on GSM8K")
+     - Manual curation: Defeats automation goal
+   - **Phase 3 Scope**: Implement HTML/Markdown table parsing
+   - **Phase 5 Scope**: Add vision AI for PDF chart extraction
+
 ### Research Artifacts
 
 **Output**: research.md (included above as inline decisions)

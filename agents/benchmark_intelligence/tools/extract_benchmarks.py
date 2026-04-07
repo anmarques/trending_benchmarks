@@ -84,7 +84,7 @@ def extract_benchmarks_from_text(
                     "Anthropic API not available. Set ANTHROPIC_API_KEY environment "
                     "variable or install anthropic package (pip install anthropic)"
                 )
-            result = call_claude_json(prompt=prompt)
+            result = call_claude_json(prompt=prompt, max_tokens=32768)
         else:
             result = claude_fn(prompt=prompt)
 
