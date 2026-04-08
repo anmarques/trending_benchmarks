@@ -200,13 +200,11 @@ class DocumentCache:
             logger.error(f"Extraction failed for {url[:80]}...: {e}")
             benchmarks = []
 
-        # Apply validation filters to remove false positives
+        # Apply heuristic validation filters to remove false positives
+        # AI validation happens later as post-processing on unique names
         if benchmarks:
             pre_filter_count = len(benchmarks)
-            benchmarks = filter_benchmarks(
-                benchmarks,
-                use_ai_validation=False  # AI validation disabled by default
-            )
+            benchmarks = filter_benchmarks(benchmarks)
             if len(benchmarks) < pre_filter_count:
                 logger.debug(
                     f"Filtered {pre_filter_count - len(benchmarks)} "

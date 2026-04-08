@@ -136,14 +136,12 @@ def extract_benchmarks_from_model_docs(
                 )
                 benchmarks = extraction_result.get("benchmarks", [])
 
-            # Apply validation filters to remove false positives
-            # (model names, single words, etc.)
+            # Apply heuristic validation filters to remove false positives
+            # (model names, single words, markdown headers, etc.)
+            # Note: AI validation happens as post-processing on unique names
             if benchmarks:
                 pre_filter_count = len(benchmarks)
-                benchmarks = filter_benchmarks(
-                    benchmarks,
-                    use_ai_validation=False  # AI validation disabled by default (too expensive)
-                )
+                benchmarks = filter_benchmarks(benchmarks)
                 if len(benchmarks) < pre_filter_count:
                     logger.debug(
                         f"  {model_id}: Filtered {pre_filter_count - len(benchmarks)} "

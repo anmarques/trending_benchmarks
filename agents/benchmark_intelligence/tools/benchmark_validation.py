@@ -365,22 +365,20 @@ You are a benchmark validation expert. Determine if the following extracted name
 
 
 def filter_benchmarks(
-    benchmarks: List[Dict[str, Any]],
-    use_ai_validation: bool = False,
-    ai_confidence_threshold: float = 70.0
+    benchmarks: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
     """
-    Apply all validation layers to filter and normalize benchmarks.
+    Apply heuristic validation and normalization to filter benchmarks.
 
     Layers:
     1. Heuristic filters (fast, rejects obvious false positives)
     2. Normalization (cleans up variant names)
-    3. AI validation (optional, expensive but accurate)
+
+    Note: AI validation is done as post-processing on consolidated unique names,
+    not during extraction. See validate_benchmarks_ai.py.
 
     Args:
         benchmarks: List of extracted benchmark dictionaries
-        use_ai_validation: Whether to apply AI validation layer
-        ai_confidence_threshold: Minimum confidence to accept (0-100)
 
     Returns:
         Filtered and normalized list of benchmarks
@@ -400,25 +398,10 @@ def filter_benchmarks(
         # Layer 2: Normalization
         bench = normalize_benchmark_entry(bench)
 
-        # Layer 3: AI validation (optional)
-        if use_ai_validation:
-            is_valid, confidence, reason = validate_benchmark_with_ai(
-                bench['name'],
-                context=bench.get('source_location')
-            )
-
-            if not is_valid or confidence < ai_confidence_threshold:
-                rejected_count += 1
-                logger.info(
-                    f"AI validation rejected '{name}': "
-                    f"confidence={confidence}, reason={reason[:100]}"
-                )
-                continue
-
         filtered.append(bench)
 
     if rejected_count > 0:
-        logger.info(
+        logger.debug(
             f"Filtered {rejected_count}/{len(benchmarks)} benchmarks "
             f"({len(filtered)} remaining)"
         )
