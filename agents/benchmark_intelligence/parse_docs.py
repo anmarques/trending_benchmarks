@@ -30,6 +30,7 @@ from agents.benchmark_intelligence.tools.parse_table import (
 from agents.benchmark_intelligence.tools.extract_benchmarks_vision import extract_benchmarks_from_pdf
 from agents.benchmark_intelligence.concurrent_processor import ConcurrentModelProcessor
 from agents.benchmark_intelligence.tools.cache import CacheManager
+from agents.benchmark_intelligence.tools.document_cache import DocumentCache
 from agents.benchmark_intelligence.error_aggregator import ErrorAggregator
 from agents.benchmark_intelligence.progress_tracker import ProgressTracker
 
@@ -176,7 +177,7 @@ def extract_benchmarks_from_model_docs(
     }
 
 
-def run(docs_json: Optional[str] = None, concurrency: int = 20) -> str:
+def run(docs_json: Optional[str] = None, concurrency: int = 20, use_document_cache: bool = True) -> str:
     """
     Execute Stage 3: Document parsing and benchmark extraction.
 
@@ -186,6 +187,7 @@ def run(docs_json: Optional[str] = None, concurrency: int = 20) -> str:
     Args:
         docs_json: Path to find_documents JSON output (auto-finds if not specified)
         concurrency: Number of parallel workers (default: 20)
+        use_document_cache: Use document-level caching to deduplicate fetches (default: True)
 
     Returns:
         Path to generated JSON output file
@@ -216,6 +218,7 @@ def run(docs_json: Optional[str] = None, concurrency: int = 20) -> str:
     logger.info(f"Configuration:")
     logger.info(f"  Models to process: {len(models)}")
     logger.info(f"  Concurrency: {concurrency} workers")
+    logger.info(f"  Document caching: {'Enabled' if use_document_cache else 'Disabled'}")
     logger.info(f"  AI extraction: Enabled (Claude)")
 
     # Initialize error aggregator and progress tracker
@@ -226,31 +229,69 @@ def run(docs_json: Optional[str] = None, concurrency: int = 20) -> str:
         enable_console_updates=True
     )
 
-    # Initialize concurrent processor
-    processor = ConcurrentModelProcessor(max_workers=concurrency)
+    # Use document-level caching if enabled
+    if use_document_cache:
+        logger.info("\n" + "=" * 70)
+        logger.info("Document-Level Caching Enabled")
+        logger.info("=" * 70)
 
-    logger.info(f"\nProcessing {len(models)} models in parallel...")
+        # Initialize document cache
+        doc_cache = DocumentCache()
 
-    # Start progress tracking
-    progress_tracker.start()
+        # Fetch and parse all unique documents once
+        doc_cache.fetch_and_parse_all(models, max_workers=concurrency)
 
-    # Wrapper function to pass error_aggregator and progress_tracker
-    def process_with_tracking(model_entry):
-        return extract_benchmarks_from_model_docs(
-            model_entry,
-            error_aggregator=error_aggregator,
-            progress_tracker=progress_tracker
+        # Get cache stats
+        cache_stats = doc_cache.get_cache_stats()
+        logger.info(f"\nCache Statistics:")
+        logger.info(f"  Unique URLs: {cache_stats['unique_urls']}")
+        logger.info(f"  Total references: {cache_stats['total_references']}")
+        logger.info(f"  Deduplication savings: {cache_stats['deduplication_savings']} fetches avoided")
+        logger.info(f"  Total benchmarks extracted: {cache_stats['total_benchmarks_extracted']}")
+
+        # Distribute cached results to models
+        logger.info(f"\nDistributing results to {len(models)} models...")
+        results = []
+        for model in models:
+            result = doc_cache.get_benchmarks_for_model(
+                model_id=model['model_id'],
+                documents=model.get('documents', [])
+            )
+            results.append(result)
+
+        logger.info(f"✓ Distributed benchmarks to {len(models)} models")
+
+    else:
+        # Original per-model processing (legacy mode)
+        logger.info("\n" + "=" * 70)
+        logger.info("Per-Model Processing (Legacy Mode)")
+        logger.info("=" * 70)
+
+        # Initialize concurrent processor
+        processor = ConcurrentModelProcessor(max_workers=concurrency)
+
+        logger.info(f"\nProcessing {len(models)} models in parallel...")
+
+        # Start progress tracking
+        progress_tracker.start()
+
+        # Wrapper function to pass error_aggregator and progress_tracker
+        def process_with_tracking(model_entry):
+            return extract_benchmarks_from_model_docs(
+                model_entry,
+                error_aggregator=error_aggregator,
+                progress_tracker=progress_tracker
+            )
+
+        # Process all models concurrently
+        results = processor.process_models(
+            models=models,
+            process_func=process_with_tracking,
+            progress_callback=None  # Progress tracker handles this now
         )
 
-    # Process all models concurrently
-    results = processor.process_models(
-        models=models,
-        process_func=process_with_tracking,
-        progress_callback=None  # Progress tracker handles this now
-    )
-
-    # Stop progress tracking
-    progress_tracker.stop()
+        # Stop progress tracking
+        progress_tracker.stop()
 
     # Aggregate statistics
     output_data = []
@@ -348,11 +389,20 @@ def main():
         default=20,
         help="Number of parallel workers (default: 20)"
     )
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="Disable document-level caching (fetch each document per model)"
+    )
 
     args = parser.parse_args()
 
     try:
-        output_path = run(args.input, args.concurrency)
+        output_path = run(
+            docs_json=args.input,
+            concurrency=args.concurrency,
+            use_document_cache=not args.no_cache
+        )
         print(f"\n✓ Success! Output saved to: {output_path}")
         sys.exit(0)
 
