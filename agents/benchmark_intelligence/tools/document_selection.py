@@ -17,6 +17,56 @@ from ._claude_client import call_claude, is_anthropic_available
 logger = logging.getLogger(__name__)
 
 
+def _is_valid_arxiv_id(arxiv_id: str) -> bool:
+    """
+    Validate arXiv ID to filter out placeholders and invalid IDs.
+
+    Args:
+        arxiv_id: arXiv identifier (e.g., "2505.09388")
+
+    Returns:
+        True if valid, False if placeholder or invalid
+
+    Examples:
+        >>> _is_valid_arxiv_id("2505.09388")  # Valid new format
+        True
+        >>> _is_valid_arxiv_id("0704.0001")  # Valid (first month of new format)
+        True
+        >>> _is_valid_arxiv_id("0000.00000")  # Placeholder
+        False
+        >>> _is_valid_arxiv_id("9999.99999")  # Invalid year
+        False
+    """
+    # Check for obvious placeholders
+    if arxiv_id in ["0000.00000", "0000.0000", "1111.11111"]:
+        return False
+
+    # Parse year-month format (YYMM.NNNNN)
+    match = re.match(r'^(\d{2})(\d{2})\.(\d+)$', arxiv_id)
+    if not match:
+        return False
+
+    year = int(match.group(1))
+    month = int(match.group(2))
+
+    # Year 00 is invalid (placeholder)
+    if year == 0:
+        return False
+
+    # Month must be 01-12
+    if month < 1 or month > 12:
+        return False
+
+    # arXiv new format started in 2007 (year 07)
+    # But some valid IDs exist from 91+ (old format converted)
+    # Reject obvious future dates (year > current year % 100)
+    current_year = 26  # 2026
+    if year > current_year + 10:  # Allow some future buffer
+        return False
+
+    return True
+
+
 def extract_all_arxiv_ids(
     model_card_content: str,
     tags: List[str]
@@ -24,12 +74,14 @@ def extract_all_arxiv_ids(
     """
     Extract all arXiv IDs from model card content and tags.
 
+    Filters out placeholder IDs like "0000.00000" from BibTeX templates.
+
     Args:
         model_card_content: Full model card markdown content
         tags: List of model tags from HuggingFace
 
     Returns:
-        List of unique arXiv IDs (e.g., ["2505.09388", "2407.21783"])
+        List of unique valid arXiv IDs (e.g., ["2505.09388", "2407.21783"])
 
     Example:
         >>> tags = ["arxiv:2505.09388", "llm"]
@@ -44,7 +96,8 @@ def extract_all_arxiv_ids(
     for tag in tags:
         if tag.startswith('arxiv:'):
             arxiv_id = tag.replace('arxiv:', '')
-            arxiv_ids.add(arxiv_id)
+            if _is_valid_arxiv_id(arxiv_id):
+                arxiv_ids.add(arxiv_id)
 
     # Extract from content using regex patterns
     # Pattern 1: arxiv.org/abs/2407.21783
@@ -58,7 +111,9 @@ def extract_all_arxiv_ids(
 
     for pattern in patterns:
         matches = re.findall(pattern, model_card_content, re.IGNORECASE)
-        arxiv_ids.update(matches)
+        for match in matches:
+            if _is_valid_arxiv_id(match):
+                arxiv_ids.add(match)
 
     return sorted(list(arxiv_ids))
 
