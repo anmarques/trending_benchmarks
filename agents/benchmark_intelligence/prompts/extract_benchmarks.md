@@ -493,16 +493,20 @@ If unsure about exact benchmark name, extract as written and flag for manual rev
 
 **DO NOT extract the following as benchmarks:**
 
-### 1. Model Names
+### 1. Model Names & Model-Specific Products
 - **AI Model Names**: Qwen, Llama, GPT, Claude, Gemini, Mistral, DeepSeek, Phi, GLM, InternLM, Ministral, etc.
 - **Model Variants**: Qwen3-8B, Llama-3.1-70B, GPT-4o, Claude-3.5-Sonnet, Gemini-2.0-Flash, etc.
-- **Pattern**: If it contains a model family name + version/size, it's NOT a benchmark
+- **Model Products**: "Llama Prompt Guard", "Gemini Embedding", "granite-embedding-english-r2"
+- **Pattern**: If it contains a model family name + version/size/product, it's NOT a benchmark
 
 **Examples of model names to REJECT:**
 - ❌ "Ministral 3 14B"
 - ❌ "GLM-4.5-Air"
 - ❌ "Qwen3-Coder-480B-A35B-Instruct"
 - ❌ "DeepSeek-R1"
+- ❌ "Llama Prompt Guard 1"
+- ❌ "Gemini Embedding"
+- ❌ "granite-embedding-english-r2"
 
 ### 2. Single Generic Words
 - **Common words**: spotting, reasoning, performance, accuracy, evaluation, testing
@@ -533,7 +537,29 @@ If unsure about exact benchmark name, extract as written and flag for manual rev
 - ❌ "\u03c4\u00b2bench"
 - ❌ "PyTorch Benchmark Suite" (unless referring to a specific standardized eval)
 
-### 5. Metadata and Non-Evaluation Content
+### 5. Table/Section Headers & Metadata
+- **Markdown headers**: `**Reasoning**`, `**Long Context**`, `##Section Title`
+- **Bracketed descriptions**: `[Advanced Reasoning Benchmark]`, `[AI2's Reasoning Challenge]`
+- **Category labels**: "General Multimodal", "Long Document", "Context Length"
+- **Table column headers**: These appear in result tables but are NOT benchmark names
+
+**Examples to REJECT:**
+- ❌ `**Reasoning**` (markdown bold - this is a section header)
+- ❌ `**General Multimodal**` (category header)
+- ❌ `[Advanced Reasoning Benchmark]` (bracketed description)
+- ❌ "Context Length" (table column header, not a benchmark)
+
+### 6. Training Data Descriptions
+- **Synthetic datasets**: "Synthetic Math", "Synthetic Code" (training data, not eval benchmarks)
+- **SFT datasets**: "Code SFT", "General SFT" (supervised fine-tuning data)
+- **Crawl data**: "Common Crawl Code", "Common Crawl Text"
+
+**Examples to REJECT:**
+- ❌ "Synthetic Math" (training data)
+- ❌ "Code SFT" (fine-tuning dataset)
+- ❌ "Common Crawl Code" (web crawl data)
+
+### 7. URLs, Badges & Other Metadata
 - **URLs, badges, shields**: https://, ![badge], [![status]]
 - **Author names**: "John Smith", "OpenAI Team"
 - **Company names**: "Meta AI", "Google DeepMind"

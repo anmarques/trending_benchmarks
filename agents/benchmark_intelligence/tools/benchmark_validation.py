@@ -37,15 +37,22 @@ MODEL_NAME_PATTERNS = [
     r'\bcodellama[-\s]?\d+',
     r'\bwizardlm[-\s]?\d+',
 
+    # Specific model products (with names, not just patterns)
+    r'\bllama\s+\w+\s+(guard|prompt)',  # "Llama Prompt Guard"
+    r'\bgemini\s+embedding',  # "Gemini Embedding"
+    r'\bgranite[-\s]?embedding',  # "granite-embedding-english-r2"
+    r'\b(openai|anthropic|meta|google|microsoft)[-\s]?\w+',  # Company prefixed models
+
     # Model size indicators (e.g., "8B", "70B", "405B")
     r'\b\d+[bmk]\b',  # 8B, 70B, 1M, etc.
     r'\b\d+\.\d+[bmk]\b',  # 3.5B, 1.5B, etc.
 
-    # Instruct/Chat variants
+    # Instruct/Chat/Embedding variants
     r'[-\s]?instruct\b',
     r'[-\s]?chat\b',
     r'[-\s]?turbo\b',
     r'[-\s]?preview\b',
+    r'[-\s]?embedding[-\s]?',
 ]
 
 # Compile patterns for performance
@@ -99,12 +106,50 @@ def is_valid_benchmark_name(benchmark_name: str) -> bool:
     GENERIC_WORDS = {
         'spotting', 'reasoning', 'evaluation', 'testing', 'performance',
         'accuracy', 'score', 'metric', 'test', 'eval', 'benchmark',
-        'model', 'data', 'training', 'inference', 'validation'
+        'model', 'data', 'training', 'inference', 'validation',
+        'multimodal', 'document', 'context', 'parsing', 'length'
+    }
+
+    # Reject category/section headers (often appear in model cards)
+    CATEGORY_PHRASES = {
+        'general multimodal', 'long document', 'long context', 'context length',
+        'reasoning mode', 'document parsing', 'text reasoning', 'image reasoning',
+        'video reasoning', 'novel logical reasoning'
     }
 
     if name.lower() in GENERIC_WORDS:
         logger.debug(f"Rejected '{name}': generic word")
         return False
+
+    # Check for category phrases
+    if name.lower() in CATEGORY_PHRASES:
+        logger.debug(f"Rejected '{name}': category/section header")
+        return False
+
+    # Filter: Reject markdown formatting (section headers from model cards)
+    # **Text**, ##Text, ###Text, etc.
+    if name.startswith('**') or name.startswith('##') or name.endswith('**'):
+        logger.debug(f"Rejected '{name}': markdown formatting")
+        return False
+
+    # Filter: Reject text in square brackets [Description]
+    # These are usually metadata or descriptions, not benchmark names
+    if name.startswith('[') and name.endswith(']'):
+        logger.debug(f"Rejected '{name}': bracketed description")
+        return False
+
+    # Filter: Reject training data descriptions
+    # "Synthetic X", "X SFT", "Common Crawl X"
+    training_patterns = [
+        r'\bsft\b',  # Supervised Fine-Tuning
+        r'^synthetic\s+\w+$',  # "Synthetic Math", "Synthetic Code"
+        r'^common\s+crawl\s+\w+$',  # "Common Crawl Code"
+        r'\bembedding\b',  # Embedding models, not benchmarks
+    ]
+    for pattern in training_patterns:
+        if re.search(pattern, name, re.IGNORECASE):
+            logger.debug(f"Rejected '{name}': training data description")
+            return False
 
     if len(name.split()) == 1 and len(name) < 10:
         if name.lower() not in KNOWN_SHORT_BENCHMARKS:
