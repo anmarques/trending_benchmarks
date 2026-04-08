@@ -14,6 +14,7 @@ from .parallel_fetcher import fetch_document_content
 from .extract_benchmarks import extract_benchmarks_from_text
 from .parse_table import parse_html_table, parse_markdown_table
 from .extract_benchmarks_vision import extract_benchmarks_from_pdf
+from .benchmark_validation import filter_benchmarks
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +199,19 @@ class DocumentCache:
         except Exception as e:
             logger.error(f"Extraction failed for {url[:80]}...: {e}")
             benchmarks = []
+
+        # Apply validation filters to remove false positives
+        if benchmarks:
+            pre_filter_count = len(benchmarks)
+            benchmarks = filter_benchmarks(
+                benchmarks,
+                use_ai_validation=False  # AI validation disabled by default
+            )
+            if len(benchmarks) < pre_filter_count:
+                logger.debug(
+                    f"Filtered {pre_filter_count - len(benchmarks)} "
+                    f"false positives from {url[:80]}..."
+                )
 
         return benchmarks
 

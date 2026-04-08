@@ -33,6 +33,7 @@ from agents.benchmark_intelligence.tools.cache import CacheManager
 from agents.benchmark_intelligence.tools.document_cache import DocumentCache
 from agents.benchmark_intelligence.error_aggregator import ErrorAggregator
 from agents.benchmark_intelligence.progress_tracker import ProgressTracker
+from agents.benchmark_intelligence.tools.benchmark_validation import filter_benchmarks
 
 
 logger = logging.getLogger(__name__)
@@ -134,6 +135,20 @@ def extract_benchmarks_from_model_docs(
                     detect_cooccurrence=True
                 )
                 benchmarks = extraction_result.get("benchmarks", [])
+
+            # Apply validation filters to remove false positives
+            # (model names, single words, etc.)
+            if benchmarks:
+                pre_filter_count = len(benchmarks)
+                benchmarks = filter_benchmarks(
+                    benchmarks,
+                    use_ai_validation=False  # AI validation disabled by default (too expensive)
+                )
+                if len(benchmarks) < pre_filter_count:
+                    logger.debug(
+                        f"  {model_id}: Filtered {pre_filter_count - len(benchmarks)} "
+                        f"false positives from {doc_type}"
+                    )
 
             # Add source attribution to all benchmarks
             for bench in benchmarks:
