@@ -361,11 +361,12 @@ def run(docs_json: Optional[str] = None, concurrency: int = 20, use_document_cac
         }
     )
 
-    # Get processing summary
-    summary = processor.get_summary()
-    logger.info(f"\nProcessing summary:")
-    logger.info(f"  Completed: {summary['completed']}")
-    logger.info(f"  Failed: {summary['failed']}")
+    # Get processing summary (only available in legacy mode)
+    if not use_document_cache:
+        summary = processor.get_summary()
+        logger.info(f"\nProcessing summary:")
+        logger.info(f"  Completed: {summary['completed']}")
+        logger.info(f"  Failed: {summary['failed']}")
 
     logger.info(f"\n✓ Stage 3 complete")
     logger.info(f"  Output: {output_path}")
