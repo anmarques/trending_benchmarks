@@ -108,12 +108,23 @@ def is_valid_benchmark_name(benchmark_name: str) -> bool:
 
     if len(name.split()) == 1 and len(name) < 10:
         if name.lower() not in KNOWN_SHORT_BENCHMARKS:
-            # Allow if it contains numbers (GSM8K, C4, etc.)
-            # or uppercase letters (MMLU, ARC, etc.)
+            # Allow if it contains:
+            # - Numbers (GSM8K, C4, etc.)
+            # - Uppercase letters (MMLU, ARC, etc.)
+            # - Greek letters (τ²bench, μBench, etc.)
+            # - Mathematical notation (superscripts, subscripts)
             has_numbers = re.search(r'\d', name)
             has_caps_structure = bool(re.search(r'[A-Z]{2,}', name))  # At least 2 caps in a row
 
-            if not has_numbers and not has_caps_structure:
+            # Check for Greek letters
+            greek_letters = set('αβγδεζηθικλμνξοπρστυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ')
+            has_greek = any(c in greek_letters for c in name)
+
+            # Check for mathematical notation (superscripts, subscripts)
+            math_notation = set('²³¹₂₃₁⁰⁴⁵⁶⁷⁸⁹₀')
+            has_math_notation = any(c in math_notation for c in name)
+
+            if not (has_numbers or has_caps_structure or has_greek or has_math_notation):
                 logger.debug(f"Rejected '{name}': single generic word")
                 return False
 
@@ -129,21 +140,9 @@ def is_valid_benchmark_name(benchmark_name: str) -> bool:
         logger.debug(f"Rejected '{name}': contains unicode escape sequences")
         return False
 
-    # Reject if contains mathematical superscripts/subscripts (likely tool/formula, not benchmark)
-    # Exception: Allow numbered subscripts like "test_1" or "v2"
-    math_super_sub = ['²', '³', '¹', '₂', '₃', '₁', '⁰', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹']
-    if any(char in name for char in math_super_sub):
-        logger.debug(f"Rejected '{name}': contains mathematical superscript/subscript")
-        return False
-
-    # Reject if name contains Greek letters combined with non-standard characters
-    # (e.g., τ²bench is a tool name, not a benchmark)
-    greek_letters = set('αβγδεζηθικλμνξοπρστυφχψω')
-    if any(c.lower() in greek_letters for c in name):
-        # If it has Greek AND special characters/numbers, likely a formula/tool
-        if re.search(r'[²³¹₂₃₁⁰⁴⁵⁶⁷⁸⁹\d]', name):
-            logger.debug(f"Rejected '{name}': Greek letter combined with numbers/symbols (likely tool name)")
-            return False
+    # Allow Greek letters and mathematical notation in benchmark names
+    # (e.g., τ²bench, μBench, etc. are valid benchmarks)
+    # Only reject if it's ONLY unicode escapes without readable text
 
     # Filter 5: Reject pure URLs or badges
     if name.startswith('http') or name.startswith('![') or name.startswith('[!['):
