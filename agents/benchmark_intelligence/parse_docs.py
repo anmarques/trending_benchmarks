@@ -33,7 +33,11 @@ from agents.benchmark_intelligence.tools.cache import CacheManager
 from agents.benchmark_intelligence.tools.document_cache import DocumentCache
 from agents.benchmark_intelligence.error_aggregator import ErrorAggregator
 from agents.benchmark_intelligence.progress_tracker import ProgressTracker
-from agents.benchmark_intelligence.tools.benchmark_validation import filter_benchmarks
+from agents.benchmark_intelligence.tools.benchmark_validation import (
+    filter_benchmarks,
+    validate_benchmark_with_ai
+)
+from agents.benchmark_intelligence.tools._claude_client import is_anthropic_available
 
 
 logger = logging.getLogger(__name__)
@@ -350,6 +354,93 @@ def run(docs_json: Optional[str] = None, concurrency: int = 20, use_document_cac
     logger.info(f"  Models without benchmarks: {models_without_benchmarks}")
     logger.info(f"  Avg benchmarks per model: {avg_benchmarks_per_model:.1f}")
 
+    # AI Validation: Validate benchmarks per model
+    logger.info(f"\n" + "=" * 70)
+    logger.info("AI Validation of Extracted Benchmarks")
+    logger.info("=" * 70)
+
+    logger.info(f"Models with benchmarks: {models_with_benchmarks}")
+    logger.info(f"Running AI validation (one call per model)...")
+    logger.info("")
+
+    ai_validation_results = {
+        'enabled': False,
+        'models_validated': 0,
+        'total_benchmarks_before': total_benchmarks,
+        'total_benchmarks_after': 0,
+        'total_rejected': 0
+    }
+
+    if is_anthropic_available() and output_data:
+        from agents.benchmark_intelligence.tools.benchmark_validation import validate_model_benchmarks_with_ai
+
+        ai_validation_results['enabled'] = True
+        models_processed = 0
+
+        for entry in output_data:
+            model_id = entry.get('model_id')
+            benchmarks = entry.get('benchmarks', [])
+
+            if not benchmarks:
+                continue
+
+            try:
+                # Validate all benchmarks for this model in one AI call
+                validation_result = validate_model_benchmarks_with_ai(
+                    model_id=model_id,
+                    benchmarks=benchmarks
+                )
+
+                valid_names = set(validation_result['valid_benchmarks'])
+                rejected = validation_result['rejected_benchmarks']
+
+                # Filter benchmarks to keep only valid ones
+                original_count = len(benchmarks)
+                filtered_benchmarks = [
+                    b for b in benchmarks
+                    if b.get('name') in valid_names
+                ]
+
+                entry['benchmarks'] = filtered_benchmarks
+                entry['benchmark_count'] = len(filtered_benchmarks)
+
+                rejected_count = original_count - len(filtered_benchmarks)
+                ai_validation_results['total_rejected'] += rejected_count
+
+                # Log results for this model
+                if rejected_count > 0:
+                    logger.info(f"  {model_id}:")
+                    logger.info(f"    ✓ Accepted: {len(filtered_benchmarks)}")
+                    logger.info(f"    ✗ Rejected: {rejected_count}")
+                    for rej in rejected:
+                        logger.info(f"       - {rej.get('name')}: {rej.get('reason', 'No reason')[:60]}...")
+
+                models_processed += 1
+
+            except Exception as e:
+                logger.warning(f"  AI validation failed for {model_id}: {e}")
+
+        ai_validation_results['models_validated'] = models_processed
+
+        # Recalculate statistics after AI filtering
+        total_benchmarks = sum(entry['benchmark_count'] for entry in output_data)
+        models_with_benchmarks = sum(1 for e in output_data if e['benchmark_count'] > 0)
+        models_without_benchmarks = len(models) - models_with_benchmarks
+        avg_benchmarks_per_model = total_benchmarks / len(models) if models else 0
+
+        ai_validation_results['total_benchmarks_after'] = total_benchmarks
+
+        logger.info("")
+        logger.info(f"✓ AI validation complete:")
+        logger.info(f"  Models validated: {models_processed}")
+        logger.info(f"  Benchmarks before: {ai_validation_results['total_benchmarks_before']}")
+        logger.info(f"  Benchmarks after: {total_benchmarks}")
+        logger.info(f"  Total rejected: {ai_validation_results['total_rejected']}")
+    else:
+        logger.info("AI validation skipped (Claude not available)")
+
+    logger.info("=" * 70)
+
     if errors_list:
         logger.warning(f"  Errors encountered: {len(errors_list)}")
 
@@ -370,7 +461,8 @@ def run(docs_json: Optional[str] = None, concurrency: int = 20, use_document_cac
             "error_summary": error_summary,
             "models_without_benchmarks": models_without_benchmarks,
             "models_with_benchmarks": models_with_benchmarks,
-            "total_benchmarks": total_benchmarks
+            "total_benchmarks": total_benchmarks,
+            "ai_validation": ai_validation_results
         }
     )
 

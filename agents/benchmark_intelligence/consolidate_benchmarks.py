@@ -23,6 +23,8 @@ from agents.benchmark_intelligence.stage_utils import (
     save_stage_json,
     find_latest_stage_output
 )
+from agents.benchmark_intelligence.tools.benchmark_validation import validate_benchmark_with_ai
+from agents.benchmark_intelligence.tools._claude_client import is_anthropic_available
 
 
 logger = logging.getLogger(__name__)
@@ -33,10 +35,11 @@ def normalize_benchmark_name(name: str) -> str:
     """
     Normalize a benchmark name for grouping similar variants.
 
-    Simple normalization for MVP:
+    Normalization strategy:
     - Lowercase
     - Remove hyphens, underscores, spaces
-    - Remove version suffixes
+    - Remove noise qualifiers (shot count, zero-shot)
+    - KEEP semantic qualifiers (Code, English, Multivariate, etc.)
 
     Args:
         name: Raw benchmark name
@@ -47,8 +50,10 @@ def normalize_benchmark_name(name: str) -> str:
     Example:
         >>> normalize_benchmark_name("MMLU (5-shot)")
         "mmlu"
-        >>> normalize_benchmark_name("GSM-8K")
-        "gsm8k"
+        >>> normalize_benchmark_name("MTEB (Code)")
+        "mteb(code)"
+        >>> normalize_benchmark_name("MTEB (English, v2)")
+        "mteb(english)"
     """
     if not name:
         return ""
@@ -56,15 +61,31 @@ def normalize_benchmark_name(name: str) -> str:
     # Lowercase
     normalized = name.lower()
 
-    # Remove common noise patterns
-    normalized = normalized.split('(')[0]  # Remove parenthetical context
-    normalized = normalized.split('[')[0]  # Remove bracket context
+    # Remove noise qualifiers but KEEP semantic qualifiers
+    # Noise: (5-shot), (zero-shot), (few-shot), version numbers
+    import re
 
-    # Remove separators
+    # Remove shot-count qualifiers
+    normalized = re.sub(r'\(\d+-shot\)', '', normalized)
+    normalized = re.sub(r'\(zero-shot\)', '', normalized)
+    normalized = re.sub(r'\(few-shot\)', '', normalized)
+    normalized = re.sub(r'\(one-shot\)', '', normalized)
+
+    # Remove standalone version indicators in parentheses: (v1), (v2), (version 2)
+    # But keep when part of semantic qualifier like "(English, v2)" → keep as "(english)"
+    normalized = re.sub(r'\s*,\s*v\d+', '', normalized)  # ", v2" within parentheses
+    normalized = re.sub(r'\(v\d+\)', '', normalized)      # Standalone (v1)
+    normalized = re.sub(r'\(version\s*\d+\)', '', normalized)
+
+    # Remove bracket context (usually metadata)
+    normalized = normalized.split('[')[0]
+
+    # Remove separators (but preserve parentheses for semantic grouping)
     normalized = normalized.replace('-', '').replace('_', '').replace(' ', '')
 
-    # Remove trailing numbers that might be versions
-    # (Keep embedded numbers like "gsm8k")
+    # Clean up any double parentheses or empty ones
+    normalized = re.sub(r'\(\s*\)', '', normalized)
+
     normalized = normalized.strip()
 
     return normalized
@@ -271,15 +292,118 @@ def run(input_json: Optional[str] = None) -> str:
                     f"{item['variant_count']} variants"
                 )
 
+        # AI Validation: Validate unique canonical benchmark names
+        logger.info("\n" + "=" * 70)
+        logger.info("AI Validation of Consolidated Benchmarks")
+        logger.info("=" * 70)
+
+        # Collect all unique canonical names
+        unique_names = [item['canonical_name'] for item in output_data]
+
+        logger.info(f"Total consolidated benchmarks: {len(unique_names)}")
+        logger.info(f"Running AI validation on {len(unique_names)} canonical names...")
+        logger.info("")
+
+        # Run AI validation if available
+        if is_anthropic_available() and unique_names:
+            rejected_names_set = set()
+            validation_results = {
+                'validated': 0,
+                'accepted': 0,
+                'rejected': 0,
+                'errors': 0
+            }
+
+            for i, name in enumerate(unique_names, 1):
+                try:
+                    is_valid, confidence, reason = validate_benchmark_with_ai(name)
+
+                    validation_results['validated'] += 1
+
+                    if not is_valid or confidence < 70.0:
+                        rejected_names_set.add(name)
+                        validation_results['rejected'] += 1
+                        logger.info(f"  ✗ Rejected: '{name}' (confidence: {confidence}%)")
+                        logger.info(f"     Reason: {reason[:100]}...")
+                    else:
+                        validation_results['accepted'] += 1
+
+                    # Progress reporting every 20 benchmarks
+                    if i % 20 == 0:
+                        logger.info(
+                            f"  Progress: {i}/{len(unique_names)} "
+                            f"(Accepted: {validation_results['accepted']}, "
+                            f"Rejected: {validation_results['rejected']})"
+                        )
+
+                except Exception as e:
+                    logger.warning(f"  Validation error for '{name}': {e}")
+                    validation_results['errors'] += 1
+
+            # Filter out rejected benchmarks from output_data
+            logger.info("")
+            logger.info("Filtering rejected benchmarks from results...")
+
+            pre_filter_count = len(output_data)
+            output_data = [
+                item for item in output_data
+                if item['canonical_name'] not in rejected_names_set
+            ]
+            post_filter_count = len(output_data)
+
+            # Recalculate statistics after AI filtering
+            unique_benchmarks = len(output_data)
+            total_variants = sum(item['variant_count'] for item in output_data) if output_data else 0
+            avg_variants = total_variants / unique_benchmarks if unique_benchmarks > 0 else 0
+
+            logger.info("")
+            logger.info("=" * 70)
+            logger.info("AI Validation Summary:")
+            logger.info("=" * 70)
+            logger.info(f"  Benchmarks validated: {validation_results['validated']}")
+            logger.info(f"  ✓ Accepted: {validation_results['accepted']}")
+            logger.info(f"  ✗ Rejected: {validation_results['rejected']}")
+            logger.info(f"  Errors: {validation_results['errors']}")
+            logger.info(f"  Filtered from results: {pre_filter_count - post_filter_count}")
+            logger.info("")
+            logger.info("Final Consolidation Statistics:")
+            logger.info(f"  Unique benchmarks: {unique_benchmarks}")
+            logger.info(f"  Total variants: {total_variants}")
+            logger.info(f"  Avg variants per benchmark: {avg_variants:.1f}")
+            logger.info("=" * 70)
+
+            # Add AI validation metadata
+            ai_validation_metadata = {
+                'ai_validation_performed': True,
+                'benchmarks_validated': validation_results['validated'],
+                'benchmarks_accepted': validation_results['accepted'],
+                'benchmarks_rejected': validation_results['rejected'],
+                'validation_errors': validation_results['errors'],
+                'confidence_threshold': 70.0
+            }
+        else:
+            if not is_anthropic_available():
+                logger.warning("Claude API not available - skipping AI validation")
+            ai_validation_metadata = {
+                'ai_validation_performed': False,
+                'reason': 'Claude API not available' if not is_anthropic_available() else 'No benchmarks to validate'
+            }
+
     # Save standardized JSON output with preserved metadata
+    metadata = {
+        "models_without_benchmarks": models_without_benchmarks
+    }
+
+    # Add AI validation metadata if it was performed
+    if output_data and 'ai_validation_metadata' in locals():
+        metadata.update(ai_validation_metadata)
+
     output_path = save_stage_json(
         data=output_data,
         stage_name="consolidate_names",
         input_count=len(all_benchmarks),
         errors=[],
-        metadata={
-            "models_without_benchmarks": models_without_benchmarks
-        }
+        metadata=metadata
     )
 
     logger.info(f"\n✓ Stage 4 complete")

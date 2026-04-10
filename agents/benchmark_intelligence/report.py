@@ -59,10 +59,10 @@ def generate_report_markdown(
             by_category[primary] = []
         by_category[primary].append(bench)
 
-    # Sort benchmarks within each category by mention count
+    # Sort benchmarks within each category by model count (adoption)
     for category in by_category:
         by_category[category].sort(
-            key=lambda x: x.get('mention_count', 0),
+            key=lambda x: x.get('model_count', 0),
             reverse=True
         )
 
@@ -103,26 +103,25 @@ def generate_report_markdown(
     # Top 20 Most Popular Benchmarks (Overall)
     lines.append("## Top 20 Most Popular Benchmarks")
     lines.append("")
-    lines.append("Ranked by total mentions across all models:")
+    lines.append("Ranked by number of models reporting each benchmark:")
     lines.append("")
-    lines.append("| Rank | Benchmark | Category | Mentions | Models | Variants |")
-    lines.append("|------|-----------|----------|----------|--------|----------|")
+    lines.append("| Rank | Benchmark | Category | Models | Variants |")
+    lines.append("|------|-----------|----------|--------|----------|")
 
-    # Sort all benchmarks by mention count
+    # Sort all benchmarks by model count (adoption)
     sorted_benchmarks = sorted(
         categorized_benchmarks,
-        key=lambda x: x.get('mention_count', 0),
+        key=lambda x: x.get('model_count', 0),
         reverse=True
     )
 
     for i, bench in enumerate(sorted_benchmarks[:20], 1):
         name = bench.get('canonical_name', 'Unknown')
         category = bench.get('primary_category', 'uncategorized')
-        mentions = bench.get('mention_count', 0)
         models = bench.get('model_count', 0)
         variants = bench.get('variant_count', 0)
 
-        lines.append(f"| {i} | {name} | {category} | {mentions} | {models} | {variants} |")
+        lines.append(f"| {i} | {name} | {category} | {models} | {variants} |")
 
     lines.append("")
 
@@ -134,16 +133,15 @@ def generate_report_markdown(
         benchmarks = by_category[category]
         lines.append(f"### {category.capitalize()}")
         lines.append("")
-        lines.append("| Benchmark | Mentions | Models | Variants |")
-        lines.append("|-----------|----------|--------|----------|")
+        lines.append("| Benchmark | Models | Variants |")
+        lines.append("|-----------|--------|----------|")
 
         for bench in benchmarks[:10]:  # Top 10 per category
             name = bench.get('canonical_name', 'Unknown')
-            mentions = bench.get('mention_count', 0)
             models = bench.get('model_count', 0)
             variants = bench.get('variant_count', 0)
 
-            lines.append(f"| {name} | {mentions} | {models} | {variants} |")
+            lines.append(f"| {name} | {models} | {variants} |")
 
         lines.append("")
 

@@ -107,7 +107,9 @@ def is_valid_benchmark_name(benchmark_name: str) -> bool:
         'spotting', 'reasoning', 'evaluation', 'testing', 'performance',
         'accuracy', 'score', 'metric', 'test', 'eval', 'benchmark',
         'model', 'data', 'training', 'inference', 'validation',
-        'multimodal', 'document', 'context', 'parsing', 'length'
+        'multimodal', 'document', 'context', 'parsing', 'length',
+        'modality', 'html', 'json', 'yaml', 'xml', 'sql',
+        'portuguese', 'multilingual', 'english'
     }
 
     # Reject category/section headers (often appear in model cards)
@@ -117,6 +119,60 @@ def is_valid_benchmark_name(benchmark_name: str) -> bool:
         'video reasoning', 'novel logical reasoning'
     }
 
+    # Reject table column headers and metadata fields
+    TABLE_METADATA_HEADERS = {
+        'dataset size', 'collection period', 'collecting organisation',
+        'modality', 'seed dataset', 'model(s) used for generation',
+        'collecting organization', 'dataset', 'source', 'format',
+        'model size', 'parameters', 'architecture', 'training data'
+    }
+
+    # Reject programming languages and file types
+    PROGRAMMING_LANGUAGES = {
+        'html', 'json', 'yaml', 'xml', 'sql', 'dockerfile',
+        'php', 'typescript', 'javascript', 'visualbasic.net',
+        'systemverilog', 'vhdl', 'commonlisp', 'mathematica',
+        'jupyternotebook', 'restructuredtext', 'python', 'java',
+        'c++', 'c#', 'ruby', 'go', 'rust', 'scala', 'kotlin',
+        'swift', 'perl', 'bash', 'shell', 'powershell'
+    }
+
+    # Reject aggregate metric names (summary scores, not benchmarks)
+    AGGREGATE_METRIC_PATTERNS = [
+        r'\bmean\b',           # "MTEB Mean", "NanoBEIR Mean"
+        r'\baverage\b',        # "Average Score"
+        r'\bavg\b',            # "Fleurs-avg"
+        r'\boverall\b',        # "VoiceBench-Overall", "MMMU-Pro-overall"
+        r'-mean$',             # Ends with "-mean"
+        r'-avg$',              # Ends with "-avg"
+        r'-overall$',          # Ends with "-overall"
+        r'\(task\)',           # "Mean (Task)"
+        r'\(all languages\)',  # "Mean (All Languages)"
+    ]
+
+    # Reject validation/test split indicators (these are splits, not benchmarks)
+    SPLIT_INDICATORS = [
+        r'\bval\b$',           # "DocVQA val", "InfoVQA Val"
+        r'\btest\b$',          # "AI2D_TEST", "TEDS_TEST"
+        r'-test$',             # "Opencpop-test", "SEED-test-zh"
+        r'-val$',              # Ends with "-val"
+        r'-dev$',              # "MMBenchEN-DEV-v1.1"
+        r'\bdev\b',            # "DEV" in name
+    ]
+
+    # Known MTEB component tasks (not the benchmark suite itself)
+    # Includes both regular MTEB and NanoBEIR variants
+    MTEB_TASK_IDS = {
+        'banking77classification', 'biosses', 'askubuntuduplication',
+        'fiqa2018', 'scidocs', 'sts12', 'sts13', 'sts14', 'sts15',
+        'sts17', 'sts22.v2', 'touche2020retrieval.v3',
+        'twentynewsgroupsclustering.v2', 'summevalsummarization.v2',
+        'stackexchangeclustering.v2', 'stackexchangeclusteringp2p.v2',
+        # NanoBEIR variants
+        'nanofiqa2018', 'nanoscidocs', 'nanotouche2020', 'nanobeir',
+        'nanosts12', 'nanosts13', 'nanosts14', 'nanosts15'
+    }
+
     if name.lower() in GENERIC_WORDS:
         logger.debug(f"Rejected '{name}': generic word")
         return False
@@ -124,6 +180,40 @@ def is_valid_benchmark_name(benchmark_name: str) -> bool:
     # Check for category phrases
     if name.lower() in CATEGORY_PHRASES:
         logger.debug(f"Rejected '{name}': category/section header")
+        return False
+
+    # Check for table metadata headers
+    if name.lower() in TABLE_METADATA_HEADERS:
+        logger.debug(f"Rejected '{name}': table metadata header")
+        return False
+
+    # Check for programming languages
+    if name.lower() in PROGRAMMING_LANGUAGES:
+        logger.debug(f"Rejected '{name}': programming language/file type")
+        return False
+
+    # Check for aggregate metric patterns
+    for pattern in AGGREGATE_METRIC_PATTERNS:
+        if re.search(pattern, name, re.IGNORECASE):
+            logger.debug(f"Rejected '{name}': aggregate metric pattern")
+            return False
+
+    # Check for split indicators (val, test, dev)
+    for pattern in SPLIT_INDICATORS:
+        if re.search(pattern, name, re.IGNORECASE):
+            logger.debug(f"Rejected '{name}': validation/test split indicator")
+            return False
+
+    # Check for MTEB task IDs (reject component tasks, keep suite)
+    if name.lower() in MTEB_TASK_IDS:
+        logger.debug(f"Rejected '{name}': MTEB component task ID")
+        return False
+
+    # Reject individual language slices (e.g., "XOR-Retrieve - Arabic")
+    # Pattern: "BenchmarkName - LanguageName"
+    language_slice_pattern = r'^.+\s+-\s+(Arabic|Bengali|Hindi|Tamil|Chinese|English|French|Spanish|German|Italian|Japanese|Korean|Portuguese|Russian|Turkish|Swahili|Telugu)$'
+    if re.search(language_slice_pattern, name, re.IGNORECASE):
+        logger.debug(f"Rejected '{name}': language slice")
         return False
 
     # Filter: Reject markdown formatting (section headers from model cards)
@@ -139,12 +229,20 @@ def is_valid_benchmark_name(benchmark_name: str) -> bool:
         return False
 
     # Filter: Reject training data descriptions
-    # "Synthetic X", "X SFT", "Common Crawl X"
+    # "Synthetic X", "X SFT", "Common Crawl X", "RL data", etc.
     training_patterns = [
         r'\bsft\b',  # Supervised Fine-Tuning
-        r'^synthetic\s+\w+$',  # "Synthetic Math", "Synthetic Code"
-        r'^common\s+crawl\s+\w+$',  # "Common Crawl Code"
+        r'\bsynthetic\b',  # Any "Synthetic" mention (Synthetic Math, Synthetic SWE, etc.)
+        r'\bcrawl\b',  # Common Crawl, GitHub Crawl, etc.
         r'\bembedding\b',  # Embedding models, not benchmarks
+        r'\brl\s+data\b',  # RL data, RL Data
+        r'\bfor\s+rl\b',  # "for RL", "Synthetic X for RL"
+        r'\s+rl$',  # Ends with " RL" (Long context RL, etc.)
+        r'^rl\s+',  # Starts with "RL " (RL data for Search)
+        r'\bdata\s+for\b',  # "data for X", "Synthetic Data for Search"
+        r'tool\s+calling\s+data',  # Tool Calling Data
+        r'instruction\s+following',  # Instruction Following data
+        r'\btranslated\s+',  # Translated Synthetic X
     ]
     for pattern in training_patterns:
         if re.search(pattern, name, re.IGNORECASE):
@@ -230,11 +328,12 @@ def normalize_benchmark_name(benchmark_name: str) -> str:
     name = benchmark_name.strip()
 
     # Rule 1: AIME variants
-    # AIME24, AIME-24, AIME 24, MT-AIME24 → AIME 2024
-    # AIME25, AIME-25, AIME 25 → AIME 2025
+    # AIME24, AIME-24, AIME 24, AIME'24, MT-AIME24 → AIME 2024
+    # AIME25, AIME-25, AIME 25, AIME'25 → AIME 2025
 
-    # Match MT-AIME24, AIME24, AIME-24, etc.
-    aime_pattern = r'(?:MT[-\s]?)?AIME[-\s]?(20)?(\d{2})\b'
+    # Match MT-AIME24, AIME24, AIME-24, AIME'24, etc.
+    # Supports hyphen, space, apostrophe (regular and smart quote) as separators
+    aime_pattern = r"(?:MT[-\s]?)?AIME[-\s'']?(20)?(\d{2})\b"
     match = re.search(aime_pattern, name, re.IGNORECASE)
     if match:
         year_suffix = match.group(2)
@@ -280,6 +379,153 @@ def normalize_benchmark_entry(benchmark: Dict[str, Any]) -> Dict[str, Any]:
     return benchmark
 
 
+def validate_model_benchmarks_with_ai(
+    model_id: str,
+    benchmarks: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """
+    Use AI to validate all benchmarks extracted for a single model.
+
+    More efficient and contextual than validating each name individually.
+    Claude can assess benchmarks in the context of the full set extracted
+    from one model's documentation.
+
+    Args:
+        model_id: Model identifier
+        benchmarks: List of benchmark dicts extracted from this model
+
+    Returns:
+        Dictionary with validation results:
+            - valid_benchmarks: List of benchmark names that passed validation
+            - rejected_benchmarks: List of dicts with name, reason, confidence
+            - validation_summary: Overall assessment
+
+    Examples:
+        >>> validate_model_benchmarks_with_ai("Qwen3-8B", [
+        ...     {"name": "MMLU", "score": "85.2"},
+        ...     {"name": "Qwen3-8B", "score": "baseline"},
+        ...     {"name": "GSM8K", "score": "79.1"}
+        ... ])
+        {
+            "valid_benchmarks": ["MMLU", "GSM8K"],
+            "rejected_benchmarks": [
+                {"name": "Qwen3-8B", "reason": "This is the model name...", "confidence": 99}
+            ],
+            ...
+        }
+    """
+    if not is_anthropic_available():
+        logger.warning("AI validation unavailable, accepting all benchmarks")
+        return {
+            "valid_benchmarks": [b.get("name") for b in benchmarks],
+            "rejected_benchmarks": [],
+            "validation_summary": "AI unavailable, all benchmarks accepted by default"
+        }
+
+    if not benchmarks:
+        return {
+            "valid_benchmarks": [],
+            "rejected_benchmarks": [],
+            "validation_summary": "No benchmarks to validate"
+        }
+
+    # Format benchmark list for prompt
+    benchmark_list = "\n".join([
+        f"  - {b.get('name', 'UNNAMED')}: {b.get('score', 'N/A')}"
+        for b in benchmarks
+    ])
+
+    prompt = f"""
+You are a benchmark validation expert. Review the following list of benchmarks extracted from the documentation for model "{model_id}".
+
+**Your Task**: Identify which extracted names are REAL evaluation benchmarks vs. false positives (model names, generic words, section headers, training data, etc.).
+
+**Extracted Benchmarks**:
+{benchmark_list}
+
+**CRITICAL: Known Patterns to REJECT**:
+
+1. **Training Data Descriptions** (NOT benchmarks):
+   - Anything with "Crawl": "Common Crawl", "GitHub Crawl", "Translated Synthetic Crawl"
+   - Anything with "RL data" or "for RL": "Synthetic Data for RL", "RL data for Search", "Long context RL"
+   - Anything with "Synthetic": "Synthetic Math", "Synthetic SWE", "Synthetic Agentless SWE", "Synthetic Tool Call Schema"
+   - Dataset descriptions: "Tool Calling Data", "Instruction Following Data"
+
+2. **Table Column Headers/Metadata**:
+   - "Dataset Size", "Collection Period", "Collecting Organisation", "Modality"
+   - "Seed Dataset", "Model(s) used for generation", "Training Data"
+
+3. **Programming Languages/File Types**:
+   - "HTML", "JSON", "YAML", "XML", "SQL", "Dockerfile"
+   - "TypeScript", "JavaScript", "PHP", "Python", "SystemVerilog", "VHDL"
+   - "JupyterNotebook", "reStructuredText", "CommonLisp"
+
+4. **Model Names & Products**:
+   - Model names: Qwen, Llama, GPT, Claude, Gemini, Mistral, DeepSeek
+   - Model variants: Qwen3-8B, Llama-3.1-70B, GPT-4o
+   - Embedding models: "e5-base-v2", "bge-base-en-v1.5", "granite-embedding-english-r2"
+
+5. **Generic Words & Labels**:
+   - Single words: "Portuguese", "Multilingual", "English", "Modality"
+   - Section headers: "General Multimodal", "Long Context", "Reasoning Mode"
+   - Markdown: **Text**, ##Section
+
+**Known Valid Benchmarks** (partial list):
+- MMLU, GSM8K, HumanEval, MATH, HellaSwag, ARC, TruthfulQA
+- GPQA, LiveBench, SWE-bench, AIME, MBPP, HumanEval+
+- C-EVAL, MMLU-Pro, IF-Eval, MT-Bench, AlpacaEval
+
+**Output JSON**:
+{{
+  "valid_benchmarks": ["MMLU", "GSM8K", ...],
+  "rejected_benchmarks": [
+    {{
+      "name": "Common Crawl",
+      "confidence": 99,
+      "reason": "This is a training dataset (crawl), not a benchmark"
+    }},
+    {{
+      "name": "Dataset Size",
+      "confidence": 99,
+      "reason": "This is a table column header, not a benchmark"
+    }},
+    ...
+  ],
+  "validation_summary": "Brief overall assessment (1-2 sentences)"
+}}
+
+**Be VERY strict**: When in doubt, REJECT. Training data, table headers, programming languages, and metadata are NOT benchmarks.
+Review the complete set together - patterns of false positives are easier to spot when seeing all extractions from one model.
+"""
+
+    try:
+        result = call_claude_json(prompt=prompt, max_tokens=2048)
+
+        valid = result.get('valid_benchmarks', [])
+        rejected = result.get('rejected_benchmarks', [])
+        summary = result.get('validation_summary', 'No summary provided')
+
+        logger.debug(
+            f"Batch validation for {model_id}: "
+            f"{len(valid)} valid, {len(rejected)} rejected"
+        )
+
+        return {
+            "valid_benchmarks": valid,
+            "rejected_benchmarks": rejected,
+            "validation_summary": summary
+        }
+
+    except Exception as e:
+        logger.warning(f"Batch AI validation failed for {model_id}: {e}")
+        # On error, default to accepting all (heuristics already filtered obvious cases)
+        return {
+            "valid_benchmarks": [b.get("name") for b in benchmarks],
+            "rejected_benchmarks": [],
+            "validation_summary": f"Validation error: {str(e)}, accepted all by default"
+        }
+
+
 def validate_benchmark_with_ai(
     benchmark_name: str,
     context: Optional[str] = None
@@ -320,17 +566,34 @@ You are a benchmark validation expert. Determine if the following extracted name
 1. Is this a real, standardized evaluation benchmark used to measure AI model performance?
 2. Or is it a model name, random word, tool name, or other false positive?
 
-**Known Patterns to REJECT**:
-- Model names: Qwen, Llama, GPT, Claude, Gemini, Mistral, DeepSeek, GLM, etc.
-- Model variants: Qwen3-8B, Llama-3.1-70B, GPT-4o, etc.
-- Single generic words: "spotting", "reasoning", "evaluation"
-- Tool/framework names: τ²bench, PyTorch, TensorFlow
-- Descriptions: "Synthetic X from Y", "Art of Problem Solving"
+**CRITICAL Patterns to REJECT**:
+
+1. **Aggregate Metrics** (NOT benchmarks):
+   - Anything with "Mean", "Average", "Overall", "avg": "NanoBEIR Mean", "VoiceBench-Overall", "MTEB Multilingual v2 - Mean (Task)"
+
+2. **Validation/Test Splits** (splits, NOT benchmarks):
+   - Ends with "val", "test", "dev": "DocVQA val", "InfoVQA Val", "AI2D_TEST", "SEED-test-zh", "MMBenchEN-DEV-v1.1"
+
+3. **Language Slices** (subsets, NOT standalone benchmarks):
+   - Individual languages: "XOR-Retrieve - Arabic", "XTREME-UP - Hindi", "OCRBenchV2 English"
+
+4. **MTEB Component Task IDs** (tasks, NOT suite):
+   - Individual task IDs: "Banking77Classification", "BIOSSES", "FiQA2018", "SCIDOCS", "STS12", "Touche2020Retrieval.v3"
+   - Only accept: "MTEB", "MTEB (Code)", "MTEB (English)", etc. (suite names)
+
+5. **Datasets/Challenge Sets** (NOT standard benchmarks):
+   - "GTZAN", "MagnaTagATune", "Monash Time Series Forecasting Repository"
+   - Statistical datasets: "NAB (Univariate)", "TODS (Univariate)", "UCR (Univariate)"
+
+6. **Model Names & Training Data**:
+   - Model names: Qwen, Llama, GPT, Claude, Gemini, Mistral
+   - Training data: "Common Crawl", "Synthetic X", "RL data"
 
 **Known Valid Benchmarks** (partial list):
 - MMLU, GSM8K, HumanEval, MATH, HellaSwag, ARC, TruthfulQA
 - GPQA, LiveBench, SWE-bench, AIME, MBPP, HumanEval+
 - C-EVAL, MMLU-Pro, IF-Eval, MT-Bench, AlpacaEval
+- MTEB (suite name, not individual tasks)
 
 **Output JSON**:
 {{
@@ -340,7 +603,7 @@ You are a benchmark validation expert. Determine if the following extracted name
   "reason": "Brief explanation of decision"
 }}
 
-**Be strict**: When in doubt, reject. It's better to miss edge cases than accept false positives.
+**Be VERY strict**: Aggregate metrics, splits, language slices, and component task IDs are NOT benchmarks. When in doubt, REJECT.
 """
 
     try:

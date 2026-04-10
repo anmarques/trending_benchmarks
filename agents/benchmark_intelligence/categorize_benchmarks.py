@@ -26,55 +26,77 @@ from agents.benchmark_intelligence.tools.taxonomy_manager import (
     load_taxonomy_json,
     apply_category_overrides
 )
+from agents.benchmark_intelligence.tools._claude_client import call_claude_json, is_anthropic_available
 
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 
-# MVP taxonomy (simple rule-based categories)
+# Taxonomy (rule-based keywords for common benchmarks)
 TAXONOMY_RULES = {
-    'coding': [
-        'humaneval', 'mbpp', 'codegen', 'apps', 'codeforce', 'leetcode',
-        'swench', 'swebench', 'codecontests'
-    ],
-    'math': [
-        'gsm8k', 'gsm', 'math', 'aime', 'mathqa', 'mawps', 'svamp',
-        'asdiv', 'minerva'
-    ],
     'knowledge': [
-        'mmlu', 'arc', 'hellaswag', 'winogrande', 'piqa', 'siqa',
-        'commonsenseqa', 'csqa', 'openbookqa', 'triviaqa', 'naturalquestions',
-        'nq', 'squad', 'webqa', 'truthfulqa'
+        'arc', 'boolq', 'cmmlu', 'commonsense', 'naturalquestions',
+        'obqa', 'openbookqa', 'piqa', 'race', 'simpleqa', 'squad',
+        'triviaqa', 'truthfulqa', 'webquest', 'wikitext'
     ],
     'reasoning': [
-        'bbh', 'bigbenchhard', 'logiqa', 'reclor', 'strategyqa',
-        'clutrr', 'drop', 'quoref'
+        'bbh', 'bigbench', 'drop', 'gpqa', 'hellaswag', 'lsat',
+        'logiqa', 'musr', 'siqa', 'socialiq', 'winogrande', 'zebralogic'
     ],
-    'vision': [
-        'videomme', 'mme', 'mmbench', 'seed', 'pope', 'vqav2',
-        'vizwiz', 'textvqa', 'docvqa', 'chartqa', 'infovqa',
-        'ocrbench', 'refcoco'
+    'math': [
+        'aime', 'amc', 'cmath', 'deepmindmath', 'gsm', 'imo',
+        'math', 'mathvista', 'mgsm', 'minif2f', 'olympiad', 'sat'
     ],
-    'audio': [
-        'librispeech', 'commonvoice', 'fleurs', 'voxceleb',
-        'tedlium', 'switchboard'
+    'coding': [
+        'bigcodebench', 'codeforces', 'crux', 'design2code', 'humaneval',
+        'livecode', 'mbpp', 'multiple', 'ojbench', 'repoqa', 'swebench'
     ],
-    'multilingual': [
-        'ceval', 'cmmlu', 'flores', 'xtreme', 'xnli', 'pawsx',
-        'mlqa', 'tydiqa', 'indicglue'
+    'instruction': [
+        'followir', 'ifeval', 'ifbench', 'instructionfollowing'
+    ],
+    'alignment': [
+        'alpacaeval', 'alignbench', 'arenahard', 'hhem', 'livebench',
+        'mtbench', 'writingbench'
     ],
     'agent': [
-        'webarena', 'osworld', 'mint', 'alfworld', 'scienceworld',
-        'babyai', 'textcraft'
+        'acebench', 'androidworld', 'apibank', 'apibench', 'bfcl',
+        'ccbench', 'muirbench', 'osworld', 'screenspot', 'taubench',
+        'tirbench', 'windowsagent', 'zerobench', 'τ2bench', 'τ²bench'
     ],
-    'comparison': [
-        'alpacaeval', 'arenahard', 'mtbench', 'chatbotarena',
-        'lmsys', 'bfcl'
+    'longcontext': [
+        'infinitebench', 'longbench', 'longcode', 'longvideo',
+        'mmlongbench', 'quality', 'ruler', 'squality'
+    ],
+    'vision': [
+        '7scenes', 'activitynet', 'ai2d', 'blink', 'charades', 'chartqa',
+        'countbench', 'cvbench', 'dl3dv', 'docvqa', 'dtu', 'embspatial',
+        'gotbenchmark', 'hallusion', 'ibims', 'infovqa', 'lvbench',
+        'medxpert', 'mhalu', 'mlvu', 'mmbench', 'mmmu', 'mmstar', 'mmvet',
+        'mmvu', 'motionbench', 'mtvqa', 'mvbench', 'next', 'nyuv2',
+        'ocrbench', 'odinw', 'okvqa', 'omnidocbench', 'perception',
+        'pmcvqa', 'realworldqa', 'refcoco', 'refspatial', 'rtvlm',
+        'simplevqa', 'slake', 'sunrgbd', 'textvqa', 'tvqa', 'videomme',
+        'videomu', 'vitabench', 'vizwiz', 'vlmsareblind', 'vqav2',
+        'vsibench', 'websrc'
+    ],
+    'retrieval': [
+        'climatefever', 'cmteb', 'frames', 'mldr', 'mmteb', 'mteb',
+        'nanoscifact', 'paws', 'sickr', 'stsbenchmark', 'treccovid',
+        'twittersemeval'
+    ],
+    'multilingual': [
+        'ceval', 'fleurs', 'flores', 'mmmlu', 'multilingualmmlu', 'wmt'
+    ],
+    'audio': [
+        'aishell', 'alimeeting', 'chime', 'covost', 'fleurs',
+        'librispeech', 'spgispeech', 'switchboard'
     ],
     'safety': [
-        'harmfulqa', 'toxicgen', 'realtoxicityprompts', 'saferbench',
-        'trustllm', 'decodingtrust'
+        'jbbq', 'safetybench', 'saladbench', 'vlguard'
+    ],
+    'timeseries': [
+        'smd', 'tsbad', 'uea'
     ],
 }
 
@@ -118,7 +140,130 @@ def categorize_benchmark(benchmark_name: str) -> List[str]:
     return categories
 
 
-def run(input_json: Optional[str] = None) -> str:
+def review_categorization_with_ai(benchmarks_with_categories: List[Dict[str, Any]]) -> Dict[str, str]:
+    """
+    Single AI call to review and correct categorization for ALL benchmarks.
+
+    More efficient and provides better context than per-benchmark categorization.
+    AI can see patterns across all benchmarks and ensure consistency.
+
+    Args:
+        benchmarks_with_categories: List of dicts with 'name' and 'current_category'
+
+    Returns:
+        Dict mapping benchmark_name -> corrected_category
+
+    Example:
+        >>> review_categorization_with_ai([
+        ...     {"name": "GPQA Diamond", "current_category": "uncategorized"},
+        ...     {"name": "MMLU", "current_category": "knowledge"}
+        ... ])
+        {"GPQA Diamond": "knowledge", "MMLU": "knowledge"}
+    """
+    if not is_anthropic_available():
+        logger.warning("AI categorization unavailable, keeping current categories")
+        return {}
+
+    # Available categories with descriptions
+    categories_desc = {
+        "knowledge": "General knowledge, QA, facts (ARC, TriviaQA, SimpleQA, BoolQ, RACE)",
+        "reasoning": "Logical reasoning, inference (BIG-Bench Hard, GPQA, DROP, HellaSwag, WinoGrande)",
+        "math": "Mathematical reasoning, problem solving (GSM8K, MATH, AIME, OlympiadBench)",
+        "coding": "Programming, code generation, software engineering (HumanEval, MBPP, SWE-Bench, LiveCodeBench)",
+        "instruction": "Following instructions precisely (IF-Eval, IFBench, FollowIR)",
+        "alignment": "Model comparison, human preference, dialogue quality (AlpacaEval, Arena-Hard, MT-Bench, LiveBench)",
+        "agent": "Interactive agents, tool use, function calling (OSWorld, TauBench, API-Bench, BFCL)",
+        "longcontext": "Long document/context understanding (RULER, LongBench, InfiniteBench, QuALITY)",
+        "vision": "Visual understanding, VQA, OCR, multimodal (MMMU, DocVQA, VideoMME, ChartQA)",
+        "retrieval": "Embedding, retrieval, semantic similarity (MTEB, MLDR, FRAMES, STSBenchmark)",
+        "multilingual": "Cross-lingual, translation (FLORES, C-EVAL, MMMLU, WMT)",
+        "audio": "Speech recognition, audio processing (LibriSpeech, FLEURS, AISHELL)",
+        "safety": "Safety, toxicity, bias, fairness (SafetyBench, JBBQ, VLGuard)",
+        "timeseries": "Time series analysis, forecasting (TSB-AD, UEA, SMD)"
+    }
+
+    categories_list = "\n".join([f"- **{cat}**: {desc}" for cat, desc in categories_desc.items()])
+
+    # Format benchmark list
+    benchmark_list = []
+    for b in benchmarks_with_categories:
+        name = b['name']
+        current_cat = b['current_category']
+        benchmark_list.append(f"  - {name}: {current_cat}")
+
+    benchmarks_str = "\n".join(benchmark_list[:250])  # Limit to fit in context
+    if len(benchmark_list) > 250:
+        benchmarks_str += f"\n  ... and {len(benchmark_list) - 250} more"
+
+    prompt = f"""
+Review and correct the categorization of {len(benchmarks_with_categories)} AI evaluation benchmarks.
+
+**Available Categories**:
+{categories_list}
+
+**Current Categorization** (name: current_category):
+{benchmarks_str}
+
+**Your Task**:
+1. Review each benchmark's current category
+2. For "uncategorized" benchmarks: assign the best category based on the benchmark name
+3. For already categorized benchmarks: verify correctness, suggest corrections if needed
+4. Ensure similar benchmarks get consistent categories (e.g., GPQA and GPQA Diamond)
+5. Consider the full context - seeing all benchmarks together helps spot patterns
+
+**Important Guidelines**:
+- **knowledge** vs **reasoning**: GPQA is reasoning (knowledge-intensive reasoning), not knowledge
+- **instruction** vs **reasoning**: IF-Eval, IFBench are instruction, not reasoning
+- **longcontext** vs **reasoning/vision**: RULER, LongBench, InfiniteBench are longcontext
+- **alignment**: AlpacaEval, Arena-Hard, MT-Bench, LiveBench are alignment (human preference/dialogue)
+- **retrieval** vs **multilingual**: MTEB is retrieval (embedding/semantic similarity), not multilingual
+- **agent** includes tool use, function calling (API-Bench, BFCL, ZeroBench, OSWorld)
+- **vision**: Design2Code can be vision or coding depending on context
+- Ensure variant consistency: GPQA ≈ GPQA Diamond, MMMU ≈ MMMU Pro, AIME ≈ AIME 2024 ≈ AIME 2025
+
+**Output JSON**:
+{{
+  "corrections": {{
+    "GPQA Diamond": "knowledge",
+    "LiveCodeBench": "coding",
+    "IF-Eval": "comparison",
+    ... only include benchmarks that need categorization or correction
+  }},
+  "summary": "Brief summary of changes (1-2 sentences)"
+}}
+
+**Important**:
+- Only include benchmarks in "corrections" that need changes (uncategorized → category, or wrong category → correct category)
+- Do NOT include benchmarks that are already correctly categorized
+- Use lowercase category names
+"""
+
+    try:
+        result = call_claude_json(prompt=prompt, max_tokens=4096)
+        corrections = result.get('corrections', {})
+        summary = result.get('summary', 'No summary provided')
+
+        # Validate all categories
+        valid_categories = set(categories_desc.keys()) | {'uncategorized'}
+        validated_corrections = {}
+
+        for name, category in corrections.items():
+            if category.lower() in valid_categories:
+                validated_corrections[name] = category.lower()
+            else:
+                logger.warning(f"AI returned invalid category '{category}' for '{name}', ignoring")
+
+        logger.info(f"  AI Summary: {summary}")
+        logger.info(f"  Corrections: {len(validated_corrections)} benchmarks")
+
+        return validated_corrections
+
+    except Exception as e:
+        logger.error(f"AI categorization review failed: {e}")
+        return {}
+
+
+def run(input_json: Optional[str] = None, use_ai: bool = True) -> str:
     """
     Execute Stage 5: Benchmark categorization.
 
@@ -189,11 +334,57 @@ def run(input_json: Optional[str] = None) -> str:
         category_counts = {}
         new_categories = set()  # T087: Track newly created categories
 
+        # First pass: Rule-based categorization
         for benchmark in benchmarks:
             canonical_name = benchmark.get('canonical_name', '')
-
-            # Get categories
             categories = categorize_benchmark(canonical_name)
+            benchmark['_categories'] = categories  # Temporary storage
+
+        # Second pass: Single AI call to review all categorizations
+        if use_ai and is_anthropic_available():
+            # Prepare data for AI review
+            benchmarks_for_review = [
+                {
+                    'name': b.get('canonical_name', ''),
+                    'current_category': b['_categories'][0]
+                }
+                for b in benchmarks
+            ]
+
+            uncategorized_count = sum(1 for b in benchmarks if b['_categories'] == ['uncategorized'])
+
+            logger.info(f"\nAI Categorization Review:")
+            logger.info(f"  Rule-based categorized: {len(benchmarks) - uncategorized_count}")
+            logger.info(f"  Uncategorized: {uncategorized_count}")
+            logger.info(f"  Sending all {len(benchmarks)} benchmarks to AI for review...")
+            logger.info("")
+
+            # Single AI call reviews all benchmarks
+            corrections = review_categorization_with_ai(benchmarks_for_review)
+
+            # Apply corrections
+            ai_corrected = 0
+            for benchmark in benchmarks:
+                canonical_name = benchmark.get('canonical_name', '')
+                if canonical_name in corrections:
+                    new_category = corrections[canonical_name]
+                    old_category = benchmark['_categories'][0]
+                    benchmark['_categories'] = [new_category]
+                    benchmark['_ai_categorized'] = True
+                    ai_corrected += 1
+
+                    if old_category == 'uncategorized':
+                        logger.info(f"  {canonical_name}: uncategorized → {new_category}")
+                    else:
+                        logger.info(f"  {canonical_name}: {old_category} → {new_category} (corrected)")
+
+            logger.info(f"\n✓ AI review complete:")
+            logger.info(f"  Corrections applied: {ai_corrected}")
+
+        # Build final output
+        for benchmark in benchmarks:
+            canonical_name = benchmark.get('canonical_name', '')
+            categories = benchmark.get('_categories', ['uncategorized'])
 
             # T087: Check if any category is newly created
             newly_created = False
@@ -213,6 +404,7 @@ def run(input_json: Optional[str] = None) -> str:
                 'primary_category': categories[0] if categories else 'uncategorized',
                 'taxonomy_version': taxonomy_version,
                 'newly_created_category': newly_created,
+                'ai_categorized': benchmark.get('_ai_categorized', False),
                 # Preserve metadata from Stage 4
                 'mention_count': benchmark.get('mention_count', 0),
                 'model_count': benchmark.get('model_count', 0),
@@ -272,11 +464,23 @@ def main():
         "--input",
         help="Path to consolidate_names JSON output (auto-finds if not specified)"
     )
+    parser.add_argument(
+        "--use-ai",
+        action="store_true",
+        default=True,
+        help="Use AI to categorize uncategorized benchmarks (default: True)"
+    )
+    parser.add_argument(
+        "--no-ai",
+        dest="use_ai",
+        action="store_false",
+        help="Disable AI categorization, use rule-based only"
+    )
 
     args = parser.parse_args()
 
     try:
-        output_path = run(args.input)
+        output_path = run(args.input, use_ai=args.use_ai)
         print(f"\n✓ Success! Output saved to: {output_path}")
         sys.exit(0)
 
