@@ -13,6 +13,7 @@ import json
 
 from ._claude_client import call_claude_json, is_anthropic_available
 from .google_search import scrape_google_search
+from .benchmark_validation import normalize_benchmark_name
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,20 @@ def consolidate_benchmarks(
         logger.info(f"Using fuzzy match threshold: {threshold:.2%}, web search: {enable_web_search}")
         if benchmark_aliases:
             logger.info(f"Loaded {len(benchmark_aliases)} benchmark aliases from config")
+
+        # Step 0: Normalize benchmark names (AIME variants, remove "from X" suffixes, etc.)
+        normalized_names = []
+        normalization_count = 0
+        for name in benchmark_names:
+            normalized = normalize_benchmark_name(name)
+            if normalized != name:
+                normalization_count += 1
+                logger.debug(f"Normalized: '{name}' → '{normalized}'")
+            normalized_names.append(normalized)
+
+        benchmark_names = normalized_names
+        if normalization_count > 0:
+            logger.info(f"Normalized {normalization_count} benchmark name variants")
 
         # Step 1: Apply benchmark aliases (resolve known alternate names)
         benchmark_names = _apply_aliases(benchmark_names, benchmark_aliases)

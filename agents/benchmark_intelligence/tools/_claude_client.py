@@ -337,6 +337,156 @@ def call_claude_json(
         raise RuntimeError(f"Invalid JSON response from Claude: {e}")
 
 
+def call_claude_vision_json(
+    prompt: str,
+    image_data: str,
+    image_type: str = "image/png",
+    system_prompt: Optional[str] = None,
+    model: str = "claude-sonnet-4-20250514",
+    max_tokens: int = 4096,
+    api_key: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Call Claude API with vision (image) and parse JSON response.
+
+    Args:
+        prompt: The user prompt/message
+        image_data: Base64-encoded image data
+        image_type: MIME type of image (e.g., "image/png", "image/jpeg")
+        system_prompt: Optional system prompt
+        model: Claude model to use
+        max_tokens: Maximum tokens in response
+        api_key: Anthropic API key
+
+    Returns:
+        Parsed JSON response as dictionary
+
+    Raises:
+        RuntimeError: If API call fails or response is not valid JSON
+        ValueError: If Claude access is not available
+
+    Example:
+        >>> import base64
+        >>> with open("chart.png", "rb") as f:
+        ...     img_b64 = base64.b64encode(f.read()).decode('utf-8')
+        >>> result = call_claude_vision_json(
+        ...     "Extract benchmarks from this chart",
+        ...     image_data=img_b64,
+        ...     image_type="image/png"
+        ... )
+    """
+    # Add JSON instruction to prompt if not already present
+    if "```json" not in prompt.lower() and "provide your response as a json" not in prompt.lower():
+        prompt = prompt + "\n\nProvide your response as a JSON object."
+
+    # Detect environment and get client
+    environment = detect_environment()
+    logger.info(f"Claude environment: {environment.value}")
+
+    try:
+        # Get appropriate client
+        if environment == ClaudeEnvironment.AMBIENT:
+            # Use Vertex AI via anthropic[vertex] package
+            logger.info("Using Ambient's native Vertex AI authentication")
+            from anthropic import AnthropicVertex
+
+            project_id = os.getenv("ANTHROPIC_VERTEX_PROJECT_ID", "ambient-code-platform")
+            region = os.getenv("ANTHROPIC_VERTEX_REGION", "us-east5")
+
+            client = AnthropicVertex(
+                project_id=project_id,
+                region=region,
+            )
+
+            # Convert model to Vertex format
+            model = _convert_to_vertex_model_id(model)
+
+        elif environment == ClaudeEnvironment.VERTEX_AI:
+            # Use Vertex AI
+            from anthropic import AnthropicVertex
+
+            project_id = os.getenv("ANTHROPIC_VERTEX_PROJECT_ID")
+            if not project_id:
+                raise ValueError("ANTHROPIC_VERTEX_PROJECT_ID not set for Vertex AI")
+
+            region = os.getenv("ANTHROPIC_VERTEX_REGION", "us-east5")
+            client = AnthropicVertex(project_id=project_id, region=region)
+
+            # Convert model to Vertex format
+            model = _convert_to_vertex_model_id(model)
+
+        else:
+            # Use standard Anthropic API
+            from anthropic import Anthropic
+
+            client_api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
+            if not client_api_key:
+                raise ValueError(_get_helpful_error_message(environment))
+
+            client = Anthropic(api_key=client_api_key)
+
+        # Build messages with vision content
+        messages = [{
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": image_type,
+                        "data": image_data,
+                    },
+                },
+                {
+                    "type": "text",
+                    "text": prompt,
+                },
+            ],
+        }]
+
+        # Make API call
+        logger.debug(f"Calling Claude Vision API (model: {model}, max_tokens: {max_tokens})")
+
+        kwargs = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "messages": messages,
+            "temperature": 0.0,  # Use 0 for deterministic JSON extraction
+        }
+
+        if system_prompt:
+            kwargs["system"] = system_prompt
+
+        response = client.messages.create(**kwargs)
+
+        # Extract text from response
+        if response.content and len(response.content) > 0:
+            response_text = response.content[0].text
+            logger.debug(f"Claude Vision API call successful, response length: {len(response_text)}")
+
+            # Extract and parse JSON
+            json_text = _extract_json_from_response(response_text)
+
+            try:
+                result = json.loads(json_text)
+                logger.debug(f"Successfully parsed JSON response: {len(json_text)} chars")
+                return result
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse JSON response: {e}")
+                logger.debug(f"Attempted to parse: {json_text[:500]}...")
+                raise RuntimeError(f"Invalid JSON response from Claude Vision: {e}")
+
+        raise RuntimeError("Empty response from Claude Vision API")
+
+    except ValueError:
+        # Re-raise ValueError (configuration issues)
+        raise
+    except Exception as e:
+        logger.error(f"Claude Vision API call failed: {e}")
+        _log_troubleshooting_info(environment, str(e))
+        raise RuntimeError(f"Failed to call Claude Vision API: {e}")
+
+
 def _extract_json_from_response(text: str) -> str:
     """
     Extract JSON from Claude's response.

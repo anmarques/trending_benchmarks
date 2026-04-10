@@ -489,6 +489,103 @@ Cannot extract absolute score (requires baseline), mark as null but note in meta
 ### Ambiguous Names
 If unsure about exact benchmark name, extract as written and flag for manual review.
 
+## What NOT to Extract (Critical Exclusions)
+
+**DO NOT extract the following as benchmarks:**
+
+### 1. Model Names & Model-Specific Products
+- **AI Model Names**: Qwen, Llama, GPT, Claude, Gemini, Mistral, DeepSeek, Phi, GLM, InternLM, Ministral, etc.
+- **Model Variants**: Qwen3-8B, Llama-3.1-70B, GPT-4o, Claude-3.5-Sonnet, Gemini-2.0-Flash, etc.
+- **Model Products**: "Llama Prompt Guard", "Gemini Embedding", "granite-embedding-english-r2"
+- **Pattern**: If it contains a model family name + version/size/product, it's NOT a benchmark
+
+**Examples of model names to REJECT:**
+- ❌ "Ministral 3 14B"
+- ❌ "GLM-4.5-Air"
+- ❌ "Qwen3-Coder-480B-A35B-Instruct"
+- ❌ "DeepSeek-R1"
+- ❌ "Llama Prompt Guard 1"
+- ❌ "Gemini Embedding"
+- ❌ "granite-embedding-english-r2"
+
+### 2. Single Generic Words
+- **Common words**: spotting, reasoning, performance, accuracy, evaluation, testing
+- **Rule**: Single words (< 6 characters) without context are NOT benchmarks
+- **Exception**: Known short benchmark names like MATH, MMLU, ARC, GSM8K
+
+**Examples to REJECT:**
+- ❌ "spotting"
+- ❌ "test"
+- ❌ "eval"
+
+### 3. Synthetic Dataset Descriptions
+- **Pattern**: "Synthetic X from [Model]"
+- **Rule**: If it describes a synthetic dataset created by a specific model, it's NOT a standard benchmark
+- **Action**: Extract the base name only, remove the "from [Model]" suffix
+
+**Examples:**
+- ❌ "Synthetic Art of Problem Solving from DeepSeek-R1" → REJECT (not a benchmark)
+- ✅ "Synthetic SWE-Gym from Qwen3-Coder" → Extract as "Synthetic SWE-Gym" (remove suffix)
+
+### 4. Tool/Framework Names
+- **Technical tools**: τ²bench, TensorFlow, PyTorch, Hugging Face
+- **Unicode artifacts**: Encoded characters like \u03c4\u00b2bench
+- **Rule**: Framework and tool names are NOT benchmarks
+
+**Examples to REJECT:**
+- ❌ "τ²bench"
+- ❌ "\u03c4\u00b2bench"
+- ❌ "PyTorch Benchmark Suite" (unless referring to a specific standardized eval)
+
+### 5. Table/Section Headers & Metadata
+- **Markdown headers**: `**Reasoning**`, `**Long Context**`, `##Section Title`
+- **Bracketed descriptions**: `[Advanced Reasoning Benchmark]`, `[AI2's Reasoning Challenge]`
+- **Category labels**: "General Multimodal", "Long Document", "Context Length"
+- **Table column headers**: These appear in result tables but are NOT benchmark names
+
+**Examples to REJECT:**
+- ❌ `**Reasoning**` (markdown bold - this is a section header)
+- ❌ `**General Multimodal**` (category header)
+- ❌ `[Advanced Reasoning Benchmark]` (bracketed description)
+- ❌ "Context Length" (table column header, not a benchmark)
+
+### 6. Training Data Descriptions
+- **Synthetic datasets**: "Synthetic Math", "Synthetic Code" (training data, not eval benchmarks)
+- **SFT datasets**: "Code SFT", "General SFT" (supervised fine-tuning data)
+- **Crawl data**: "Common Crawl Code", "Common Crawl Text"
+
+**Examples to REJECT:**
+- ❌ "Synthetic Math" (training data)
+- ❌ "Code SFT" (fine-tuning dataset)
+- ❌ "Common Crawl Code" (web crawl data)
+
+### 7. URLs, Badges & Other Metadata
+- **URLs, badges, shields**: https://, ![badge], [![status]]
+- **Author names**: "John Smith", "OpenAI Team"
+- **Company names**: "Meta AI", "Google DeepMind"
+- **Dates**: "2024", "April 2025" (unless part of benchmark name like "AIME 2024")
+
+### 6. Generic Benchmark Descriptions
+- **Not specific enough**: "general reasoning", "code evaluation", "math problems"
+- **Rule**: Must be a named, standardized benchmark with clear identity
+- **Exception**: Some descriptive names are valid if they're established benchmarks
+
+## Validation Rules for Extracted Benchmarks
+
+A valid benchmark must meet ALL of these criteria:
+
+1. **Has a recognizable name**: Appears in benchmark literature, leaderboards, or papers
+2. **Is standardized**: Can be evaluated consistently across different models
+3. **Is NOT a model name**: Doesn't match known AI model patterns
+4. **Has evaluation context**: Associated with scores, metrics, or evaluation results in the text
+5. **Is specific**: Not a generic category like "reasoning" or "coding"
+
+**When in doubt:**
+- If it looks like a model name → REJECT
+- If it's a single generic word → REJECT
+- If it contains "from [Model]" → Remove suffix or REJECT if nothing remains
+- If you're unsure → Extract it (consolidation step will handle edge cases)
+
 ## Quality Checks
 
 1. **Score validation**: Most should be 0-100 for accuracy/percentage metrics

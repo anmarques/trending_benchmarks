@@ -109,6 +109,201 @@ def _filter_benchmark_sections(sections: List[Dict[str, Any]]) -> List[Dict[str,
     return filtered
 
 
+def _extract_images_from_pdf(pdf_content: bytes) -> List[Dict[str, Any]]:
+    """
+    Extract embedded images from PDF pages.
+
+    Args:
+        pdf_content: PDF file content as bytes
+
+    Returns:
+        List of image dictionaries with:
+            - image_data: Image bytes
+            - page_num: Page number where image was found
+            - width: Image width in pixels
+            - height: Image height in pixels
+    """
+    try:
+        import pdfplumber
+        from PIL import Image
+
+        images = []
+
+        with pdfplumber.open(io.BytesIO(pdf_content)) as pdf:
+            for page_num, page in enumerate(pdf.pages, 1):
+                # Extract images from this page
+                page_images = page.images
+
+                if not page_images:
+                    continue
+
+                logger.debug(f"Page {page_num}: Found {len(page_images)} embedded images")
+
+                for img_idx, img_info in enumerate(page_images):
+                    try:
+                        # Get image object
+                        # pdfplumber provides image metadata, need to extract actual image
+                        x0 = img_info.get('x0', 0)
+                        y0 = img_info.get('top', 0)
+                        x1 = img_info.get('x1', page.width)
+                        y1 = img_info.get('bottom', page.height)
+
+                        # Crop the image area from the page
+                        cropped = page.crop((x0, y0, x1, y1))
+                        img = cropped.to_image(resolution=150)
+
+                        # Convert to bytes
+                        img_buffer = io.BytesIO()
+                        img.save(img_buffer, format='PNG')
+                        img_bytes = img_buffer.getvalue()
+
+                        if len(img_bytes) < 1000:  # Skip very small images (likely icons/decorations)
+                            logger.debug(f"Page {page_num}, image {img_idx}: Too small ({len(img_bytes)} bytes), skipping")
+                            continue
+
+                        images.append({
+                            'image_data': img_bytes,
+                            'page_num': page_num,
+                            'width': int(x1 - x0),
+                            'height': int(y1 - y0),
+                            'index': img_idx
+                        })
+
+                        logger.debug(
+                            f"Page {page_num}, image {img_idx}: Extracted "
+                            f"({int(x1-x0)}x{int(y1-y0)}, {len(img_bytes)} bytes)"
+                        )
+
+                    except Exception as e:
+                        logger.warning(f"Page {page_num}, image {img_idx}: Failed to extract: {e}")
+                        continue
+
+        logger.info(f"Extracted {len(images)} images from PDF")
+        return images
+
+    except ImportError:
+        logger.error("pdfplumber not installed. Install with: pip install pdfplumber")
+        return []
+    except Exception as e:
+        logger.error(f"Failed to extract images from PDF: {e}")
+        return []
+
+
+def _extract_from_image_with_vision(image_bytes: bytes, source_name: str, max_tokens: int = 16384) -> Dict[str, Any]:
+    """
+    Extract benchmarks from image using Claude vision API.
+
+    Args:
+        image_bytes: Image content as bytes (PNG/JPEG)
+        source_name: Name/identifier of the source
+        max_tokens: Maximum tokens in response
+
+    Returns:
+        Dictionary with extracted benchmarks and metadata
+    """
+    try:
+        # Encode image to base64
+        image_b64 = base64.b64encode(image_bytes).decode('utf-8')
+
+        # Determine image type
+        image_type = "image/png"
+        if image_bytes[:2] == b'\xff\xd8':  # JPEG magic number
+            image_type = "image/jpeg"
+
+        # Build vision prompt
+        prompt = _build_vision_extraction_prompt()
+
+        # Call Claude with vision
+        from ._claude_client import call_claude_vision_json
+
+        result = call_claude_vision_json(
+            prompt=prompt,
+            image_data=image_b64,
+            image_type=image_type,
+            max_tokens=max_tokens
+        )
+
+        # Validate result
+        if not isinstance(result, dict):
+            logger.warning("Vision API response is not a dict")
+            return {"benchmarks": [], "metadata": {"error": "invalid_response"}}
+
+        if "benchmarks" not in result:
+            result["benchmarks"] = []
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Vision extraction failed: {e}")
+        return {
+            "benchmarks": [],
+            "metadata": {
+                "error": str(e),
+                "extraction_method": "vision_failed"
+            }
+        }
+
+
+def extract_benchmarks_from_image(
+    image_content: bytes,
+    source_name: Optional[str] = None,
+    max_tokens: int = 16384,
+) -> Dict[str, Any]:
+    """
+    Extract benchmarks from a standalone image (chart, figure, screenshot).
+
+    Used for images embedded in blog posts or documentation.
+
+    Args:
+        image_content: Image file content as bytes (PNG, JPEG, etc.)
+        source_name: Name/identifier of the source
+        max_tokens: Maximum tokens in response
+
+    Returns:
+        Dictionary containing extracted benchmark data:
+            - benchmarks: List of benchmark entries
+            - metadata: Extraction metadata
+
+    Example:
+        >>> with open("benchmark_chart.png", "rb") as f:
+        ...     img_bytes = f.read()
+        >>> result = extract_benchmarks_from_image(img_bytes, source_name="Blog Post Chart")
+        >>> print(f"Found {len(result['benchmarks'])} benchmarks")
+    """
+    try:
+        if not image_content or not isinstance(image_content, bytes):
+            raise ValueError("image_content must be non-empty bytes")
+
+        if len(image_content) < 100:
+            logger.warning("Image content is very small, may not be valid")
+            return _empty_result(source_name, "image_too_small")
+
+        logger.info(f"Extracting benchmarks from image ({len(image_content)} bytes)")
+
+        # Extract using vision API
+        result = _extract_from_image_with_vision(image_content, source_name or "unknown", max_tokens)
+
+        # Add metadata
+        if "metadata" not in result:
+            result["metadata"] = {}
+
+        result["metadata"]["document_source"] = source_name or "unknown"
+        result["metadata"]["extraction_date"] = datetime.utcnow().isoformat()
+        result["metadata"]["total_benchmarks"] = len(result.get("benchmarks", []))
+        result["metadata"]["source_type"] = "image_vision"
+        result["metadata"]["extraction_method"] = "claude_vision_api"
+
+        logger.info(f"Extracted {len(result['benchmarks'])} benchmarks from image using vision AI")
+
+        return result
+
+    except ValueError:
+        raise
+    except Exception as e:
+        logger.error(f"Image vision extraction failed: {e}")
+        raise RuntimeError(f"Failed to extract benchmarks from image: {e}")
+
+
 def extract_benchmarks_from_pdf(
     pdf_content: bytes,
     source_name: Optional[str] = None,
@@ -116,25 +311,21 @@ def extract_benchmarks_from_pdf(
     chunk_size: int = 8,
 ) -> Dict[str, Any]:
     """
-    Extract benchmarks from PDF using two-pass section filtering + chunked AI extraction.
+    Extract benchmarks from PDF using vision AI with text fallback.
 
-    Strategy:
+    Strategy (FR-004):
     1. Extract section structure from PDF (titles + page ranges)
     2. Filter to benchmark-relevant sections (Evaluation, Results, etc.)
-    3. Split filtered pages into chunks (default: 8 pages per chunk)
-    4. Extract benchmarks from each chunk separately
-    5. Merge results from all chunks
-
-    This approach ensures robustness for benchmark-heavy papers by:
-    - Reducing input tokens 50-80% via section filtering
-    - Processing in smaller chunks to avoid JSON truncation
-    - Handling papers with 100+ benchmarks reliably
+    3. Extract embedded images (charts, figures, tables) from relevant sections
+    4. Send each extracted image to Claude vision API for analysis
+    5. If no images found, fall back to text-based extraction
+    6. Merge results from all images/chunks
 
     Args:
         pdf_content: PDF file content as bytes
         source_name: Name/identifier of the source document
-        max_tokens: Maximum tokens in response per chunk
-        chunk_size: Pages per chunk (default: 8)
+        max_tokens: Maximum tokens in response per chunk/image
+        chunk_size: Pages per chunk for text fallback (default: 8)
 
     Returns:
         Dictionary containing extracted benchmark data:
@@ -225,53 +416,121 @@ def extract_benchmarks_from_pdf(
         chunks_processed = 0
         chunks_failed = 0
 
-        with pdfplumber.open(io.BytesIO(pdf_content)) as pdf:
-            for chunk_idx, chunk_pages in enumerate(page_chunks, 1):
-                try:
-                    # Extract text from this chunk
-                    chunk_text = ""
-                    for page_num in chunk_pages:
-                        page = pdf.pages[page_num - 1]  # pdfplumber uses 0-based indexing
-                        page_text = page.extract_text()
-                        if page_text:
-                            chunk_text += f"\n\n=== Page {page_num} ===\n\n{page_text}"
+        # Always attempt vision extraction first (FR-004)
+        vision_successful = False
+        logger.info(f"Attempting vision AI extraction - extracting embedded images from PDF")
 
-                    if not chunk_text or len(chunk_text) < 100:
-                        logger.warning(f"Chunk {chunk_idx}/{len(page_chunks)}: No text extracted, skipping")
+        # Extract all embedded images from the PDF
+        pdf_images = _extract_images_from_pdf(pdf_content)
+
+        if not pdf_images:
+            logger.info("No images found in PDF, using text extraction")
+        else:
+            # Filter images to only those in relevant pages
+            relevant_images = [
+                img for img in pdf_images
+                if img['page_num'] in relevant_pages
+            ]
+
+            if not relevant_images:
+                logger.info("No images in relevant sections, using text extraction")
+            else:
+                vision_successful = True
+                logger.info(
+                    f"Found {len(pdf_images)} total images, "
+                    f"{len(relevant_images)} in relevant sections"
+                )
+
+                # Process each image with vision API
+                for img_idx, img_info in enumerate(relevant_images, 1):
+                    try:
+                        page_num = img_info['page_num']
+                        img_bytes = img_info['image_data']
+
+                        logger.debug(
+                            f"Image {img_idx}/{len(relevant_images)}: "
+                            f"Analyzing page {page_num} image "
+                            f"({img_info['width']}x{img_info['height']}, {len(img_bytes)} bytes)"
+                        )
+
+                        # Extract benchmarks from image using vision API
+                        img_result = _extract_from_image_with_vision(
+                            img_bytes,
+                            f"{source_name} - Page {page_num} Image {img_info['index']}",
+                            max_tokens
+                        )
+
+                        img_benchmarks = img_result.get("benchmarks", [])
+                        all_benchmarks.extend(img_benchmarks)
+
+                        if img_benchmarks:
+                            logger.info(
+                                f"Image {img_idx}/{len(relevant_images)}: "
+                                f"Extracted {len(img_benchmarks)} benchmarks from page {page_num}"
+                            )
+
+                    except Exception as e:
+                        logger.error(f"Image {img_idx}/{len(relevant_images)} failed: {e}")
                         chunks_failed += 1
-                        continue
+                        # Continue processing other images
 
-                    logger.info(
-                        f"Chunk {chunk_idx}/{len(page_chunks)}: Extracted {len(chunk_text)} chars "
-                        f"from pages {chunk_pages[0]}-{chunk_pages[-1]}"
-                    )
+                chunks_processed = len(relevant_images) - chunks_failed
+                logger.info(
+                    f"Vision extraction complete: Analyzed {chunks_processed}/{len(relevant_images)} images"
+                )
 
-                    # Build extraction prompt for this chunk
-                    prompt = _build_text_extraction_prompt(chunk_text)
+        # Fall back to text extraction if no images found
+        if not vision_successful:
+            # Text mode: Extract text and use standard text extraction
+            logger.info(f"Using text-based extraction for {len(page_chunks)} chunks")
 
-                    # Use standard text extraction
-                    from ._claude_client import call_claude_json
+            with pdfplumber.open(io.BytesIO(pdf_content)) as pdf:
+                for chunk_idx, chunk_pages in enumerate(page_chunks, 1):
+                    try:
+                        # Extract text from this chunk
+                        chunk_text = ""
+                        for page_num in chunk_pages:
+                            page = pdf.pages[page_num - 1]  # pdfplumber uses 0-based indexing
+                            page_text = page.extract_text()
+                            if page_text:
+                                chunk_text += f"\n\n=== Page {page_num} ===\n\n{page_text}"
 
-                    logger.debug(f"Chunk {chunk_idx}/{len(page_chunks)}: Calling Claude")
+                        if not chunk_text or len(chunk_text) < 100:
+                            logger.warning(f"Chunk {chunk_idx}/{len(page_chunks)}: No text extracted, skipping")
+                            chunks_failed += 1
+                            continue
 
-                    chunk_result = call_claude_json(
-                        prompt=prompt,
-                        max_tokens=max_tokens
-                    )
+                        logger.info(
+                            f"Chunk {chunk_idx}/{len(page_chunks)}: Extracted {len(chunk_text)} chars "
+                            f"from pages {chunk_pages[0]}-{chunk_pages[-1]}"
+                        )
 
-                    # Merge benchmarks from this chunk
-                    chunk_benchmarks = chunk_result.get("benchmarks", [])
-                    all_benchmarks.extend(chunk_benchmarks)
-                    chunks_processed += 1
+                        # Build extraction prompt for this chunk
+                        prompt = _build_text_extraction_prompt(chunk_text)
 
-                    logger.info(
-                        f"Chunk {chunk_idx}/{len(page_chunks)}: Extracted {len(chunk_benchmarks)} benchmarks"
-                    )
+                        # Use standard text extraction
+                        from ._claude_client import call_claude_json
 
-                except Exception as e:
-                    logger.error(f"Chunk {chunk_idx}/{len(page_chunks)} failed: {e}")
-                    chunks_failed += 1
-                    # Continue processing other chunks
+                        logger.debug(f"Chunk {chunk_idx}/{len(page_chunks)}: Calling Claude")
+
+                        chunk_result = call_claude_json(
+                            prompt=prompt,
+                            max_tokens=max_tokens
+                        )
+
+                        # Merge benchmarks from this chunk
+                        chunk_benchmarks = chunk_result.get("benchmarks", [])
+                        all_benchmarks.extend(chunk_benchmarks)
+                        chunks_processed += 1
+
+                        logger.info(
+                            f"Chunk {chunk_idx}/{len(page_chunks)}: Extracted {len(chunk_benchmarks)} benchmarks"
+                        )
+
+                    except Exception as e:
+                        logger.error(f"Chunk {chunk_idx}/{len(page_chunks)} failed: {e}")
+                        chunks_failed += 1
+                        # Continue processing other chunks
 
         if not all_benchmarks and chunks_processed == 0:
             logger.warning("No benchmarks extracted from any chunk")
@@ -301,20 +560,32 @@ def extract_benchmarks_from_pdf(
         result["metadata"]["document_source"] = source_name or "unknown"
         result["metadata"]["extraction_date"] = datetime.utcnow().isoformat()
         result["metadata"]["total_benchmarks"] = len(result.get("benchmarks", []))
-        result["metadata"]["source_type"] = "pdf_vision"
-        result["metadata"]["extraction_method"] = "claude_vision_api_with_section_filtering_and_chunking"
+        result["metadata"]["source_type"] = "pdf_vision" if vision_successful else "pdf_text"
+        result["metadata"]["extraction_method"] = (
+            "claude_vision_api_from_embedded_images" if vision_successful
+            else "claude_text_extraction_with_section_filtering_and_chunking"
+        )
+        result["metadata"]["vision_used"] = vision_successful
         result["metadata"]["total_pages"] = total_pages
         result["metadata"]["pages_processed"] = len(relevant_pages)
         result["metadata"]["sections_found"] = len(sections)
         result["metadata"]["sections_used"] = len(relevant_sections)
-        result["metadata"]["chunks_total"] = len(page_chunks)
-        result["metadata"]["chunks_processed"] = chunks_processed
-        result["metadata"]["chunks_failed"] = chunks_failed
-        result["metadata"]["chunk_size"] = chunk_size
 
+        if vision_successful:
+            result["metadata"]["images_total"] = len(pdf_images) if 'pdf_images' in locals() else 0
+            result["metadata"]["images_relevant"] = len(relevant_images) if 'relevant_images' in locals() else 0
+            result["metadata"]["images_processed"] = chunks_processed
+            result["metadata"]["images_failed"] = chunks_failed
+        else:
+            result["metadata"]["chunks_total"] = len(page_chunks) if 'page_chunks' in locals() else 0
+            result["metadata"]["chunks_processed"] = chunks_processed
+            result["metadata"]["chunks_failed"] = chunks_failed
+            result["metadata"]["chunk_size"] = chunk_size
+
+        extraction_mode = "vision AI (embedded images)" if vision_successful else "text-based AI"
         logger.info(
-            f"Extracted {len(result['benchmarks'])} benchmarks from PDF using chunked section-filtered AI extraction "
-            f"({len(relevant_pages)}/{total_pages} pages, {chunks_processed}/{len(page_chunks)} chunks)"
+            f"Extracted {len(result['benchmarks'])} benchmarks from PDF using {extraction_mode} extraction "
+            f"({len(relevant_pages)}/{total_pages} pages)"
         )
 
         return result
@@ -324,6 +595,55 @@ def extract_benchmarks_from_pdf(
     except Exception as e:
         logger.error(f"PDF vision extraction failed: {e}")
         raise RuntimeError(f"Failed to extract benchmarks from PDF: {e}")
+
+
+def _build_vision_extraction_prompt() -> str:
+    """
+    Build the prompt for vision-based extraction from images/PDFs.
+
+    Returns:
+        Prompt string for Claude vision API
+    """
+    return """Extract all benchmark evaluation results from this image.
+
+This image may contain:
+- Benchmark comparison tables
+- Performance charts/graphs
+- Evaluation results
+- Score listings
+
+Extract all benchmarks you can identify from the image.
+
+For each benchmark, extract:
+{
+  "name": "benchmark name (e.g., MMLU, GSM8K, HumanEval)",
+  "score": numeric_value_or_null,
+  "metric": "accuracy|pass@1|f1|wer|etc",
+  "context": {
+    "shot_count": number_or_null,
+    "subset": "specific variant if any (e.g., challenge, easy)",
+    "special_conditions": "CoT|PoT|base|instruct|with_subtitles|etc"
+  },
+  "source_location": "description of where in image (e.g., Table 2, Bar Chart)"
+}
+
+Return ONLY valid JSON in this exact format:
+{
+  "benchmarks": [ ...array of benchmark objects... ],
+  "metadata": {
+    "total_benchmarks": number,
+    "extraction_confidence": "high|medium|low",
+    "image_contains": "table|chart|both|text"
+  }
+}
+
+Important:
+- Extract ALL benchmarks visible in the image
+- Include shot count if shown (5-shot, 0-shot, etc.)
+- Include variant details (CoT, subset names, etc.)
+- If a score is unclear or not shown, use null
+- Look carefully at charts - extract benchmark names from axes, legends, and labels
+- Return ONLY the JSON object, no other text"""
 
 
 def _build_text_extraction_prompt(pdf_text: str) -> str:

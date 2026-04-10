@@ -30,8 +30,14 @@ from agents.benchmark_intelligence.tools.parse_table import (
 from agents.benchmark_intelligence.tools.extract_benchmarks_vision import extract_benchmarks_from_pdf
 from agents.benchmark_intelligence.concurrent_processor import ConcurrentModelProcessor
 from agents.benchmark_intelligence.tools.cache import CacheManager
+from agents.benchmark_intelligence.tools.document_cache import DocumentCache
 from agents.benchmark_intelligence.error_aggregator import ErrorAggregator
 from agents.benchmark_intelligence.progress_tracker import ProgressTracker
+from agents.benchmark_intelligence.tools.benchmark_validation import (
+    filter_benchmarks,
+    validate_benchmark_with_ai
+)
+from agents.benchmark_intelligence.tools._claude_client import is_anthropic_available
 
 
 logger = logging.getLogger(__name__)
@@ -134,6 +140,18 @@ def extract_benchmarks_from_model_docs(
                 )
                 benchmarks = extraction_result.get("benchmarks", [])
 
+            # Apply heuristic validation filters to remove false positives
+            # (model names, single words, markdown headers, etc.)
+            # Note: AI validation happens as post-processing on unique names
+            if benchmarks:
+                pre_filter_count = len(benchmarks)
+                benchmarks = filter_benchmarks(benchmarks)
+                if len(benchmarks) < pre_filter_count:
+                    logger.debug(
+                        f"  {model_id}: Filtered {pre_filter_count - len(benchmarks)} "
+                        f"false positives from {doc_type}"
+                    )
+
             # Add source attribution to all benchmarks
             for bench in benchmarks:
                 bench["model_id"] = model_id
@@ -176,7 +194,7 @@ def extract_benchmarks_from_model_docs(
     }
 
 
-def run(docs_json: Optional[str] = None, concurrency: int = 20) -> str:
+def run(docs_json: Optional[str] = None, concurrency: int = 20, use_document_cache: bool = True) -> str:
     """
     Execute Stage 3: Document parsing and benchmark extraction.
 
@@ -186,6 +204,7 @@ def run(docs_json: Optional[str] = None, concurrency: int = 20) -> str:
     Args:
         docs_json: Path to find_documents JSON output (auto-finds if not specified)
         concurrency: Number of parallel workers (default: 20)
+        use_document_cache: Use document-level caching to deduplicate fetches (default: True)
 
     Returns:
         Path to generated JSON output file
@@ -216,6 +235,7 @@ def run(docs_json: Optional[str] = None, concurrency: int = 20) -> str:
     logger.info(f"Configuration:")
     logger.info(f"  Models to process: {len(models)}")
     logger.info(f"  Concurrency: {concurrency} workers")
+    logger.info(f"  Document caching: {'Enabled' if use_document_cache else 'Disabled'}")
     logger.info(f"  AI extraction: Enabled (Claude)")
 
     # Initialize error aggregator and progress tracker
@@ -226,31 +246,69 @@ def run(docs_json: Optional[str] = None, concurrency: int = 20) -> str:
         enable_console_updates=True
     )
 
-    # Initialize concurrent processor
-    processor = ConcurrentModelProcessor(max_workers=concurrency)
+    # Use document-level caching if enabled
+    if use_document_cache:
+        logger.info("\n" + "=" * 70)
+        logger.info("Document-Level Caching Enabled")
+        logger.info("=" * 70)
 
-    logger.info(f"\nProcessing {len(models)} models in parallel...")
+        # Initialize document cache
+        doc_cache = DocumentCache()
 
-    # Start progress tracking
-    progress_tracker.start()
+        # Fetch and parse all unique documents once
+        doc_cache.fetch_and_parse_all(models, max_workers=concurrency)
 
-    # Wrapper function to pass error_aggregator and progress_tracker
-    def process_with_tracking(model_entry):
-        return extract_benchmarks_from_model_docs(
-            model_entry,
-            error_aggregator=error_aggregator,
-            progress_tracker=progress_tracker
+        # Get cache stats
+        cache_stats = doc_cache.get_cache_stats()
+        logger.info(f"\nCache Statistics:")
+        logger.info(f"  Unique URLs: {cache_stats['unique_urls']}")
+        logger.info(f"  Total references: {cache_stats['total_references']}")
+        logger.info(f"  Deduplication savings: {cache_stats['deduplication_savings']} fetches avoided")
+        logger.info(f"  Total benchmarks extracted: {cache_stats['total_benchmarks_extracted']}")
+
+        # Distribute cached results to models
+        logger.info(f"\nDistributing results to {len(models)} models...")
+        results = []
+        for model in models:
+            result = doc_cache.get_benchmarks_for_model(
+                model_id=model['model_id'],
+                documents=model.get('documents', [])
+            )
+            results.append(result)
+
+        logger.info(f"✓ Distributed benchmarks to {len(models)} models")
+
+    else:
+        # Original per-model processing (legacy mode)
+        logger.info("\n" + "=" * 70)
+        logger.info("Per-Model Processing (Legacy Mode)")
+        logger.info("=" * 70)
+
+        # Initialize concurrent processor
+        processor = ConcurrentModelProcessor(max_workers=concurrency)
+
+        logger.info(f"\nProcessing {len(models)} models in parallel...")
+
+        # Start progress tracking
+        progress_tracker.start()
+
+        # Wrapper function to pass error_aggregator and progress_tracker
+        def process_with_tracking(model_entry):
+            return extract_benchmarks_from_model_docs(
+                model_entry,
+                error_aggregator=error_aggregator,
+                progress_tracker=progress_tracker
+            )
+
+        # Process all models concurrently
+        results = processor.process_models(
+            models=models,
+            process_func=process_with_tracking,
+            progress_callback=None  # Progress tracker handles this now
         )
 
-    # Process all models concurrently
-    results = processor.process_models(
-        models=models,
-        process_func=process_with_tracking,
-        progress_callback=None  # Progress tracker handles this now
-    )
-
-    # Stop progress tracking
-    progress_tracker.stop()
+        # Stop progress tracking
+        progress_tracker.stop()
 
     # Aggregate statistics
     output_data = []
@@ -296,6 +354,93 @@ def run(docs_json: Optional[str] = None, concurrency: int = 20) -> str:
     logger.info(f"  Models without benchmarks: {models_without_benchmarks}")
     logger.info(f"  Avg benchmarks per model: {avg_benchmarks_per_model:.1f}")
 
+    # AI Validation: Validate benchmarks per model
+    logger.info(f"\n" + "=" * 70)
+    logger.info("AI Validation of Extracted Benchmarks")
+    logger.info("=" * 70)
+
+    logger.info(f"Models with benchmarks: {models_with_benchmarks}")
+    logger.info(f"Running AI validation (one call per model)...")
+    logger.info("")
+
+    ai_validation_results = {
+        'enabled': False,
+        'models_validated': 0,
+        'total_benchmarks_before': total_benchmarks,
+        'total_benchmarks_after': 0,
+        'total_rejected': 0
+    }
+
+    if is_anthropic_available() and output_data:
+        from agents.benchmark_intelligence.tools.benchmark_validation import validate_model_benchmarks_with_ai
+
+        ai_validation_results['enabled'] = True
+        models_processed = 0
+
+        for entry in output_data:
+            model_id = entry.get('model_id')
+            benchmarks = entry.get('benchmarks', [])
+
+            if not benchmarks:
+                continue
+
+            try:
+                # Validate all benchmarks for this model in one AI call
+                validation_result = validate_model_benchmarks_with_ai(
+                    model_id=model_id,
+                    benchmarks=benchmarks
+                )
+
+                valid_names = set(validation_result['valid_benchmarks'])
+                rejected = validation_result['rejected_benchmarks']
+
+                # Filter benchmarks to keep only valid ones
+                original_count = len(benchmarks)
+                filtered_benchmarks = [
+                    b for b in benchmarks
+                    if b.get('name') in valid_names
+                ]
+
+                entry['benchmarks'] = filtered_benchmarks
+                entry['benchmark_count'] = len(filtered_benchmarks)
+
+                rejected_count = original_count - len(filtered_benchmarks)
+                ai_validation_results['total_rejected'] += rejected_count
+
+                # Log results for this model
+                if rejected_count > 0:
+                    logger.info(f"  {model_id}:")
+                    logger.info(f"    ✓ Accepted: {len(filtered_benchmarks)}")
+                    logger.info(f"    ✗ Rejected: {rejected_count}")
+                    for rej in rejected:
+                        logger.info(f"       - {rej.get('name')}: {rej.get('reason', 'No reason')[:60]}...")
+
+                models_processed += 1
+
+            except Exception as e:
+                logger.warning(f"  AI validation failed for {model_id}: {e}")
+
+        ai_validation_results['models_validated'] = models_processed
+
+        # Recalculate statistics after AI filtering
+        total_benchmarks = sum(entry['benchmark_count'] for entry in output_data)
+        models_with_benchmarks = sum(1 for e in output_data if e['benchmark_count'] > 0)
+        models_without_benchmarks = len(models) - models_with_benchmarks
+        avg_benchmarks_per_model = total_benchmarks / len(models) if models else 0
+
+        ai_validation_results['total_benchmarks_after'] = total_benchmarks
+
+        logger.info("")
+        logger.info(f"✓ AI validation complete:")
+        logger.info(f"  Models validated: {models_processed}")
+        logger.info(f"  Benchmarks before: {ai_validation_results['total_benchmarks_before']}")
+        logger.info(f"  Benchmarks after: {total_benchmarks}")
+        logger.info(f"  Total rejected: {ai_validation_results['total_rejected']}")
+    else:
+        logger.info("AI validation skipped (Claude not available)")
+
+    logger.info("=" * 70)
+
     if errors_list:
         logger.warning(f"  Errors encountered: {len(errors_list)}")
 
@@ -316,15 +461,17 @@ def run(docs_json: Optional[str] = None, concurrency: int = 20) -> str:
             "error_summary": error_summary,
             "models_without_benchmarks": models_without_benchmarks,
             "models_with_benchmarks": models_with_benchmarks,
-            "total_benchmarks": total_benchmarks
+            "total_benchmarks": total_benchmarks,
+            "ai_validation": ai_validation_results
         }
     )
 
-    # Get processing summary
-    summary = processor.get_summary()
-    logger.info(f"\nProcessing summary:")
-    logger.info(f"  Completed: {summary['completed']}")
-    logger.info(f"  Failed: {summary['failed']}")
+    # Get processing summary (only available in legacy mode)
+    if not use_document_cache:
+        summary = processor.get_summary()
+        logger.info(f"\nProcessing summary:")
+        logger.info(f"  Completed: {summary['completed']}")
+        logger.info(f"  Failed: {summary['failed']}")
 
     logger.info(f"\n✓ Stage 3 complete")
     logger.info(f"  Output: {output_path}")
@@ -348,11 +495,20 @@ def main():
         default=20,
         help="Number of parallel workers (default: 20)"
     )
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="Disable document-level caching (fetch each document per model)"
+    )
 
     args = parser.parse_args()
 
     try:
-        output_path = run(args.input, args.concurrency)
+        output_path = run(
+            docs_json=args.input,
+            concurrency=args.concurrency,
+            use_document_cache=not args.no_cache
+        )
         print(f"\n✓ Success! Output saved to: {output_path}")
         sys.exit(0)
 

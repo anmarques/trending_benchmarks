@@ -48,6 +48,11 @@ pdf_constraints:
   download_timeout_seconds: 120
   max_extracted_chars: 50000
 
+# Vision AI extraction configuration (FR-004)
+# Vision extraction is always attempted for PDFs with automatic fallback to text if no images found
+vision_extraction:
+  min_image_size_bytes: 1000  # Skip very small images (likely icons/decorations)
+
 # Retry policy configuration
 retry_policy:
   max_attempts: 3
@@ -65,11 +70,9 @@ parallelization:
   enabled: true
   timeout_per_document_seconds: 60
 
-# Benchmark consolidation configuration (T079)
+# Benchmark consolidation configuration
 consolidation:
   fuzzy_match_threshold: 0.90  # Threshold for treating benchmark names as same (0.0-1.0)
-  enable_web_search: true      # Enable web search disambiguation for ambiguous pairs
-  web_search_max_results: 3    # Number of search results to analyze
 
   # AI review threshold for questionable cases (0.70-0.89 similarity)
   ai_review_min_similarity: 0.70  # Below this, definitely different benchmarks
@@ -77,6 +80,7 @@ consolidation:
 
   # Benchmark aliases - known alternate names that should consolidate to canonical form
   # Format: "alternate_name": "canonical_name"
+  # Model cards are used as primary documentation source, with arXiv papers as supplementary
   benchmark_aliases:
     # ARC variants
     "ARC-C": "ARC-Challenge"
@@ -99,16 +103,302 @@ consolidation:
     "Ifeval": "IFEval"
     "ifeval": "IFEval"
 
+    # AIME variants (year formats)
+    "AIME24": "AIME 2024"
+    "AIME-24": "AIME 2024"
+    "AIME'24": "AIME 2024"
+    "AIME'24": "AIME 2024"
+    "MT-AIME24": "AIME 2024"
+    "MT-AIME-24": "AIME 2024"
+    "AIME 24": "AIME 2024"
+
+    "AIME25": "AIME 2025"
+    "AIME-25": "AIME 2025"
+    "AIME'25": "AIME 2025"
+    "AIME'25": "AIME 2025"
+    "MT-AIME25": "AIME 2025"
+    "MT-AIME-25": "AIME 2025"
+    "AIME 25": "AIME 2025"
+
     # Add more known aliases as discovered
 
 # Taxonomy configuration (T088)
 taxonomy:
   # Manual category overrides (takes precedence over AI classification)
-  # Format: benchmark_name: "Category Name"
+  # Format: benchmark_name: "category"
   category_overrides:
-    # Example overrides (uncomment and modify as needed):
-    # "MMLU": "Knowledge & General Understanding"
-    # "GSM8K": "Mathematical Reasoning"
+    # Knowledge
+    "Adversarial SQuAD": "knowledge"
+    "AGI EVAL": "knowledge"
+    "AGI Eval English": "knowledge"
+    "AGIEval-En": "knowledge"
+    "ARC": "knowledge"
+    "ARC-Challenge": "knowledge"
+    "ARC-e": "knowledge"
+    "ARC-Easy": "knowledge"
+    "BoolQ": "knowledge"
+    "C-SimpleQA": "knowledge"
+    "CMMLU": "knowledge"
+    "CommonSenseQA": "knowledge"
+    "Humanity's Last Exam": "knowledge"
+    "NaturalQuestions": "knowledge"
+    "OBQA": "knowledge"
+    "OpenBookQA": "knowledge"
+    "PIQA": "knowledge"
+    "QuAC": "knowledge"
+    "RACE": "knowledge"
+    "RACE High": "knowledge"
+    "RACE-Middle": "knowledge"
+    "SAT Reading": "knowledge"
+    "SimpleQA": "knowledge"
+    "SQuAD V2": "knowledge"
+    "TriviaQA": "knowledge"
+    "TruthfulQA": "knowledge"
+    "Webquest-QA": "knowledge"
+    "WikiText-103": "knowledge"
+
+    # Reasoning
+    "BBH CoT": "reasoning"
+    "BIG-Bench Hard": "reasoning"
+    "BigBench Extra Hard": "reasoning"
+    "CLUE WSC": "reasoning"
+    "DROP": "reasoning"
+    "GPQA": "reasoning"
+    "GPQA Diamond": "reasoning"
+    "HellaSwag": "reasoning"
+    "LSAT": "reasoning"
+    "MLogiQA": "reasoning"
+    "MUSR": "reasoning"
+    "Social IQA": "reasoning"
+    "SIQA": "reasoning"
+    "WinoGrande": "reasoning"
+    "ZebraLogic": "reasoning"
+
+    # Math
+    "AIME": "math"
+    "AIME 2024": "math"
+    "AIME 2025": "math"
+    "AMC 12 2024": "math"
+    "CMATH": "math"
+    "DeepMind Math": "math"
+    "GSM-8K": "math"
+    "GSM-Plus": "math"
+    "GSM8K Symbolic": "math"
+    "IMO-AnswerBench": "math"
+    "MATH": "math"
+    "MATH-Vision": "math"
+    "MathVista-Mini": "math"
+    "MGSM": "math"
+    "MiniF2F pass@1": "math"
+    "MiniF2F pass@32": "math"
+    "MT-AIME": "math"
+    "OlympiadBench": "math"
+    "SAT Math": "math"
+
+    # Coding
+    "BigCodeBench": "coding"
+    "Codeforces ELO": "coding"
+    "CRUX-I": "coding"
+    "CRUXEval-I": "coding"
+    "CRUXEval-I-cot": "coding"
+    "CRUXEval-O": "coding"
+    "CRUXEval-O-cot": "coding"
+    "Design2Code": "coding"
+    "HumanEval": "coding"
+    "HumanEval+": "coding"
+    "LiveCodeBench": "coding"
+    "LiveCodeBench v6": "coding"
+    "LiveCodeBench-Base": "coding"
+    "MBPP": "coding"
+    "MBPP EvalPlus": "coding"
+    "MBPP+": "coding"
+    "Multi-SWE-Bench": "coding"
+    "MultiPL-E": "coding"
+    "OJBench": "coding"
+    "RepoQA": "coding"
+    "SWE Verified": "coding"
+    "SWE-Bench": "coding"
+    "SWE-Bench Multilingual": "coding"
+    "SWE-Bench Pro": "coding"
+    "SWE-Bench Verified": "coding"
+
+    # Instruction
+    "FollowIR": "instruction"
+    "IF-Eval": "instruction"
+    "IFBench": "instruction"
+    "M-IFEval": "instruction"
+
+    # Alignment
+    "AlpacaEval 2.0": "alignment"
+    "AlignBench": "alignment"
+    "Arena-Hard": "alignment"
+    "Arena-Hard v2*": "alignment"
+    "Arena-Hard-Auto v2.0": "alignment"
+    "Arena-Hard-V2": "alignment"
+    "HHEM": "alignment"
+    "HHEM v2.1": "alignment"
+    "LiveBench": "alignment"
+    "LiveBench 20241125": "alignment"
+    "LiveBenchmark": "alignment"
+    "MT-Bench": "alignment"
+    "WritingBench": "alignment"
+
+    # Agent
+    "ACEBench": "agent"
+    "AndroidWorld": "agent"
+    "API-Bank": "agent"
+    "API-Bench": "agent"
+    "BFCL": "agent"
+    "BFCL v3": "agent"
+    "BFCL v4": "agent"
+    "CC-Bench - Tool Calling Success Rate": "agent"
+    "MUIRBENCH": "agent"
+    "OSWorld": "agent"
+    "OSWorld-G": "agent"
+    "OSWorld-Verified": "agent"
+    "ScreenSpot-V2": "agent"
+    "TauBench V2": "agent"
+    "TIR-Bench": "agent"
+    "WindowsAgentArena": "agent"
+    "ZEROBench": "agent"
+    "ZeroBench w/ tools": "agent"
+    "τ2-Bench": "agent"
+    "τ²-Bench": "agent"
+
+    # Longcontext
+    "InfiniteBench En.MC": "longcontext"
+    "InfiniteBench En.QA": "longcontext"
+    "LongBench v2": "longcontext"
+    "LongCodeArena": "longcontext"
+    "LongVideoBench": "longcontext"
+    "MMLongBench-DOC": "longcontext"
+    "QuALITY": "longcontext"
+    "RULER": "longcontext"
+    "SQuALITY": "longcontext"
+
+    # Vision
+    "7-Scenes": "vision"
+    "ActivityNet-QA": "vision"
+    "AI2D": "vision"
+    "AI2Diagram": "vision"
+    "BLINK": "vision"
+    "CharadesSTA": "vision"
+    "ChartQA": "vision"
+    "ChartQAPro": "vision"
+    "CountBench": "vision"
+    "CV-Bench": "vision"
+    "Design2Code": "vision"
+    "DL3DV": "vision"
+    "DocVQA": "vision"
+    "DTU": "vision"
+    "EmbSpatialBench": "vision"
+    "GOT benchmark": "vision"
+    "HallusionBench": "vision"
+    "iBims-1": "vision"
+    "InfoVQA": "vision"
+    "LVBench": "vision"
+    "MedXPertQA MM": "vision"
+    "MHalu": "vision"
+    "MLVU": "vision"
+    "MLVU-MCQ": "vision"
+    "MMBench": "vision"
+    "MMBench-V1.1": "vision"
+    "MMMU": "vision"
+    "MMMU Pro": "vision"
+    "MMStar": "vision"
+    "MMVet": "vision"
+    "MMVU": "vision"
+    "MotionBench": "vision"
+    "MTVQA": "vision"
+    "MVBench": "vision"
+    "NExT-QA": "vision"
+    "NYUv2": "vision"
+    "OCRBench": "vision"
+    "OCRBench-V2": "vision"
+    "ODInW13": "vision"
+    "OK VQA": "vision"
+    "OmniDocBench": "vision"
+    "OmniDocBench (v1.0)": "vision"
+    "OmniDocBench 1.5": "vision"
+    "OmniDocBench v1.5": "vision"
+    "PerceptionTest": "vision"
+    "PMC-VQA": "vision"
+    "RealWorldQA": "vision"
+    "RefCOCO": "vision"
+    "RefSpatialBench": "vision"
+    "RTVLM": "vision"
+    "SimpleVQA": "vision"
+    "SLAKE": "vision"
+    "SUNRGBD": "vision"
+    "TextVQA": "vision"
+    "TVQA": "vision"
+    "Video-MME": "vision"
+    "VideoMMMU": "vision"
+    "VITA-Bench": "vision"
+    "VizWiz VQA": "vision"
+    "VlmsAreBlind": "vision"
+    "VQAv2": "vision"
+    "VSI-Bench": "vision"
+    "WebSRC": "vision"
+
+    # Retrieval
+    "ClimateFEVERHardNegatives": "retrieval"
+    "CMTEB": "retrieval"
+    "CMTEB-R": "retrieval"
+    "FRAMES": "retrieval"
+    "MLDR": "retrieval"
+    "MMTEB": "retrieval"
+    "MMTEB-R": "retrieval"
+    "MTEB (Code)": "retrieval"
+    "MTEB (English, v2)": "retrieval"
+    "MTEB-Code": "retrieval"
+    "NanoSciFact": "retrieval"
+    "PAWS": "retrieval"
+    "SICK-R": "retrieval"
+    "STSBenchmark": "retrieval"
+    "TRECCOVID": "retrieval"
+    "TwitterSemEval2015": "retrieval"
+
+    # Multilingual
+    "C-EVAL": "multilingual"
+    "FLEURS Translation": "multilingual"
+    "FLORES-200": "multilingual"
+    "MMMLU": "multilingual"
+    "Multilingual MMLU": "multilingual"
+    "WMT25": "multilingual"
+
+    # Audio
+    "Aishell-1": "audio"
+    "AISHELL-4": "audio"
+    "AliMeeting": "audio"
+    "CHiME-4": "audio"
+    "CoVoST": "audio"
+    "Covost 2": "audio"
+    "FLEURS": "audio"
+    "LibriSpeech": "audio"
+    "LibriSpeech Clean": "audio"
+    "LibriSpeech Other": "audio"
+    "Multilingual LibriSpeech": "audio"
+    "SPGISpeech": "audio"
+    "Switchboard": "audio"
+
+    # Safety
+    "JBBQ": "safety"
+    "SafetyBench": "safety"
+    "SafetyBench - Illegal Activities": "safety"
+    "SafetyBench - Mental Health": "safety"
+    "SafetyBench - Offensiveness": "safety"
+    "SafetyBench - Physical Health": "safety"
+    "SafetyBench - Privacy & Property": "safety"
+    "SafetyBench - Unfairness & Bias": "safety"
+    "SALAD-Bench": "safety"
+    "VLGuard": "safety"
+
+    # Timeseries
+    "SMD (Multivariate)": "timeseries"
+    "TSB-AD": "timeseries"
+    "UEA": "timeseries"
+    "UEA Classification (17 datasets subset)": "timeseries"
 
 # Rate limiting configuration (T091)
 rate_limiting:

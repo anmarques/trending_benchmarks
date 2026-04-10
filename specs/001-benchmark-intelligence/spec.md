@@ -9,11 +9,10 @@
 
 ### Session 2026-04-06
 
-- Q: What minimum similarity threshold should determine when two benchmark names are considered the same during fuzzy matching consolidation? → A: High confidence (90%+ similarity) - merge clearly similar names, use web search for ambiguous cases below threshold
+- Q: What minimum similarity threshold should determine when two benchmark names are considered the same during fuzzy matching consolidation? → A: High confidence (90%+ similarity) - merge clearly similar names, use AI validation for ambiguous cases below threshold
 - Q: What is the maximum number of retry attempts before marking a source as failed and continuing? → A: 3 retries
 - Q: How long should historical snapshots be retained before cleanup? → A: Indefinitely - never delete snapshots
 - Q: Should the system process multiple models concurrently or sequentially? → A: Parallel (20+ concurrent models) - high concurrency
-- Q: How many search results should be analyzed to determine if two benchmark names represent the same or different evaluation sets? → A: Top 3 results
 - Q: How should the system handle API rate limits with 20+ concurrent models processing simultaneously? → A: Respect rate limits with backoff queue - queue requests when rate limited, retry after backoff
 - Q: What level of progress visibility should the system provide during pipeline execution? → A: Real-time progress with statistics - show running counts (models processed, benchmarks extracted, errors)
 - Q: How should errors be collected and reported from parallel execution of 20+ models? → A: Aggregate errors by type with summary - continue processing, collect errors, report summary at end with counts by error type
@@ -65,20 +64,20 @@
 ### User Story 3 - Multi-Source Comprehensive Extraction (Priority: P1)
 
 **As a** user of the system,  
-**I want to** be confident that benchmark data comes from all available sources (model cards, papers, blogs, GitHub),  
+**I want to** be confident that benchmark data comes from reliable sources (model cards and arXiv papers),  
 **So that** I get complete and accurate benchmark coverage without missing important evaluation details.
 
 **Why this priority**: Data quality and completeness is fundamental - incomplete extraction makes all insights unreliable.
 
-**Independent Test**: Can be tested by selecting a known model (e.g., Llama 3.1) with benchmarks in multiple sources and verifying the system extracts from model card, arXiv paper, official blog, and GitHub. Delivers value by ensuring data completeness.
+**Independent Test**: Can be tested by selecting a known model (e.g., Llama 3.1) with benchmarks in model card and arXiv paper and verifying the system extracts from both sources using both text and vision extraction. Delivers value by ensuring data completeness.
 
 **Acceptance Scenarios**:
 
-1. **Given** a model has benchmarks mentioned in its model card, arXiv paper, and official blog post, **When** the system processes this model, **Then** it extracts benchmarks from all three sources and tags each benchmark with its source
+1. **Given** a model has benchmarks mentioned in its model card and arXiv paper, **When** the system processes this model, **Then** it extracts benchmarks from both sources and tags each benchmark with its source
 
-2. **Given** a blog post contains benchmark charts as images, **When** the system processes the blog, **Then** it uses vision AI to extract benchmark names from the chart images
+2. **Given** a PDF paper contains benchmark charts and figures, **When** the system processes the paper, **Then** it uses Claude vision AI to extract benchmark names by extracting embedded images from the PDF and analyzing each image
 
-3. **Given** a PDF paper contains benchmark tables, **When** the system processes the paper, **Then** it correctly extracts benchmark names, variants (shots, methods), and categories
+3. **Given** a PDF paper contains benchmark tables, **When** the system processes the paper, **Then** it correctly extracts benchmark names, variants (shots, methods), and context using both vision extraction (for images) and text extraction (for structured text)
 
 ---
 
@@ -107,19 +106,19 @@
 - **What happens when a model card is updated with new benchmarks?** System should detect content changes via hash comparison and re-extract only from changed sources
 - **How does the system handle models with no benchmark data?** System should log these models but not block processing; report should show "N models with no benchmarks found"
 - **What if a source is temporarily unavailable (404, timeout)?** System should retry up to 3 times with exponential backoff, cache last successful fetch, and continue processing other sources
-- **How are benchmark name variants handled (e.g., "MMLU" vs "MMLU-Pro" vs "MMLU 5-shot")?** System should use fuzzy matching to consolidate similar names but preserve meaningful variants (benchmarks using different evaluation sets). When in doubt about whether variants represent the same benchmark, the system should search the web (analyze top 3 results) for clarification
+- **How are benchmark name variants handled (e.g., "MMLU" vs "MMLU-Pro" vs "MMLU 5-shot")?** System uses fuzzy matching and AI validation to consolidate similar names (MMLU ≈ MMLU (5-shot)) but preserves meaningful variants when evaluation sets differ (MMLU vs MMLU-Pro). Unicode normalization handles superscripts/subscripts (τ²-Bench = τ2-Bench)
 - **What happens with the 12-month rolling window when the system is first initialized?** System should work with whatever data is available, clearly indicating the actual time window in reports
-- **How does the system handle benchmarks mentioned in figures/charts vs text?** Both should be extracted and tagged with extraction method; figure-extracted benchmarks should be validated against text mentions where possible
+- **How does the system handle benchmarks mentioned in figures/charts vs text?** System uses Claude vision API to extract benchmarks from charts, figures, and tables by converting PDF pages to images. Both vision-extracted and text-extracted benchmarks are tagged with extraction method. Vision extraction can capture data from complex charts that text parsing cannot handle
 
 ## Requirements
 
 ### Functional Requirements
 
 - **FR-001**: System MUST discover AI models from configured labs on HuggingFace based on filters (date range, task type, minimum downloads)
-- **FR-002**: System MUST extract benchmark names from model cards, arXiv papers, official blogs, and GitHub documentation
+- **FR-002**: System MUST extract benchmark names from model cards and arXiv papers. Model cards are the primary documentation source, with arXiv papers providing supplementary benchmark data. Official blogs and GitHub documentation are excluded due to reliability concerns
 - **FR-003**: System MUST extract benchmark variants including number of shots (0-shot, 5-shot, etc.), methods (CoT, PoT, TIR), and model types (base, instruct, chat)
-- **FR-004**: System MUST use vision-capable AI to extract benchmarks from charts, figures, and images embedded in blog posts and PDFs
-- **FR-005**: System MUST consolidate duplicate benchmark names using fuzzy matching (90%+ similarity threshold) while preserving meaningful variants. Names below threshold should trigger web search (analyze top 3 results) for clarification
+- **FR-004**: System MUST use vision-capable AI (Claude with vision) to extract benchmarks from charts, figures, and tables by analyzing embedded images within PDFs and documentation. The system extracts images from PDFs using pdfplumber and sends each image to Claude vision API for analysis, focusing only on images in benchmark-relevant sections (identified via section filtering)
+- **FR-005**: System MUST consolidate duplicate benchmark names using fuzzy matching (90%+ similarity threshold) and AI validation while preserving meaningful variants (e.g., MMLU vs MMLU-Pro use different evaluation sets). Normalization handles Unicode variants (superscripts/subscripts), capitalization, and hyphenation differences
 - **FR-006**: System MUST categorize benchmarks into taxonomy categories (e.g., General Knowledge, Reasoning, Math, Code)
 - **FR-007**: System MUST track benchmark usage over a 12-month rolling window from current date
 - **FR-008**: System MUST classify benchmarks as "Emerging" (first seen ≤3 months), "Almost Extinct" (last seen ≥9 months), or "Active" (all others)
@@ -176,20 +175,21 @@
 
 - HuggingFace API provides reliable model discovery within specified date ranges
 - AI model evaluation benchmarks are primarily documented in English-language sources
-- Model cards, papers, and blogs follow reasonably consistent formatting patterns that can be parsed
-- Vision AI (Claude with vision capabilities) can reliably extract text from benchmark charts and tables
+- Model cards are the most reliable and consistent source of benchmark data
+- ArXiv papers provide supplementary benchmark information
+- Vision AI (Claude with vision capabilities) can reliably extract benchmark data from charts, tables, and figures in PDFs
 - 12-month window provides sufficient trend data for meaningful insights
-- Benchmark names, while varied in formatting, can be consolidated using fuzzy matching without losing important distinctions
+- Benchmark names can be consolidated using fuzzy matching, Unicode normalization, and AI validation without losing important distinctions
 - Labs maintain relatively stable benchmark evaluation practices over time
 - SQLite database is sufficient for the expected data volume (thousands of models, tens of thousands of benchmark mentions)
 
 ### Dependencies
 
 - HuggingFace Hub API for model discovery
-- Anthropic API (Claude) for AI-powered extraction, consolidation, and classification
-- External document sources: arXiv API, GitHub, lab blogs
-- PDF parsing libraries for extracting content from research papers
-- Vision-capable AI for chart/figure extraction
+- Anthropic API (Claude) for AI-powered extraction, consolidation, categorization, and vision-based chart/figure extraction
+- External document sources: arXiv API for supplementary papers
+- PDF parsing libraries (pdfplumber) for text extraction and embedded image extraction from research papers
+- Claude vision API for analyzing extracted images (charts, figures, tables) to extract benchmark data
 
 ### Constraints
 

@@ -24,31 +24,29 @@ from agents.benchmark_intelligence.stage_utils import (
 )
 from agents.benchmark_intelligence.tools.cache import CacheManager
 from agents.benchmark_intelligence.error_aggregator import ErrorAggregator
+from agents.benchmark_intelligence.tools.document_selection import (
+    extract_all_arxiv_ids,
+    fetch_arxiv_abstract,
+    select_best_arxiv_paper,
+    search_arxiv_api,
+    extract_blog_urls
+)
+from agents.benchmark_intelligence.tools.parse_model_card import parse_model_card
 
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 
-def extract_arxiv_id(tags: List[str]) -> Optional[str]:
-    """
-    Extract arXiv ID from model tags.
-
-    Args:
-        tags: List of model tags
-
-    Returns:
-        arXiv ID if found (e.g., "2505.09388"), None otherwise
-    """
-    for tag in tags:
-        if tag.startswith('arxiv:'):
-            return tag.replace('arxiv:', '')
-    return None
-
-
 def construct_document_urls(model_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
-    Construct documentation URLs for a model.
+    Construct documentation URLs for a model from model card content.
+
+    Strategy:
+    1. Always include HuggingFace model card
+    2. Extract ALL arXiv papers from model card (tags + content), fallback to arXiv API
+    3. Use AI to select best paper if multiple found
+    4. Extract blog post URLs from model card content
 
     Args:
         model_data: Model information dictionary
@@ -58,6 +56,8 @@ def construct_document_urls(model_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     model_id = model_data['model_id']
     tags = model_data.get('tags', [])
+    author = model_data.get('author', '')
+    model_name = model_id.split('/')[-1]
     documents = []
 
     # 1. HuggingFace Model Card (always available)
@@ -67,59 +67,76 @@ def construct_document_urls(model_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         'found': True
     })
 
-    # 2. arXiv Paper (if referenced in tags)
-    arxiv_id = extract_arxiv_id(tags)
-    if arxiv_id:
-        documents.append({
-            'type': 'arxiv_paper',
-            'url': f'https://arxiv.org/abs/{arxiv_id}',
-            'found': True
-        })
+    # 2. arXiv Papers - Extract from model card, fallback to arXiv API search
+    try:
+        # Fetch model card to search for arXiv references
+        logger.debug(f"Fetching model card for {model_id} to find arXiv papers")
+        from agents.benchmark_intelligence.clients.factory import get_hf_client
+        hf_client = get_hf_client()
+        model_card = parse_model_card(model_id, hf_client)
+        model_card_content = model_card.get('content', '')
 
-    # 3. GitHub Repository (construct from model_id)
-    # Format: github.com/org/repo
-    # Some labs have predictable GitHub patterns
-    author = model_data.get('author', '')
-    github_orgs = {
-        'Qwen': 'QwenLM',
-        'meta-llama': 'meta-llama',
-        'mistralai': 'mistralai',
-        'google': 'google-research',
-        'microsoft': 'microsoft',
-        'deepseek-ai': 'deepseek-ai',
-        'nvidia': 'NVIDIA',
-        'openai': 'openai',
-        'moonshotai': 'moonshotai',
-        'zai-org': 'THUDM',
-        'ibm-granite': 'ibm-granite'
-    }
+        # Extract arXiv IDs from tags and content
+        arxiv_ids = extract_all_arxiv_ids(model_card_content, tags)
 
-    github_org = github_orgs.get(author)
-    if github_org:
-        # Extract model name from model_id
-        model_name = model_id.split('/')[-1]
-        documents.append({
-            'type': 'github',
-            'url': f'https://github.com/{github_org}/{model_name}',
-            'found': False  # Will be validated in future if needed
-        })
+        # If no papers found in model card, search arXiv API
+        if not arxiv_ids:
+            logger.info(f"No arXiv papers in model card for {model_id}, searching arXiv API")
+            arxiv_ids = search_arxiv_api(model_name, author, max_results=5)
 
-    # 4. Official Blog Posts (for major models)
-    # Add predictable blog URLs for major labs
-    blog_urls = {
-        'Qwen': 'https://qwenlm.github.io/blog/',
-        'meta-llama': 'https://ai.meta.com/blog/',
-        'mistralai': 'https://mistral.ai/news/',
-        'google': 'https://blog.research.google/',
-        'deepseek-ai': 'https://www.deepseek.com/blog/',
-    }
+        if arxiv_ids:
+            logger.info(
+                f"Found {len(arxiv_ids)} arXiv papers for {model_id}: {arxiv_ids}"
+            )
 
-    if author in blog_urls:
-        documents.append({
-            'type': 'blog',
-            'url': blog_urls[author],
-            'found': False  # Generic blog URL, not model-specific
-        })
+            if len(arxiv_ids) == 1:
+                # Only one paper, use it
+                selected_id = arxiv_ids[0]
+                logger.info(f"Using single arXiv paper: {selected_id}")
+            else:
+                # Multiple papers - fetch abstracts and use AI to select best one
+                logger.info(f"Multiple arXiv papers found, fetching abstracts...")
+                abstracts = []
+                for arxiv_id in arxiv_ids:
+                    abstract = fetch_arxiv_abstract(arxiv_id)
+                    if abstract:
+                        abstracts.append(abstract)
+
+                # Use AI to select the best paper
+                selected_id = select_best_arxiv_paper(abstracts, model_name, author)
+
+            if selected_id:
+                documents.append({
+                    'type': 'arxiv_paper',
+                    'url': f'https://arxiv.org/abs/{selected_id}',
+                    'found': True,
+                    'metadata': {
+                        'total_candidates': len(arxiv_ids),
+                        'ai_selected': len(arxiv_ids) > 1
+                    }
+                })
+
+    except Exception as e:
+        logger.warning(f"Failed to discover arXiv papers for {model_id}: {e}")
+
+    # 3. Blog Posts - Extract from model card content
+    try:
+        # Extract blog URLs from model card content (already fetched above)
+        blog_urls = extract_blog_urls(model_card_content)
+
+        for blog in blog_urls:
+            documents.append({
+                'type': 'blog',
+                'url': blog['url'],
+                'found': True,
+                'metadata': {
+                    'title': blog.get('title'),
+                    'source': 'model_card'
+                }
+            })
+
+    except Exception as e:
+        logger.warning(f"Failed to extract blog URLs for {model_id}: {e}")
 
     return documents
 
