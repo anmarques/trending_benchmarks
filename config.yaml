@@ -48,6 +48,12 @@ pdf_constraints:
   download_timeout_seconds: 120
   max_extracted_chars: 50000
 
+# Vision AI extraction configuration (FR-004)
+vision_extraction:
+  enabled: true  # Use Claude vision API to extract benchmarks from embedded images (charts/figures/tables)
+  fallback_to_text: true  # Fall back to text extraction if no images found or vision fails
+  min_image_size_bytes: 1000  # Skip very small images (likely icons/decorations)
+
 # Retry policy configuration
 retry_policy:
   max_attempts: 3
@@ -65,11 +71,9 @@ parallelization:
   enabled: true
   timeout_per_document_seconds: 60
 
-# Benchmark consolidation configuration (T079)
+# Benchmark consolidation configuration
 consolidation:
   fuzzy_match_threshold: 0.90  # Threshold for treating benchmark names as same (0.0-1.0)
-  enable_web_search: true      # Enable web search disambiguation for ambiguous pairs
-  web_search_max_results: 3    # Number of search results to analyze
 
   # AI review threshold for questionable cases (0.70-0.89 similarity)
   ai_review_min_similarity: 0.70  # Below this, definitely different benchmarks
@@ -77,6 +81,7 @@ consolidation:
 
   # Benchmark aliases - known alternate names that should consolidate to canonical form
   # Format: "alternate_name": "canonical_name"
+  # Model cards are used as primary documentation source, with arXiv papers as supplementary
   benchmark_aliases:
     # ARC variants
     "ARC-C": "ARC-Challenge"
