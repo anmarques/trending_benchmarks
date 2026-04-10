@@ -8,13 +8,13 @@
 
 ## 📊 Latest Report
 
-**[View Latest Benchmark Report →](agents/benchmark_intelligence/reports/report_20260402_162723.md)**
+**[View Latest Benchmark Report →](agents/benchmark_intelligence/reports/trending_benchmarks_20260410_155422.md)**
 
-**Key Findings** (2026-04-02):
-- **84 unique benchmarks** discovered
-- **43 models** analyzed from 12 major labs
-- **Top benchmarks**: C-Eval (13 models), MMLU (9), GSM8K (6)
-- **Categories**: Reasoning (32.5%), Knowledge (27.7%), Vision (15.1%)
+**Key Findings** (2026-04-10):
+- **Automated benchmark tracking** across major AI labs
+- **Vision AI extraction** from charts and figures in research papers
+- **Unicode normalization** handles variants like τ²-Bench = τ2-Bench
+- **AI validation** ensures benchmark quality and relevance
 
 ---
 
@@ -23,11 +23,12 @@
 This AI agent automatically:
 
 1. **Discovers trending models** from major labs (Qwen, Meta, Mistral, Google, Microsoft, etc.)
-2. **Extracts benchmarks** from model cards, blogs, and technical reports using AI
-3. **Consolidates variations** (GSM8K ≈ gsm8k ≈ GSM-8K) using intelligent matching
-4. **Classifies benchmarks** into categories using Claude AI
-5. **Tracks trends** over time with SQLite caching and snapshots
-6. **Generates reports** showing evolution and emerging patterns
+2. **Extracts benchmarks** from model cards and arXiv papers using AI (text + vision extraction)
+3. **Analyzes charts & figures** using Claude vision AI to extract benchmarks from PDFs
+4. **Consolidates variations** (GSM8K ≈ gsm8k ≈ GSM-8K, τ²-Bench = τ2-Bench) using Unicode normalization and AI validation
+5. **Classifies benchmarks** into categories using Claude AI
+6. **Tracks trends** over time with SQLite caching and snapshots
+7. **Generates reports** showing evolution and emerging patterns
 
 **Run it monthly** to stay current with the AI evaluation landscape.
 
@@ -117,7 +118,7 @@ python -m agents.benchmark_intelligence.main generate
 
 | Resource | Description |
 |----------|-------------|
-| **[Latest Report](agents/benchmark_intelligence/reports/report_20260402_162723.md)** | Most recent benchmark intelligence |
+| **[Latest Report](agents/benchmark_intelligence/reports/trending_benchmarks_20260410_155422.md)** | Most recent benchmark intelligence |
 | **[All Reports](agents/benchmark_intelligence/reports/)** | Historical snapshots |
 | **[SQLite Database](benchmark_cache.db)** | Queryable cache (see below) |
 
@@ -202,8 +203,7 @@ ORDER BY s.timestamp;
 Timestamped reports in `agents/benchmark_intelligence/reports/`:
 ```
 reports/
-├── report_20260402_162723.md  # Latest
-├── report_20260402_151316.md
+├── trending_benchmarks_20260410_155422.md  # Latest
 └── ...
 ```
 
@@ -216,11 +216,11 @@ Discover Models (HuggingFace API)
     ↓
 Check Cache (content-hash comparison)
     ↓
-Parse Model Cards (if changed)
+Parse Documents (model cards, arXiv papers - if changed)
     ↓
-Extract Benchmarks (Claude AI)
+Extract Benchmarks (Claude AI: text + vision for charts/figures)
     ↓
-Consolidate Names (fuzzy matching + AI)
+Consolidate Names (Unicode normalization + fuzzy matching + AI validation)
     ↓
 Classify Benchmarks (multi-label AI categorization)
     ↓
@@ -234,9 +234,11 @@ Generate Markdown Report
 **Key Components**:
 - **HuggingFace Client**: Official `huggingface_hub` library
 - **Universal Claude Client**: Auto-detects Ambient/Vertex AI/Anthropic API
-- **AI Extraction**: Claude-powered parsing of unstructured model cards
+- **AI Extraction**: Claude-powered parsing of model cards and arXiv papers (text + vision)
+- **Vision AI**: Extracts benchmarks from charts/figures in PDFs using Claude vision API
+- **PDF Processing**: `pdfplumber` for embedded image extraction from research papers
 - **Cache Manager**: SQLite with content-hash change detection
-- **Smart Consolidation**: Handles variations ("MMLU", "MMLU-Pro", "MMLU 5-shot")
+- **Smart Consolidation**: Unicode normalization + AI validation ("MMLU", "MMLU-Pro", τ²-Bench = τ2-Bench)
 
 ---
 
@@ -401,9 +403,10 @@ discovery:
 **AI**: Claude Sonnet 4 for intelligent extraction & classification
 **Format**: Markdown, YAML, JSON
 
-**Dependencies** (6):
+**Dependencies** (7):
 - `huggingface_hub` - Model discovery
 - `anthropic` - AI-powered parsing (or Vertex AI on Ambient)
+- `pdfplumber` - PDF parsing and image extraction
 - `pyyaml` - Configuration
 - `requests` - HTTP
 - `beautifulsoup4` - HTML parsing
@@ -415,11 +418,10 @@ discovery:
 
 | Document | Purpose |
 |----------|---------|
-| [QUICKSTART.md](QUICKSTART.md) | Get started in 5 minutes |
-| [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) | Complete build summary |
-| [CLAUDE_API_SETUP.md](CLAUDE_API_SETUP.md) | Claude API configuration guide |
+| [AMBIENT_QUICKSTART.md](AMBIENT_QUICKSTART.md) | Get started on Ambient platform |
 | [agents/.../README.md](agents/benchmark_intelligence/README.md) | Full technical documentation |
-| [agents/.../USAGE.md](agents/benchmark_intelligence/USAGE.md) | CLI reference & examples |
+| [config.yaml](config.yaml) | Configuration reference |
+| [specs/001-.../spec.md](specs/001-benchmark-intelligence/spec.md) | Complete feature specification |
 
 ---
 
@@ -538,7 +540,8 @@ Apache 2.0 - See [LICENSE](LICENSE) file
 
 ## 🔗 Links
 
-- **[Latest Report](agents/benchmark_intelligence/reports/report_20260402_162723.md)** ⭐
+- **[Latest Report](agents/benchmark_intelligence/reports/trending_benchmarks_20260410_155422.md)** ⭐
+- **[Feature Specification](specs/001-benchmark-intelligence/spec.md)** - Complete requirements
 - **[Benchmark Taxonomy](benchmark_taxonomy.md)** - Complete reference
 - **[Categories](categories.yaml)** - Category definitions
 - [HuggingFace Hub](https://huggingface.co)
@@ -548,10 +551,10 @@ Apache 2.0 - See [LICENSE](LICENSE) file
 
 ## 📊 Status
 
-**Version**: 1.0.1
+**Version**: 1.1.0
 **Status**: ✅ Production Ready
-**Last Run**: 2026-04-02
-**Models**: 43 | **Benchmarks**: 84 | **Snapshots**: 3
+**Last Run**: 2026-04-10
+**Features**: Vision AI extraction • Unicode normalization • AI validation • Multi-source parsing
 
 ---
 
