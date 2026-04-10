@@ -49,9 +49,8 @@ pdf_constraints:
   max_extracted_chars: 50000
 
 # Vision AI extraction configuration (FR-004)
+# Vision extraction is always attempted for PDFs with automatic fallback to text if no images found
 vision_extraction:
-  enabled: true  # Use Claude vision API to extract benchmarks from embedded images (charts/figures/tables)
-  fallback_to_text: true  # Fall back to text extraction if no images found or vision fails
   min_image_size_bytes: 1000  # Skip very small images (likely icons/decorations)
 
 # Retry policy configuration

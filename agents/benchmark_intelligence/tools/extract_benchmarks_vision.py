@@ -309,33 +309,23 @@ def extract_benchmarks_from_pdf(
     source_name: Optional[str] = None,
     max_tokens: int = 16384,
     chunk_size: int = 8,
-    use_vision: bool = True,
 ) -> Dict[str, Any]:
     """
-    Extract benchmarks from PDF using vision AI or text-based extraction.
+    Extract benchmarks from PDF using vision AI with text fallback.
 
-    Strategy (vision mode - FR-004):
+    Strategy (FR-004):
     1. Extract section structure from PDF (titles + page ranges)
     2. Filter to benchmark-relevant sections (Evaluation, Results, etc.)
     3. Extract embedded images (charts, figures, tables) from relevant sections
     4. Send each extracted image to Claude vision API for analysis
-    5. Extract benchmarks from images
-    6. Merge results from all images
-
-    Strategy (text mode - fallback):
-    1. Extract section structure from PDF (titles + page ranges)
-    2. Filter to benchmark-relevant sections (Evaluation, Results, etc.)
-    3. Split filtered pages into chunks (default: 8 pages per chunk)
-    4. Extract text from PDF using pdfplumber
-    5. Send text to Claude for extraction
-    6. Merge results from all chunks
+    5. If no images found, fall back to text-based extraction
+    6. Merge results from all images/chunks
 
     Args:
         pdf_content: PDF file content as bytes
         source_name: Name/identifier of the source document
-        max_tokens: Maximum tokens in response per chunk
-        chunk_size: Pages per chunk (default: 8)
-        use_vision: Whether to use vision API (default: True)
+        max_tokens: Maximum tokens in response per chunk/image
+        chunk_size: Pages per chunk for text fallback (default: 8)
 
     Returns:
         Dictionary containing extracted benchmark data:
@@ -426,73 +416,71 @@ def extract_benchmarks_from_pdf(
         chunks_processed = 0
         chunks_failed = 0
 
-        # Extract embedded images if using vision mode
+        # Always attempt vision extraction first (FR-004)
         vision_successful = False
-        if use_vision:
-            # Vision mode: Extract embedded images and analyze with vision API
-            logger.info(f"Using vision AI extraction - extracting embedded images from PDF")
+        logger.info(f"Attempting vision AI extraction - extracting embedded images from PDF")
 
-            # Extract all embedded images from the PDF
-            pdf_images = _extract_images_from_pdf(pdf_content)
+        # Extract all embedded images from the PDF
+        pdf_images = _extract_images_from_pdf(pdf_content)
 
-            if not pdf_images:
-                logger.warning("No images found in PDF, falling back to text extraction")
+        if not pdf_images:
+            logger.info("No images found in PDF, using text extraction")
+        else:
+            # Filter images to only those in relevant pages
+            relevant_images = [
+                img for img in pdf_images
+                if img['page_num'] in relevant_pages
+            ]
+
+            if not relevant_images:
+                logger.info("No images in relevant sections, using text extraction")
             else:
-                # Filter images to only those in relevant pages
-                relevant_images = [
-                    img for img in pdf_images
-                    if img['page_num'] in relevant_pages
-                ]
+                vision_successful = True
+                logger.info(
+                    f"Found {len(pdf_images)} total images, "
+                    f"{len(relevant_images)} in relevant sections"
+                )
 
-                if not relevant_images:
-                    logger.warning("No images in relevant sections, falling back to text extraction")
-                else:
-                    vision_successful = True
-                    logger.info(
-                        f"Found {len(pdf_images)} total images, "
-                        f"{len(relevant_images)} in relevant sections"
-                    )
+                # Process each image with vision API
+                for img_idx, img_info in enumerate(relevant_images, 1):
+                    try:
+                        page_num = img_info['page_num']
+                        img_bytes = img_info['image_data']
 
-                    # Process each image with vision API
-                    for img_idx, img_info in enumerate(relevant_images, 1):
-                        try:
-                            page_num = img_info['page_num']
-                            img_bytes = img_info['image_data']
+                        logger.debug(
+                            f"Image {img_idx}/{len(relevant_images)}: "
+                            f"Analyzing page {page_num} image "
+                            f"({img_info['width']}x{img_info['height']}, {len(img_bytes)} bytes)"
+                        )
 
-                            logger.debug(
+                        # Extract benchmarks from image using vision API
+                        img_result = _extract_from_image_with_vision(
+                            img_bytes,
+                            f"{source_name} - Page {page_num} Image {img_info['index']}",
+                            max_tokens
+                        )
+
+                        img_benchmarks = img_result.get("benchmarks", [])
+                        all_benchmarks.extend(img_benchmarks)
+
+                        if img_benchmarks:
+                            logger.info(
                                 f"Image {img_idx}/{len(relevant_images)}: "
-                                f"Analyzing page {page_num} image "
-                                f"({img_info['width']}x{img_info['height']}, {len(img_bytes)} bytes)"
+                                f"Extracted {len(img_benchmarks)} benchmarks from page {page_num}"
                             )
 
-                            # Extract benchmarks from image using vision API
-                            img_result = _extract_from_image_with_vision(
-                                img_bytes,
-                                f"{source_name} - Page {page_num} Image {img_info['index']}",
-                                max_tokens
-                            )
+                    except Exception as e:
+                        logger.error(f"Image {img_idx}/{len(relevant_images)} failed: {e}")
+                        chunks_failed += 1
+                        # Continue processing other images
 
-                            img_benchmarks = img_result.get("benchmarks", [])
-                            all_benchmarks.extend(img_benchmarks)
+                chunks_processed = len(relevant_images) - chunks_failed
+                logger.info(
+                    f"Vision extraction complete: Analyzed {chunks_processed}/{len(relevant_images)} images"
+                )
 
-                            if img_benchmarks:
-                                logger.info(
-                                    f"Image {img_idx}/{len(relevant_images)}: "
-                                    f"Extracted {len(img_benchmarks)} benchmarks from page {page_num}"
-                                )
-
-                        except Exception as e:
-                            logger.error(f"Image {img_idx}/{len(relevant_images)} failed: {e}")
-                            chunks_failed += 1
-                            # Continue processing other images
-
-                    chunks_processed = len(relevant_images) - chunks_failed
-                    logger.info(
-                        f"Vision extraction complete: Analyzed {chunks_processed}/{len(relevant_images)} images"
-                    )
-
-        # Fall back to text extraction if vision wasn't used or failed
-        if not use_vision or not vision_successful:
+        # Fall back to text extraction if no images found
+        if not vision_successful:
             # Text mode: Extract text and use standard text extraction
             logger.info(f"Using text-based extraction for {len(page_chunks)} chunks")
 
@@ -577,8 +565,7 @@ def extract_benchmarks_from_pdf(
             "claude_vision_api_from_embedded_images" if vision_successful
             else "claude_text_extraction_with_section_filtering_and_chunking"
         )
-        result["metadata"]["vision_enabled"] = use_vision
-        result["metadata"]["vision_successful"] = vision_successful
+        result["metadata"]["vision_used"] = vision_successful
         result["metadata"]["total_pages"] = total_pages
         result["metadata"]["pages_processed"] = len(relevant_pages)
         result["metadata"]["sections_found"] = len(sections)
