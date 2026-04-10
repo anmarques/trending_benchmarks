@@ -36,6 +36,7 @@ def normalize_benchmark_name(name: str) -> str:
     Normalize a benchmark name for grouping similar variants.
 
     Normalization strategy:
+    - Convert Unicode superscripts/subscripts to ASCII digits
     - Lowercase
     - Remove hyphens, underscores, spaces
     - Remove noise qualifiers (shot count, zero-shot)
@@ -54,12 +55,31 @@ def normalize_benchmark_name(name: str) -> str:
         "mteb(code)"
         >>> normalize_benchmark_name("MTEB (English, v2)")
         "mteb(english)"
+        >>> normalize_benchmark_name("τ²-Bench")
+        "τ2bench"
     """
     if not name:
         return ""
 
+    # Convert Unicode superscripts and subscripts to regular digits
+    # This ensures τ²-Bench and τ2-Bench normalize to the same string
+    superscript_map = {
+        '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4',
+        '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9'
+    }
+    subscript_map = {
+        '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4',
+        '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9'
+    }
+
+    normalized = name
+    for super_char, digit in superscript_map.items():
+        normalized = normalized.replace(super_char, digit)
+    for sub_char, digit in subscript_map.items():
+        normalized = normalized.replace(sub_char, digit)
+
     # Lowercase
-    normalized = name.lower()
+    normalized = normalized.lower()
 
     # Remove noise qualifiers but KEEP semantic qualifiers
     # Noise: (5-shot), (zero-shot), (few-shot), version numbers
@@ -304,8 +324,10 @@ def run(input_json: Optional[str] = None) -> str:
         logger.info(f"Running AI validation on {len(unique_names)} canonical names...")
         logger.info("")
 
-        # Run AI validation if available
-        if is_anthropic_available() and unique_names:
+        # Run AI validation if available and not explicitly disabled
+        import os
+        skip_ai_validation = os.environ.get('SKIP_AI_VALIDATION', '').lower() == 'true'
+        if is_anthropic_available() and unique_names and not skip_ai_validation:
             rejected_names_set = set()
             validation_results = {
                 'validated': 0,
