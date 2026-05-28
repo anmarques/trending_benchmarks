@@ -8,15 +8,12 @@
 
 ## 📊 Latest Report
 
-**[View Latest Benchmark Report →](agents/benchmark_intelligence/reports/trending_benchmarks_20260411_000851.md)**
+**[View Latest Benchmark Report →](agents/benchmark_intelligence/reports/report_20260528_213601.md)**
 
-**Key Findings** (2026-04-11):
-- **263 unique benchmarks** discovered from 11,281 mentions
-- **167 models** analyzed from 18 major labs
-- **Vision + Text extraction** - both sources used for complete coverage
-- **Top benchmarks**: MMLU Pro (57 models), MMLU (57), GPQA Diamond (48)
-- **14 categories**: Vision (61 benchmarks), Coding (37), Knowledge (25), Math (24)
-- **Unicode normalization**: τ²-Bench = τ2-Bench merged successfully
+**Key Findings** (2026-05-28):
+- **180 unique benchmarks** discovered
+- **92 models** analyzed from major labs
+- **Report Date:** May 28, 2026
 ---
 
 ## 🎯 What This Does
