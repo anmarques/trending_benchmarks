@@ -368,7 +368,7 @@ class BenchmarkIntelligenceAgent:
 
             if benchmark_names:
                 logger.info(f"Consolidating {len(benchmark_names)} unique benchmark names...")
-                consolidation_result = consolidate_benchmarks(benchmark_names)
+                consolidation_result = consolidate_benchmarks(benchmark_names, config=self.config)
 
                 # Apply consolidation
                 all_benchmarks = apply_consolidation(

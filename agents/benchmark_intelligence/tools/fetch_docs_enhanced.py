@@ -114,8 +114,12 @@ def fetch_arxiv_paper(
             arxiv_url = arxiv_urls[0]  # Use first URL found
             logger.info(f"Found arXiv URL in model card: {arxiv_url}")
 
-    # Step 2: If not found in model card, use Google search
-    if not arxiv_url:
+    # Step 2: If not found in model card, use Google search (if enabled)
+    enable_web_search = True
+    if config:
+        enable_web_search = config.get("consolidation", {}).get("enable_web_search", True)
+
+    if not arxiv_url and enable_web_search:
         logger.info(f"Searching Google for arXiv paper: {model_name}")
 
         # Get config settings
@@ -210,7 +214,14 @@ def fetch_github_pdf(
         except:
             continue
 
-    # Use Google search as fallback
+    # Use Google search as fallback (if enabled)
+    enable_web_search = True
+    if config:
+        enable_web_search = config.get("consolidation", {}).get("enable_web_search", True)
+    if not enable_web_search:
+        logger.info(f"No GitHub PDF found for {model_name}")
+        return None
+
     logger.info(f"Searching Google for GitHub PDF: {model_name}")
 
     delay = 2.0
@@ -270,6 +281,13 @@ def fetch_blog_posts(
     """
     if not HAS_GOOGLE_SEARCH:
         logger.warning("Google search not available, cannot fetch blog posts")
+        return []
+
+    enable_web_search = True
+    if config:
+        enable_web_search = config.get("consolidation", {}).get("enable_web_search", True)
+    if not enable_web_search:
+        logger.info(f"Found 0 blog posts for {model_name}")
         return []
 
     logger.info(f"Searching Google for blog posts: {model_name}")
