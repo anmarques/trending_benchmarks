@@ -646,36 +646,62 @@ No trend data available."""
         # This is simplified - in production would have more sophisticated analysis
 
         lines = ["## Temporal Trends", ""]
-        lines.append("### Benchmark Popularity Over Time (Last 12 Months)")
+        lines.append("### Benchmark Mentions by Report Date (Rolling 12-Month Window)")
         lines.append("")
-        lines.append("Tracking how benchmark usage evolves over the rolling 12-month window.")
+        lines.append(
+            "Each cell shows the number of distinct models mentioning the benchmark "
+            "in the 12 months ending at that date."
+        )
         lines.append("")
 
-        # Filter to only include benchmarks with activity in the last 12 months
+        monthly_data = self.cache.get_benchmark_monthly_mentions(top_n=15, window_days=365)
+        months = monthly_data.get("months", [])
+        bench_series = monthly_data.get("benchmarks", {})
+
+        if months and bench_series:
+            # Short month labels: "Jun 25"
+            short_labels = []
+            for m in months:
+                y, mo = m.split("-")
+                import calendar as _cal
+                short_labels.append(f"{_cal.month_abbr[int(mo)]} {y[2:]}")
+
+            header = "| Benchmark | " + " | ".join(short_labels) + " |"
+            separator = "|-----------|" + "|".join(["------"] * len(months)) + "|"
+            lines.append(header)
+            lines.append(separator)
+
+            for bench_name, monthly in bench_series.items():
+                counts = [str(monthly.get(m, 0)) for m in months]
+                lines.append(f"| {bench_name} | " + " | ".join(counts) + " |")
+        else:
+            lines.append("No benchmark activity data available.")
+
+        # Summary table: first/last recorded + lifespan
+        lines.append("")
+        lines.append("### Benchmark Lifespan")
+        lines.append("")
+        lines.append("Benchmarks ranked by number of models mentioning them, with date span.")
+        lines.append("")
+
         twelve_months_ago = (datetime.utcnow() - timedelta(days=365)).isoformat()
         active_benchmarks = [
             b for b in benchmark_trends
             if b.get("total_models", 0) > 0 and b.get("last_recorded", "") >= twelve_months_ago
         ]
+        active_benchmarks.sort(key=lambda b: b.get("total_models", 0), reverse=True)
 
         if active_benchmarks:
-            # Sort by last_recorded
-            active_benchmarks.sort(
-                key=lambda b: b.get("last_recorded", ""),
-                reverse=True
-            )
-
-            lines.append("| Benchmark | First Recorded | Last Recorded | Active Days | Total Models |")
-            lines.append("|-----------|----------------|---------------|-------------|--------------|")
+            lines.append("| Benchmark | First Recorded | Last Recorded | Lifespan (days) | Total Models |")
+            lines.append("|-----------|----------------|---------------|-----------------|--------------|")
 
             for bench in active_benchmarks[:15]:
                 name = bench.get("canonical_name", "Unknown")
-                first = bench.get("first_recorded", "N/A")[:10]
-                last = bench.get("last_recorded", "N/A")[:10]
-                active_days = bench.get("active_days", 0)
+                first = (bench.get("first_recorded") or "N/A")[:10]
+                last = (bench.get("last_recorded") or "N/A")[:10]
+                lifespan = bench.get("lifespan_days", 0) or 0
                 total_models = bench.get("total_models", 0)
-
-                lines.append(f"| {name} | {first} | {last} | {active_days} | {total_models} |")
+                lines.append(f"| {name} | {first} | {last} | {lifespan} | {total_models} |")
         else:
             lines.append("No benchmark activity in the last 12 months.")
 

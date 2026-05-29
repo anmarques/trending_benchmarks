@@ -868,7 +868,7 @@ class CacheManager:
                     b.categories,
                     b.attributes,
                     COUNT(mb.id) as total_models,
-                    COUNT(DISTINCT DATE(COALESCE(m.release_date, m.first_seen))) as active_days,
+                    CAST(JULIANDAY(MAX(COALESCE(m.release_date, m.first_seen))) - JULIANDAY(MIN(COALESCE(m.release_date, m.first_seen))) AS INTEGER) as lifespan_days,
                     MIN(COALESCE(m.release_date, m.first_seen)) as first_recorded,
                     MAX(COALESCE(m.release_date, m.first_seen)) as last_recorded
                 FROM benchmarks b
@@ -888,7 +888,7 @@ class CacheManager:
                     'first_seen': row['first_recorded'],  # derived from model release dates
                     'last_seen': row['last_recorded'],     # derived from model release dates
                     'total_models': row['total_models'],
-                    'active_days': row['active_days'],
+                    'lifespan_days': row['lifespan_days'],
                     'first_recorded': row['first_recorded'],
                     'last_recorded': row['last_recorded']
                 })
@@ -1431,7 +1431,7 @@ class CacheManager:
                     b.categories,
                     b.attributes,
                     COUNT(mb.id) as total_models,
-                    COUNT(DISTINCT DATE(COALESCE(m.release_date, m.first_seen))) as active_days,
+                    CAST(JULIANDAY(MAX(COALESCE(m.release_date, m.first_seen))) - JULIANDAY(MIN(COALESCE(m.release_date, m.first_seen))) AS INTEGER) as lifespan_days,
                     MIN(COALESCE(m.release_date, m.first_seen)) as first_recorded,
                     MAX(COALESCE(m.release_date, m.first_seen)) as last_recorded
                 FROM benchmarks b
@@ -1453,13 +1453,104 @@ class CacheManager:
                     'first_seen': row['first_recorded'],  # derived from model release dates
                     'last_seen': row['last_recorded'],     # derived from model release dates
                     'total_models': row['total_models'],
-                    'active_days': row['active_days'],
+                    'lifespan_days': row['lifespan_days'],
                     'first_recorded': row['first_recorded'],
                     'last_recorded': row['last_recorded']
                 })
 
             return trends
 
+    def get_benchmark_monthly_mentions(
+        self, top_n: int = 20, window_days: int = 365
+    ) -> Dict[str, Any]:
+        """
+        For each top benchmark, compute how many distinct models mentioned it in the
+        rolling window ending at each calendar month present in the data.
+
+        Args:
+            top_n: Number of top benchmarks (by total models) to include
+            window_days: Rolling window size in days (default 365 = 12 months)
+
+        Returns:
+            Dict with:
+                - months: list of 'YYYY-MM' labels in chronological order
+                - benchmarks: {canonical_name: {month_label: count}}
+        """
+        import re as _re
+        from collections import defaultdict
+        from datetime import date as _date, timedelta as _td
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT DISTINCT
+                    b.canonical_name,
+                    m.id as model_id,
+                    COALESCE(m.release_date, m.first_seen) as effective_date
+                FROM model_benchmarks mb
+                JOIN benchmarks b ON mb.benchmark_id = b.id
+                JOIN models m ON mb.model_id = m.id
+                WHERE COALESCE(m.release_date, m.first_seen) IS NOT NULL
+            """)
+            rows = cursor.fetchall()
+
+        if not rows:
+            return {'months': [], 'benchmarks': {}}
+
+        def _parse_date(s: str) -> Optional[_date]:
+            if not s:
+                return None
+            s = _re.sub(r'[+-]\d{2}:\d{2}$|Z$', '', s)
+            try:
+                return datetime.fromisoformat(s).date()
+            except Exception:
+                return None
+
+        # benchmark -> set of (model_id, date)
+        bench_data: Dict[str, set] = defaultdict(set)
+        all_dates: List[_date] = []
+
+        for row in rows:
+            d = _parse_date(row['effective_date'])
+            if d:
+                bench_data[row['canonical_name']].add((row['model_id'], d))
+                all_dates.append(d)
+
+        if not all_dates:
+            return {'months': [], 'benchmarks': {}}
+
+        min_date = min(all_dates)
+        max_date = max(all_dates)
+
+        # Generate end-of-month report dates covering min_date..max_date
+        report_months: List[_date] = []
+        y, m = min_date.year, min_date.month
+        while (y, m) <= (max_date.year, max_date.month):
+            eom = (_date(y, m + 1, 1) if m < 12 else _date(y + 1, 1, 1)) - _td(days=1)
+            report_months.append(eom)
+            y, m = (y, m + 1) if m < 12 else (y + 1, 1)
+
+        month_labels = [d.strftime('%Y-%m') for d in report_months]
+
+        # Pick top_n benchmarks by distinct model count
+        bench_totals = {
+            name: len({mid for mid, _ in dates})
+            for name, dates in bench_data.items()
+        }
+        top_names = sorted(bench_totals, key=lambda n: bench_totals[n], reverse=True)[:top_n]
+
+        # Rolling count per benchmark per month
+        result: Dict[str, Dict[str, int]] = {}
+        for name in top_names:
+            model_dates = bench_data[name]
+            monthly: Dict[str, int] = {}
+            for report_date in report_months:
+                window_start = report_date - _td(days=window_days)
+                count = len({mid for mid, d in model_dates if window_start <= d <= report_date})
+                monthly[report_date.strftime('%Y-%m')] = count
+            result[name] = monthly
+
+        return {'months': month_labels, 'benchmarks': result}
 
     def get_deprecated_benchmarks(self, months: int = 6) -> List[Dict[str, Any]]:
         """
