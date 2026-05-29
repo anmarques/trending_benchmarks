@@ -73,6 +73,7 @@ parallelization:
 # Benchmark consolidation configuration
 consolidation:
   fuzzy_match_threshold: 0.90  # Threshold for treating benchmark names as same (0.0-1.0)
+  enable_web_search: false  # Google search is blocked (CAPTCHA); rely on fuzzy match + Claude AI
 
   # AI review threshold for questionable cases (0.70-0.89 similarity)
   ai_review_min_similarity: 0.70  # Below this, definitely different benchmarks
