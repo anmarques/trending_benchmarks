@@ -141,11 +141,3 @@ Benchmarks for visual & multimodal perception
 
 | Benchmark | Description | Typical Metrics |
 |-----------|-------------|-----------------|
-
-
-### Alignment, Safety & Preference Evaluation
-
-Benchmarks for alignment, safety & preference evaluation
-
-| Benchmark | Description | Typical Metrics |
-|-----------|-------------|-----------------|

@@ -8,12 +8,12 @@
 
 ## 📊 Latest Report
 
-**[View Latest Benchmark Report →](agents/benchmark_intelligence/reports/report_20260528_213601.md)**
+**[View Latest Benchmark Report →](agents/benchmark_intelligence/reports/report_20260529_192726.md)**
 
-**Key Findings** (2026-05-28):
-- **180 unique benchmarks** discovered
-- **92 models** analyzed from major labs
-- **Report Date:** May 28, 2026
+**Key Findings** (2026-05-29):
+- **372 unique benchmarks** discovered
+- **150 models** analyzed from major labs
+- **Report Date:** May 29, 2026
 ---
 
 ## 🎯 What This Does
