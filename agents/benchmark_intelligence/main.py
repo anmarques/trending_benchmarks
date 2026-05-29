@@ -17,6 +17,8 @@ import argparse
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 import yaml
 
 from .tools.discover_models import discover_trending_models
@@ -26,14 +28,11 @@ from .tools.extract_benchmarks import (
     extract_benchmarks_from_multiple_sources,
     aggregate_benchmark_results,
 )
-from .tools.fetch_docs import fetch_documentation
-from .tools.parallel_fetcher import fetch_documents_parallel, prepare_document_specs_for_model
 from .tools.consolidate import (
     consolidate_benchmarks,
-    extract_benchmark_names,
-    apply_consolidation,
+    create_name_mapping,
 )
-from .tools.classify import classify_benchmarks_batch, enrich_benchmarks_with_classification
+from .tools.classify import classify_benchmarks_batch
 from .tools.cache import CacheManager
 from .tools.taxonomy_manager import (
     load_current_taxonomy,
@@ -108,7 +107,8 @@ class BenchmarkIntelligenceAgent:
         # Initialize clients
         self.hf_client = get_hf_client()
 
-        # Statistics
+        # Statistics (updated from multiple threads; protected by _stats_lock)
+        self._stats_lock = threading.Lock()
         self.stats = {
             "models_discovered": 0,
             "models_processed": 0,
@@ -179,32 +179,61 @@ class BenchmarkIntelligenceAgent:
                 logger.warning("No models discovered. Exiting.")
                 return self._create_result(success=False, message="No models discovered")
 
-            # Step 2: Process each model
+            # Step 2: Process each model (extraction only — no consolidation/classification yet)
             logger.info(f"\n[Processing] Processing {len(models)} models...")
-            for i, model in enumerate(models, 1):
-                try:
-                    logger.info(f"[Processing] Model {i}/{len(models)}: {model['id']}")
 
-                    # Check if we should process this model
-                    if incremental and not force_reprocess:
-                        if self._should_skip_model(model):
-                            logger.info(f"  {SYMBOLS['cached']} Cached (no changes)")
-                            self.stats["models_skipped"] += 1
-                            continue
+            # Separate models that need processing from those that can be skipped
+            models_to_process = []
+            for model in models:
+                if incremental and not force_reprocess and self._should_skip_model(model):
+                    logger.info(f"  {SYMBOLS['cached']} Skipping cached: {model['id']}")
+                    with self._stats_lock:
+                        self.stats["models_skipped"] += 1
+                else:
+                    models_to_process.append(model)
 
-                    # Process the model
-                    self._process_model(model)
-                    self.stats["models_processed"] += 1
+            logger.info(
+                f"[Processing] {len(models_to_process)} to process, "
+                f"{self.stats['models_skipped']} skipped"
+            )
 
-                except Exception as e:
-                    logger.error(f"Failed to process model {model.get('id', 'unknown')}: {e}")
-                    self.stats["models_failed"] += 1
-                    self.stats["errors"].append({
-                        "model_id": model.get("id"),
-                        "error": str(e),
-                    })
-                    # Continue with next model
-                    continue
+            # Process models in parallel (extraction only)
+            max_workers = min(5, len(models_to_process)) if models_to_process else 0
+            if max_workers > 0:
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    futures = {
+                        executor.submit(self._process_model, model): model
+                        for model in models_to_process
+                    }
+                    total = len(futures)
+                    done = 0
+                    for future in as_completed(futures):
+                        model = futures[future]
+                        done += 1
+                        try:
+                            model_stats = future.result()
+                            with self._stats_lock:
+                                self.stats["models_processed"] += 1
+                                self.stats["benchmarks_extracted"] += model_stats.get(
+                                    "benchmarks_extracted", 0
+                                )
+                                self.stats["documents_fetched"] += model_stats.get(
+                                    "documents_fetched", 0
+                                )
+                            logger.info(
+                                f"[Processing] {done}/{total} done: {model['id']} "
+                                f"({model_stats.get('benchmarks_extracted', 0)} benchmarks)"
+                            )
+                        except Exception as e:
+                            logger.error(
+                                f"Failed to process model {model.get('id', 'unknown')}: {e}"
+                            )
+                            with self._stats_lock:
+                                self.stats["models_failed"] += 1
+                                self.stats["errors"].append({
+                                    "model_id": model.get("id"),
+                                    "error": str(e),
+                                })
 
             # Step 3: Consolidate benchmarks across all models
             logger.info("\n[Consolidation] Consolidating benchmarks...")
@@ -296,12 +325,18 @@ class BenchmarkIntelligenceAgent:
 
         return False
 
-    def _process_model(self, model: Dict[str, Any]):
+    def _process_model(self, model: Dict[str, Any]) -> Dict[str, int]:
         """
-        Process a single model through the full pipeline.
+        Extract benchmarks for a single model and store raw results.
+
+        Consolidation and classification are intentionally omitted here —
+        they run as a single global pass after all models are processed.
 
         Args:
             model: Model information dictionary
+
+        Returns:
+            Dict with keys benchmarks_extracted, documents_fetched
         """
         model_id = model.get("id")
         if not model_id:
@@ -309,7 +344,7 @@ class BenchmarkIntelligenceAgent:
 
         # Step 2a: Parse model card
         model_card_data = parse_model_card(model_id, hf_client=self.hf_client)
-        logger.info(f"  {SYMBOLS['success']} Fetched model card")
+        logger.info(f"  {SYMBOLS['success']} [{model_id}] Fetched model card")
 
         # Step 2b: Extract benchmarks from model card
         card_benchmarks = extract_benchmarks_from_text(
@@ -317,25 +352,19 @@ class BenchmarkIntelligenceAgent:
             source_type="model_card",
             source_name=model_id,
         )
-
-        # Tag benchmarks with source_type for tracking
         for bench in card_benchmarks.get("benchmarks", []):
             bench["source_type"] = "model_card"
 
-        # Step 2c: Fetch related documentation in parallel
-        logger.info(f"Fetching related documentation...")
+        # Step 2c: Fetch related documentation
         try:
             docs = self._fetch_documents_parallel(model_id, model, model_card_data)
-            if docs:
-                logger.info(f"  {SYMBOLS['success']} Fetched {len(docs)} documents in parallel")
         except Exception as e:
-            logger.warning(f"Failed to fetch documentation: {e}")
+            logger.warning(f"  [{model_id}] Failed to fetch documentation: {e}")
             docs = []
 
         # Step 2d: Extract benchmarks from documentation
         doc_benchmarks = []
         if docs:
-            logger.info(f"Extracting benchmarks from {len(docs)} documents...")
             sources = [
                 {
                     "text": doc["content"],
@@ -344,68 +373,28 @@ class BenchmarkIntelligenceAgent:
                 }
                 for doc in docs if doc.get("content")
             ]
-
             if sources:
                 doc_extraction_results = extract_benchmarks_from_multiple_sources(sources)
                 doc_benchmarks_agg = aggregate_benchmark_results(doc_extraction_results)
                 doc_benchmarks = doc_benchmarks_agg.get("benchmarks", [])
-
-                # Tag benchmarks with source_type from their respective documents
                 for i, source in enumerate(sources):
                     if i < len(doc_extraction_results):
                         for bench in doc_extraction_results[i].get("benchmarks", []):
                             bench["source_type"] = source.get("source_type", "unknown")
 
-        # Step 2e: Consolidate benchmarks
         all_benchmarks = card_benchmarks.get("benchmarks", []) + doc_benchmarks
-        if all_benchmarks:
-            logger.info(f"  {SYMBOLS['success']} Extracted {len(all_benchmarks)} benchmarks")
-        self.stats["benchmarks_extracted"] += len(all_benchmarks)
+        logger.info(
+            f"  {SYMBOLS['success']} [{model_id}] Extracted {len(all_benchmarks)} raw benchmarks"
+        )
 
-        if all_benchmarks:
-            # Get unique benchmark names
-            benchmark_names = extract_benchmark_names(all_benchmarks)
-
-            if benchmark_names:
-                logger.info(f"Consolidating {len(benchmark_names)} unique benchmark names...")
-                consolidation_result = consolidate_benchmarks(benchmark_names, config=self.config)
-
-                # Apply consolidation
-                all_benchmarks = apply_consolidation(
-                    all_benchmarks,
-                    consolidation_result,
-                    add_canonical_field=True,
-                )
-
-        # Step 2f: Classify benchmarks
-        if all_benchmarks:
-            logger.info(f"Classifying benchmarks...")
-            # Get unique canonical names for classification
-            unique_benchmarks = {}
-            for bench in all_benchmarks:
-                canonical_name = bench.get("canonical_name", bench.get("name"))
-                if canonical_name and canonical_name not in unique_benchmarks:
-                    unique_benchmarks[canonical_name] = {
-                        "name": canonical_name,
-                        "description": bench.get("description"),
-                    }
-
-            if unique_benchmarks:
-                classification_input = list(unique_benchmarks.values())
-                classifications = classify_benchmarks_batch(classification_input)
-
-                # Enrich benchmarks with classifications
-                all_benchmarks = enrich_benchmarks_with_classification(
-                    all_benchmarks,
-                    classifications,
-                )
-
-        # Step 2g: Store in cache
+        # Step 2e: Store raw results (no consolidation or classification yet)
         if not self.dry_run and self.cache:
-            logger.info(f"Storing results in cache...")
             self._store_model_in_cache(model, model_card_data, all_benchmarks, docs)
-        else:
-            logger.debug("Skipping cache storage (dry run mode)")
+
+        return {
+            "benchmarks_extracted": len(all_benchmarks),
+            "documents_fetched": len(docs),
+        }
 
     def _store_model_in_cache(
         self,
@@ -430,16 +419,15 @@ class BenchmarkIntelligenceAgent:
         }
         self.cache.add_model(model_info)
 
-        # Add benchmarks
+        # Add benchmarks (stored with raw name; global consolidation runs later)
         for bench in benchmarks:
-            canonical_name = bench.get("canonical_name", bench.get("name"))
-            if not canonical_name:
+            raw_name = bench.get("name")
+            if not raw_name:
                 continue
 
-            # Add benchmark to cache
             benchmark_id = self.cache.add_benchmark(
-                name=canonical_name,
-                categories=bench.get("categories", []),
+                name=raw_name,
+                categories=[],  # populated by global classification pass
                 attributes={
                     "modality": bench.get("modality"),
                     "domain": bench.get("domain"),
@@ -447,7 +435,6 @@ class BenchmarkIntelligenceAgent:
                 },
             )
 
-            # Link model to benchmark
             self.cache.add_model_benchmark(
                 model_id=model_id,
                 benchmark_id=benchmark_id,
@@ -466,8 +453,6 @@ class BenchmarkIntelligenceAgent:
                     url=doc.get("url", ""),
                     content=doc["content"],
                 )
-
-        self.stats["documents_fetched"] += len(docs)
 
     def _fetch_documents_parallel(
         self,
@@ -527,21 +512,70 @@ class BenchmarkIntelligenceAgent:
             return []
 
     def _consolidate_all_benchmarks(self):
-        """Consolidate benchmarks across all models in cache."""
+        """
+        Global consolidation + classification pass over all extracted benchmarks.
+
+        This runs exactly once after all models are processed:
+        1. Collect all unique raw names from DB
+        2. Run consolidate_benchmarks() to get canonical mappings
+        3. Merge duplicate DB records via cache.consolidate_benchmark_names()
+        4. Run classify_benchmarks_batch() on all canonical names
+        5. Update benchmark categories in DB
+        """
         if self.dry_run or self.cache is None:
             logger.debug("Skipping consolidation (dry run mode or no cache)")
             return
 
-        # Get all benchmarks
+        # --- Phase A: Consolidation ---
         all_benchmarks = self.cache.get_all_benchmarks()
-        logger.info(f"[Consolidation] Found {len(all_benchmarks)} unique benchmark names")
+        raw_names = [b["canonical_name"] for b in all_benchmarks]
+        logger.info(f"[Consolidation] {len(raw_names)} unique raw names collected")
 
-        # Already consolidated during processing
-        # This step is for any additional cross-model consolidation if needed
-        logger.debug("Benchmarks already consolidated during model processing")
+        if raw_names:
+            logger.info("[Consolidation] Running global consolidation pass...")
+            consolidation_result = consolidate_benchmarks(raw_names, config=self.config)
+            name_mapping = create_name_mapping(consolidation_result)
 
-        # Taxonomy evolution
-        logger.info("Evolving taxonomy based on discovered benchmarks...")
+            # Also include raw names that map to themselves (unchanged)
+            for name in raw_names:
+                if name not in name_mapping:
+                    name_mapping[name] = name
+
+            merged = self.cache.consolidate_benchmark_names(name_mapping)
+            canonical_count = len(set(name_mapping.values()))
+            logger.info(
+                f"[Consolidation] {len(raw_names)} raw → {canonical_count} canonical "
+                f"({merged} duplicate records removed)"
+            )
+        else:
+            logger.info("[Consolidation] No benchmarks to consolidate")
+
+        # --- Phase B: Classification ---
+        all_benchmarks = self.cache.get_all_benchmarks()  # re-fetch with canonical names
+        if all_benchmarks:
+            logger.info(f"[Classification] Classifying {len(all_benchmarks)} canonical benchmarks...")
+            classification_input = [
+                {"name": b["canonical_name"], "description": None}
+                for b in all_benchmarks
+            ]
+            classifications = classify_benchmarks_batch(classification_input)
+
+            updated = 0
+            for classification in classifications:
+                canonical_name = classification.get("benchmark_name")
+                primary_cats = classification.get("primary_categories", [])
+                categories = [c["category"] for c in primary_cats if c.get("category")]
+                if canonical_name and categories:
+                    if self.cache.update_benchmark_categories(canonical_name, categories):
+                        updated += 1
+
+            logger.info(f"[Classification] Updated categories for {updated} benchmarks")
+        else:
+            logger.info("[Classification] No benchmarks to classify")
+
+        # --- Phase C: Taxonomy evolution ---
+        logger.info("[Consolidation] Evolving taxonomy based on discovered benchmarks...")
+        all_benchmarks = self.cache.get_all_benchmarks()
         self._evolve_taxonomy(all_benchmarks)
 
     def _evolve_taxonomy(self, all_benchmarks: List[Dict[str, Any]]):

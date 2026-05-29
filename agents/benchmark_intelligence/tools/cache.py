@@ -945,6 +945,111 @@ class CacheManager:
 
             return benchmarks
 
+    def consolidate_benchmark_names(self, name_mapping: Dict[str, str]) -> int:
+        """
+        Merge benchmark records based on a raw→canonical name mapping.
+
+        For each group of raw names mapping to the same canonical name:
+        - Renames the first found record to canonical_name
+        - Redirects all model_benchmark links from duplicates to the survivor
+        - Deletes the duplicate benchmark records
+
+        Args:
+            name_mapping: Dict mapping raw_name → canonical_name
+
+        Returns:
+            Number of duplicate benchmark records merged away
+        """
+        # Group raw names by canonical
+        groups: Dict[str, List[str]] = {}
+        for raw, canonical in name_mapping.items():
+            groups.setdefault(canonical, []).append(raw)
+
+        merged_count = 0
+
+        for canonical_name, raw_names in groups.items():
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+
+                # Find or designate survivor record
+                cursor.execute(
+                    "SELECT id FROM benchmarks WHERE canonical_name = ?",
+                    (canonical_name,)
+                )
+                row = cursor.fetchone()
+
+                if row:
+                    survivor_id = row['id']
+                else:
+                    # Rename first existing raw-name record to canonical
+                    survivor_id = None
+                    for raw_name in raw_names:
+                        cursor.execute(
+                            "SELECT id FROM benchmarks WHERE canonical_name = ?",
+                            (raw_name,)
+                        )
+                        r = cursor.fetchone()
+                        if r:
+                            survivor_id = r['id']
+                            cursor.execute(
+                                "UPDATE benchmarks SET canonical_name = ? WHERE id = ?",
+                                (canonical_name, survivor_id)
+                            )
+                            break
+
+                if survivor_id is None:
+                    conn.commit()
+                    continue
+
+                # Merge all other raw-name records into survivor
+                for raw_name in raw_names:
+                    if raw_name == canonical_name:
+                        continue
+                    cursor.execute(
+                        "SELECT id FROM benchmarks WHERE canonical_name = ?",
+                        (raw_name,)
+                    )
+                    r = cursor.fetchone()
+                    if r and r['id'] != survivor_id:
+                        old_id = r['id']
+                        # Redirect links; ignore if survivor already has same (model, context)
+                        cursor.execute("""
+                            UPDATE OR IGNORE model_benchmarks
+                            SET benchmark_id = ?
+                            WHERE benchmark_id = ?
+                        """, (survivor_id, old_id))
+                        # Remaining (conflicting) rows are cleaned by CASCADE on DELETE
+                        cursor.execute("DELETE FROM benchmarks WHERE id = ?", (old_id,))
+                        merged_count += 1
+
+                conn.commit()
+
+        return merged_count
+
+    def update_benchmark_categories(self, canonical_name: str, categories: List[str]) -> bool:
+        """
+        Update categories for a benchmark by canonical name.
+
+        Args:
+            canonical_name: Canonical benchmark name
+            categories: List of category strings
+
+        Returns:
+            True if benchmark found and updated, False otherwise
+        """
+        categories_json = json.dumps(categories)
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE benchmarks SET categories = ? WHERE canonical_name = ?",
+                (categories_json, canonical_name)
+            )
+            updated = cursor.rowcount > 0
+            conn.commit()
+
+        return updated
+
     def get_recent_snapshots(self, limit: int = 10) -> List[Dict[str, Any]]:
         """
         Get recent snapshots.
