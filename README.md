@@ -8,7 +8,7 @@
 
 ## 📊 Latest Report
 
-**[View Latest Benchmark Report →](agents/benchmark_intelligence/reports/report_20260529_192726.md)**
+**[View Latest Benchmark Report →](agents/benchmark_intelligence/reports/report_20260529_194029.md)**
 
 **Key Findings** (2026-05-29):
 - **372 unique benchmarks** discovered

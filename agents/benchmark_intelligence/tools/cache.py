@@ -867,13 +867,13 @@ class CacheManager:
                     b.canonical_name,
                     b.categories,
                     b.attributes,
-                    b.first_seen,
                     COUNT(mb.id) as total_models,
-                    COUNT(DISTINCT DATE(mb.recorded_at)) as active_days,
-                    MIN(mb.recorded_at) as first_recorded,
-                    MAX(mb.recorded_at) as last_recorded
+                    COUNT(DISTINCT DATE(COALESCE(m.release_date, m.first_seen))) as active_days,
+                    MIN(COALESCE(m.release_date, m.first_seen)) as first_recorded,
+                    MAX(COALESCE(m.release_date, m.first_seen)) as last_recorded
                 FROM benchmarks b
                 LEFT JOIN model_benchmarks mb ON b.id = mb.benchmark_id
+                LEFT JOIN models m ON mb.model_id = m.id
                 GROUP BY b.id
                 ORDER BY total_models DESC
             """)
@@ -885,7 +885,8 @@ class CacheManager:
                     'canonical_name': row['canonical_name'],
                     'categories': json.loads(row['categories']) if row['categories'] else [],
                     'attributes': json.loads(row['attributes']) if row['attributes'] else {},
-                    'first_seen': row['first_seen'],
+                    'first_seen': row['first_recorded'],  # derived from model release dates
+                    'last_seen': row['last_recorded'],     # derived from model release dates
                     'total_models': row['total_models'],
                     'active_days': row['active_days'],
                     'first_recorded': row['first_recorded'],
@@ -1429,14 +1430,14 @@ class CacheManager:
                     b.canonical_name,
                     b.categories,
                     b.attributes,
-                    b.first_seen,
                     COUNT(mb.id) as total_models,
-                    COUNT(DISTINCT DATE(mb.recorded_at)) as active_days,
-                    MIN(mb.recorded_at) as first_recorded,
-                    MAX(mb.recorded_at) as last_recorded
+                    COUNT(DISTINCT DATE(COALESCE(m.release_date, m.first_seen))) as active_days,
+                    MIN(COALESCE(m.release_date, m.first_seen)) as first_recorded,
+                    MAX(COALESCE(m.release_date, m.first_seen)) as last_recorded
                 FROM benchmarks b
                 LEFT JOIN model_benchmarks mb ON b.id = mb.benchmark_id
-                    AND mb.recorded_at >= ?
+                LEFT JOIN models m ON mb.model_id = m.id
+                    AND COALESCE(m.release_date, m.first_seen) >= ?
                 GROUP BY b.id
                 HAVING COUNT(mb.id) > 0
                 ORDER BY total_models DESC
@@ -1449,7 +1450,8 @@ class CacheManager:
                     'canonical_name': row['canonical_name'],
                     'categories': json.loads(row['categories']) if row['categories'] else [],
                     'attributes': json.loads(row['attributes']) if row['attributes'] else {},
-                    'first_seen': row['first_seen'],
+                    'first_seen': row['first_recorded'],  # derived from model release dates
+                    'last_seen': row['last_recorded'],     # derived from model release dates
                     'total_models': row['total_models'],
                     'active_days': row['active_days'],
                     'first_recorded': row['first_recorded'],
@@ -1482,12 +1484,15 @@ class CacheManager:
                     b.canonical_name,
                     b.categories,
                     b.attributes,
-                    b.first_seen,
-                    b.last_seen
+                    MIN(COALESCE(m.release_date, m.first_seen)) as derived_first_seen,
+                    MAX(COALESCE(m.release_date, m.first_seen)) as derived_last_seen
                 FROM benchmarks b
-                WHERE b.last_seen IS NOT NULL
-                  AND b.last_seen < ?
-                ORDER BY b.last_seen DESC
+                JOIN model_benchmarks mb ON b.id = mb.benchmark_id
+                JOIN models m ON mb.model_id = m.id
+                GROUP BY b.id
+                HAVING derived_last_seen IS NOT NULL
+                   AND derived_last_seen < ?
+                ORDER BY derived_last_seen DESC
             """, (cutoff_date,))
 
             deprecated = []
@@ -1497,8 +1502,8 @@ class CacheManager:
                     'canonical_name': row['canonical_name'],
                     'categories': json.loads(row['categories']) if row['categories'] else [],
                     'attributes': json.loads(row['attributes']) if row['attributes'] else {},
-                    'first_seen': row['first_seen'],
-                    'last_seen': row['last_seen']
+                    'first_seen': row['derived_first_seen'],
+                    'last_seen': row['derived_last_seen']
                 })
 
             return deprecated
@@ -1625,7 +1630,7 @@ class CacheManager:
                         b.id as benchmark_id,
                         b.canonical_name,
                         MIN(COALESCE(m.release_date, m.first_seen)) as first_seen,
-                        MAX(mb.last_seen) as last_seen,
+                        MAX(COALESCE(m.release_date, m.first_seen)) as last_seen,
                         COUNT(DISTINCT mb.model_id) as absolute_mentions,
                         CAST(COUNT(DISTINCT mb.model_id) AS REAL) / ? as relative_frequency
                     FROM benchmarks b
