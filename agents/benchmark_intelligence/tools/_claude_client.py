@@ -332,6 +332,11 @@ def call_claude_json(
         logger.debug(f"Successfully parsed JSON response: {len(json_text)} chars")
         return result
     except json.JSONDecodeError as e:
+        logger.warning(f"Failed to parse full JSON response: {e} — attempting partial recovery")
+        recovered = _recover_partial_json(json_text)
+        if recovered is not None:
+            logger.info(f"Partial JSON recovery succeeded: {len(recovered.get('benchmarks', []))} benchmarks")
+            return recovered
         logger.error(f"Failed to parse JSON response: {e}")
         logger.debug(f"Attempted to parse: {json_text[:500]}...")
         raise RuntimeError(f"Invalid JSON response from Claude: {e}")
@@ -524,6 +529,65 @@ def _extract_json_from_response(text: str) -> str:
 
     # No pattern matched, return the whole text and let JSON parser fail
     return text.strip()
+
+
+def _recover_partial_json(json_text: str) -> Optional[Dict[str, Any]]:
+    """
+    Attempt to recover a benchmarks list from a truncated JSON response.
+
+    When Claude's output is cut off mid-JSON due to token limits, we find the
+    last fully-formed benchmark entry and close the array/object cleanly.
+    """
+    # Find all complete benchmark objects via the closing brace pattern
+    # Look for the last complete "}," or "}" that closes a benchmark entry
+    benchmarks = []
+    # Extract individual {...} objects from the benchmarks array
+    depth = 0
+    start = None
+    in_string = False
+    escape_next = False
+
+    for i, ch in enumerate(json_text):
+        if escape_next:
+            escape_next = False
+            continue
+        if ch == '\\' and in_string:
+            escape_next = True
+            continue
+        if ch == '"' and not escape_next:
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == '{':
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0 and start is not None:
+                obj_str = json_text[start:i+1]
+                try:
+                    obj = json.loads(obj_str)
+                    # Only keep objects that look like benchmark entries
+                    if 'name' in obj:
+                        benchmarks.append(obj)
+                except json.JSONDecodeError:
+                    pass
+                start = None
+
+    if not benchmarks:
+        return None
+
+    return {
+        "benchmarks": benchmarks,
+        "metadata": {
+            "document_source": "unknown",
+            "extraction_date": "",
+            "total_benchmarks": len(benchmarks),
+            "partial_recovery": True,
+        }
+    }
 
 
 def _get_helpful_error_message(environment: ClaudeEnvironment) -> str:

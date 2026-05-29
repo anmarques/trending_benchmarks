@@ -74,6 +74,14 @@ def extract_benchmarks_from_text(
 
         logger.info(f"Extracting benchmarks from {source_type} ({len(text)} chars)")
 
+        # Truncate very large documents — benchmark tables appear near the top and
+        # sending 70K+ chars causes Claude's JSON output to exceed the token limit,
+        # producing truncated/invalid JSON.
+        MAX_CHARS = 40000
+        if len(text) > MAX_CHARS:
+            logger.warning(f"Truncating {source_type} from {len(text)} to {MAX_CHARS} chars")
+            text = text[:MAX_CHARS]
+
         # Load extraction prompt
         prompt = _build_extraction_prompt(text, source_type, source_name)
 
@@ -84,9 +92,7 @@ def extract_benchmarks_from_text(
                     "Anthropic API not available. Set ANTHROPIC_API_KEY environment "
                     "variable or install anthropic package (pip install anthropic)"
                 )
-            # Use 8192 tokens for benchmark extraction
-            # (typical model card abstracts are 1-2K tokens, response ~2-4K)
-            result = call_claude_json(prompt=prompt, max_tokens=8192)
+            result = call_claude_json(prompt=prompt, max_tokens=16384)
         else:
             result = claude_fn(prompt=prompt)
 

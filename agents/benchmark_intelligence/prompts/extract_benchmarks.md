@@ -131,6 +131,9 @@ Extract all benchmarks, scores, and evaluation contexts from model cards, resear
 ## Handling Tables
 
 ### Standard Table Format
+
+**IMPORTANT**: In comparison tables with multiple models, extract ONLY the score for the **primary/target model** (the model whose card this is — typically the first data column or the column matching the source name). Do NOT create separate entries for comparison/baseline models. We care about which benchmarks the primary model reports, not competitor scores.
+
 ```markdown
 | Benchmark         | Model A | Model B | Model C |
 |-------------------|---------|---------|---------|
@@ -139,10 +142,10 @@ Extract all benchmarks, scores, and evaluation contexts from model cards, resear
 | HumanEval         | 86.6    | 78.5    | N/A     |
 ```
 
-**Extraction:**
-- Row 1: name: "MMLU-Pro", score: 82.5 (Model A), 80.8 (Model B), 79.1 (Model C)
-- Row 2: name: "GSM8K", shot_count: 8, score: 94.2 (Model A), 92.1 (Model B), null (Model C)
-- Row 3: name: "HumanEval", metric: "pass@1", score: 86.6 (Model A), 78.5 (Model B), null (Model C)
+**Extraction (primary model = Model A only):**
+- Row 1: name: "MMLU-Pro", score: 82.5, model_name: "Model A"
+- Row 2: name: "GSM8K", shot_count: 8, score: 94.2, model_name: "Model A"
+- Row 3: name: "HumanEval", metric: "pass@1", score: 86.6, model_name: "Model A"
 
 ### Grouped Tables
 
@@ -178,7 +181,7 @@ Extract all benchmarks, scores, and evaluation contexts from model cards, resear
 | ARC-c (25-shot)   | 85.2       | 83.5         |
 ```
 
-**Output:**
+**Output (primary model = Qwen3.5-9B only):**
 ```json
 {
   "benchmarks": [
@@ -196,19 +199,6 @@ Extract all benchmarks, scores, and evaluation contexts from model cards, resear
       "source_location": "Table 1, Row 1"
     },
     {
-      "name": "MMLU",
-      "score": 80.8,
-      "metric": "accuracy",
-      "context": {
-        "shot_count": 5,
-        "subset": null,
-        "version": null,
-        "special_conditions": null
-      },
-      "model_name": "Llama-3.1-8B",
-      "source_location": "Table 1, Row 1"
-    },
-    {
       "name": "GSM8K",
       "score": 94.2,
       "metric": "accuracy",
@@ -219,19 +209,6 @@ Extract all benchmarks, scores, and evaluation contexts from model cards, resear
         "special_conditions": null
       },
       "model_name": "Qwen3.5-9B",
-      "source_location": "Table 1, Row 2"
-    },
-    {
-      "name": "GSM8K",
-      "score": 92.1,
-      "metric": "accuracy",
-      "context": {
-        "shot_count": 8,
-        "subset": null,
-        "version": null,
-        "special_conditions": null
-      },
-      "model_name": "Llama-3.1-8B",
       "source_location": "Table 1, Row 2"
     },
     {
@@ -248,19 +225,6 @@ Extract all benchmarks, scores, and evaluation contexts from model cards, resear
       "source_location": "Table 1, Row 3"
     },
     {
-      "name": "HumanEval",
-      "score": null,
-      "metric": "pass@1",
-      "context": {
-        "shot_count": 0,
-        "subset": null,
-        "version": null,
-        "special_conditions": null
-      },
-      "model_name": "Llama-3.1-8B",
-      "source_location": "Table 1, Row 3"
-    },
-    {
       "name": "ARC-c",
       "score": 85.2,
       "metric": "accuracy",
@@ -271,19 +235,6 @@ Extract all benchmarks, scores, and evaluation contexts from model cards, resear
         "special_conditions": null
       },
       "model_name": "Qwen3.5-9B",
-      "source_location": "Table 1, Row 4"
-    },
-    {
-      "name": "ARC-c",
-      "score": 83.5,
-      "metric": "accuracy",
-      "context": {
-        "shot_count": 25,
-        "subset": "challenge",
-        "version": null,
-        "special_conditions": null
-      },
-      "model_name": "Llama-3.1-8B",
       "source_location": "Table 1, Row 4"
     }
   ],

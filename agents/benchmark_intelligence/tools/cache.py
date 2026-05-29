@@ -1506,18 +1506,21 @@ class CacheManager:
                 # Build SQL query for models in window
                 placeholders = ','.join('?' * len(models_in_window))
 
-                # Get benchmark statistics via SQL aggregation
+                # Get benchmark statistics via SQL aggregation.
+                # first_seen is derived from the earliest model release date that mentioned
+                # the benchmark — this is semantically correct and survives fresh DB runs.
                 cursor.execute(f"""
                     SELECT
                         b.id as benchmark_id,
                         b.canonical_name,
-                        b.first_seen,
-                        b.last_seen,
+                        MIN(COALESCE(m.release_date, m.first_seen)) as first_seen,
+                        MAX(mb.last_seen) as last_seen,
                         COUNT(DISTINCT mb.model_id) as absolute_mentions,
                         CAST(COUNT(DISTINCT mb.model_id) AS REAL) / ? as relative_frequency
                     FROM benchmarks b
-                    LEFT JOIN model_benchmarks mb ON b.id = mb.benchmark_id
+                    JOIN model_benchmarks mb ON b.id = mb.benchmark_id
                         AND mb.model_id IN ({placeholders})
+                    JOIN models m ON mb.model_id = m.id
                     GROUP BY b.id
                     HAVING absolute_mentions > 0
                 """, [model_count] + list(models_in_window))
@@ -1530,7 +1533,7 @@ class CacheManager:
                     absolute_mentions = stat['absolute_mentions']
                     relative_frequency = stat['relative_frequency']
                     first_seen = stat['first_seen']
-                    last_seen = stat['last_seen'] or stat['first_seen']  # Fallback to first_seen
+                    last_seen = stat['last_seen'] or first_seen
 
                     # Classify benchmark status (T056-T057)
                     status = self.classify_benchmark_status(first_seen, last_seen, window_end)
