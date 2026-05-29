@@ -32,7 +32,7 @@ from .tools.consolidate import (
     consolidate_benchmarks,
     create_name_mapping,
 )
-from .tools.classify import classify_benchmarks_batch
+from .tools.classify import classify_benchmark, classify_benchmarks_batch
 from .tools.cache import CacheManager
 from .tools.taxonomy_manager import (
     load_current_taxonomy,
@@ -311,19 +311,16 @@ class BenchmarkIntelligenceAgent:
             # New model, don't skip
             return False
 
-        # Check if model card has changed
+        # If the model card content is available, compare hashes
         model_card = model.get("model_card")
         if model_card:
-            # Compute hash
             import hashlib
             new_hash = hashlib.sha256(model_card.encode('utf-8')).hexdigest()
             cached_hash = cached_model.get("model_card_hash")
+            return new_hash == cached_hash
 
-            if new_hash == cached_hash:
-                # No changes
-                return True
-
-        return False
+        # No model card in discovery metadata — assume unchanged if already in DB
+        return True
 
     def _process_model(self, model: Dict[str, Any]) -> Dict[str, int]:
         """
@@ -528,15 +525,32 @@ class BenchmarkIntelligenceAgent:
 
         # --- Phase A: Consolidation ---
         all_benchmarks = self.cache.get_all_benchmarks()
-        raw_names = [b["canonical_name"] for b in all_benchmarks]
+        # Sort alphabetically so similar names (GSM8K, GSM-8K, gsm8k) land in the same chunk
+        raw_names = sorted(set(b["canonical_name"] for b in all_benchmarks))
         logger.info(f"[Consolidation] {len(raw_names)} unique raw names collected")
 
         if raw_names:
-            logger.info("[Consolidation] Running global consolidation pass...")
-            consolidation_result = consolidate_benchmarks(raw_names, config=self.config)
-            name_mapping = create_name_mapping(consolidation_result)
+            # Process in chunks of 50 to stay within Claude's token limits
+            chunk_size = 50
+            chunks = [raw_names[i:i + chunk_size] for i in range(0, len(raw_names), chunk_size)]
+            logger.info(
+                f"[Consolidation] Running global consolidation in {len(chunks)} chunks "
+                f"of up to {chunk_size} names..."
+            )
 
-            # Also include raw names that map to themselves (unchanged)
+            name_mapping: Dict[str, str] = {}
+            for idx, chunk in enumerate(chunks, 1):
+                logger.info(f"[Consolidation] Chunk {idx}/{len(chunks)} ({len(chunk)} names)...")
+                try:
+                    result = consolidate_benchmarks(chunk, config=self.config)
+                    chunk_mapping = create_name_mapping(result)
+                    name_mapping.update(chunk_mapping)
+                except Exception as e:
+                    logger.warning(
+                        f"[Consolidation] Chunk {idx} failed ({e}), treating names as canonical"
+                    )
+
+            # Any name not in the mapping maps to itself
             for name in raw_names:
                 if name not in name_mapping:
                     name_mapping[name] = name
@@ -553,23 +567,49 @@ class BenchmarkIntelligenceAgent:
         # --- Phase B: Classification ---
         all_benchmarks = self.cache.get_all_benchmarks()  # re-fetch with canonical names
         if all_benchmarks:
-            logger.info(f"[Classification] Classifying {len(all_benchmarks)} canonical benchmarks...")
-            classification_input = [
-                {"name": b["canonical_name"], "description": None}
-                for b in all_benchmarks
-            ]
-            classifications = classify_benchmarks_batch(classification_input)
+            category_overrides = self.config.get("taxonomy", {}).get("category_overrides", {})
 
-            updated = 0
-            for classification in classifications:
-                canonical_name = classification.get("benchmark_name")
-                primary_cats = classification.get("primary_categories", [])
-                categories = [c["category"] for c in primary_cats if c.get("category")]
-                if canonical_name and categories:
-                    if self.cache.update_benchmark_categories(canonical_name, categories):
-                        updated += 1
+            # Fast path: apply config overrides without any Claude call
+            override_count = 0
+            needs_ai = []
+            for b in all_benchmarks:
+                name = b["canonical_name"]
+                if name in category_overrides:
+                    self.cache.update_benchmark_categories(name, [category_overrides[name]])
+                    override_count += 1
+                else:
+                    needs_ai.append(name)
 
-            logger.info(f"[Classification] Updated categories for {updated} benchmarks")
+            logger.info(
+                f"[Classification] {override_count} from config overrides, "
+                f"{len(needs_ai)} need Claude..."
+            )
+
+            # AI classification for remaining benchmarks (parallel, 5 workers)
+            ai_updated = 0
+            if needs_ai:
+                def _classify_one(benchmark_name: str) -> Dict[str, Any]:
+                    return classify_benchmark(benchmark_name=benchmark_name)
+
+                with ThreadPoolExecutor(max_workers=5) as executor:
+                    futures = {
+                        executor.submit(_classify_one, name): name for name in needs_ai
+                    }
+                    for future in as_completed(futures):
+                        name = futures[future]
+                        try:
+                            result = future.result()
+                            primary_cats = result.get("primary_categories", [])
+                            categories = [c["category"] for c in primary_cats if c.get("category")]
+                            if categories:
+                                self.cache.update_benchmark_categories(name, categories)
+                                ai_updated += 1
+                        except Exception as e:
+                            logger.warning(f"[Classification] Failed for {name}: {e}")
+
+            logger.info(
+                f"[Classification] Done — {override_count} overrides + {ai_updated} AI-classified"
+            )
         else:
             logger.info("[Classification] No benchmarks to classify")
 
