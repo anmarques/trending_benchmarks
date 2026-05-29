@@ -1521,10 +1521,16 @@ class CacheManager:
         Returns:
             Status string: "emerging", "almost_extinct", or "active"
         """
-        # Parse timestamps
-        first_dt = datetime.fromisoformat(first_seen.replace('Z', '+00:00'))
-        last_dt = datetime.fromisoformat(last_seen.replace('Z', '+00:00'))
-        window_end_dt = datetime.fromisoformat(window_end.replace('Z', '+00:00'))
+        # Parse timestamps as naive UTC (strip any timezone offset to avoid
+        # mixing offset-aware and offset-naive datetimes from different sources)
+        import re as _re
+        def _naive_utc(ts: str) -> datetime:
+            ts = _re.sub(r'[+-]\d{2}:\d{2}$|Z$', '', ts)
+            return datetime.fromisoformat(ts)
+
+        first_dt = _naive_utc(first_seen)
+        last_dt = _naive_utc(last_seen)
+        window_end_dt = _naive_utc(window_end)
 
         # Calculate time differences in days
         days_since_first = (window_end_dt - first_dt).days
