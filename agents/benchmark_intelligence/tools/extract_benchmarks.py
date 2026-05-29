@@ -14,6 +14,24 @@ from ._claude_client import call_claude_json, is_anthropic_available
 
 logger = logging.getLogger(__name__)
 
+# Max chars per Claude call — keeps output safely within 16384 output tokens
+CHUNK_SIZE = 20000
+# Overlap between chunks so tables that straddle a boundary aren't silently dropped
+CHUNK_OVERLAP = 500
+
+
+def _split_into_chunks(text: str) -> List[str]:
+    """Split text into overlapping chunks of CHUNK_SIZE chars."""
+    chunks = []
+    start = 0
+    while start < len(text):
+        end = min(start + CHUNK_SIZE, len(text))
+        chunks.append(text[start:end])
+        if end == len(text):
+            break
+        start = end - CHUNK_OVERLAP
+    return chunks
+
 
 def extract_benchmarks_from_text(
     text: str,
@@ -64,6 +82,7 @@ def extract_benchmarks_from_text(
             logger.warning("Text is very short, may not contain benchmarks")
             return {
                 "benchmarks": [],
+                "cooccurrences": [],
                 "metadata": {
                     "document_source": source_name or "unknown",
                     "extraction_date": datetime.utcnow().isoformat(),
@@ -74,63 +93,67 @@ def extract_benchmarks_from_text(
 
         logger.info(f"Extracting benchmarks from {source_type} ({len(text)} chars)")
 
-        # Truncate very large documents — benchmark tables appear near the top and
-        # sending 70K+ chars causes Claude's JSON output to exceed the token limit,
-        # producing truncated/invalid JSON.
-        MAX_CHARS = 40000
-        if len(text) > MAX_CHARS:
-            logger.warning(f"Truncating {source_type} from {len(text)} to {MAX_CHARS} chars")
-            text = text[:MAX_CHARS]
+        chunks = _split_into_chunks(text)
+        if len(chunks) > 1:
+            logger.info(f"Splitting into {len(chunks)} chunks of ~{CHUNK_SIZE} chars")
 
-        # Load extraction prompt
-        prompt = _build_extraction_prompt(text, source_type, source_name)
+        all_benchmarks: List[Dict[str, Any]] = []
+        all_cooccurrences: List[Dict[str, Any]] = []
+        # Deduplicate across chunks: same (name, score, context) = same row
+        seen: set = set()
 
-        # Call Claude (use injected function or default)
-        if claude_fn is None:
-            if not is_anthropic_available():
-                raise RuntimeError(
-                    "Anthropic API not available. Set ANTHROPIC_API_KEY environment "
-                    "variable or install anthropic package (pip install anthropic)"
+        for chunk_idx, chunk in enumerate(chunks):
+            chunk_label = (
+                f"{source_name} [chunk {chunk_idx+1}/{len(chunks)}]"
+                if len(chunks) > 1
+                else source_name
+            )
+            prompt = _build_extraction_prompt(chunk, source_type, chunk_label)
+
+            if claude_fn is None:
+                if not is_anthropic_available():
+                    raise RuntimeError(
+                        "Anthropic API not available. Set ANTHROPIC_API_KEY environment "
+                        "variable or install anthropic package (pip install anthropic)"
+                    )
+                chunk_result = call_claude_json(prompt=prompt, max_tokens=16384)
+            else:
+                chunk_result = claude_fn(prompt=prompt)
+
+            if not isinstance(chunk_result, dict):
+                logger.warning(f"Invalid response for chunk {chunk_idx+1}, skipping")
+                continue
+
+            for bench in chunk_result.get("benchmarks", []):
+                key = (
+                    bench.get("name"),
+                    bench.get("score"),
+                    str(bench.get("context", {})),
                 )
-            result = call_claude_json(prompt=prompt, max_tokens=16384)
-        else:
-            result = claude_fn(prompt=prompt)
+                if key not in seen:
+                    seen.add(key)
+                    all_benchmarks.append(bench)
 
-        # Validate result structure
-        if not isinstance(result, dict):
-            raise RuntimeError("Invalid response format from Claude")
+            all_cooccurrences.extend(chunk_result.get("cooccurrences", []))
 
-        if "benchmarks" not in result:
-            logger.warning("No benchmarks key in response, creating empty result")
-            result = {
-                "benchmarks": [],
-                "metadata": {
-                    "document_source": source_name or "unknown",
-                    "extraction_date": datetime.utcnow().isoformat(),
-                    "total_benchmarks": 0,
-                    "source_type": source_type,
-                },
-            }
+        result = {
+            "benchmarks": all_benchmarks,
+            "cooccurrences": [],
+            "metadata": {
+                "document_source": source_name or "unknown",
+                "extraction_date": datetime.utcnow().isoformat(),
+                "total_benchmarks": len(all_benchmarks),
+                "source_type": source_type,
+                "chunks_processed": len(chunks),
+            },
+        }
 
-        # Ensure metadata exists and has required fields
-        if "metadata" not in result:
-            result["metadata"] = {}
-
-        result["metadata"]["document_source"] = source_name or "unknown"
-        result["metadata"]["extraction_date"] = datetime.utcnow().isoformat()
-        result["metadata"]["total_benchmarks"] = len(result["benchmarks"])
-        result["metadata"]["source_type"] = source_type
-
-        # Detect co-occurrences if enabled
-        if detect_cooccurrence and result["benchmarks"]:
-            cooccurrences = _detect_cooccurrences(result["benchmarks"])
+        if detect_cooccurrence and all_benchmarks:
+            cooccurrences = _detect_cooccurrences(all_benchmarks)
             result["cooccurrences"] = cooccurrences
             logger.info(f"Detected {len(cooccurrences)} benchmark co-occurrences")
-        else:
-            result["cooccurrences"] = []
 
-        logger.info(f"Extracted {len(result['benchmarks'])} benchmarks")
-
+        logger.info(f"Extracted {len(all_benchmarks)} benchmarks")
         return result
 
     except ValueError:
